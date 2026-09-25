@@ -1,0 +1,197 @@
+"""Volatility regime and session phase: the two gates the literature survives on.
+
+Mesfin (2026) tested fourteen OHLCV signal families on 947 days of five-minute
+futures data and none cleared a five-part validation bar. Eleven failed for the
+same reason: their gross edge per trade, 0.07 to 1.50 points, sat below the
+2.0-point round-trip friction floor. The edge was real and too small to collect.
+
+The two signals that *did* survive in that study shared a shape our structure
+read does not have: they fired only inside a classified volatility regime, and
+they held for 60-75 minutes rather than predicting the next bar. The regime
+classifier used four features, and three of them need only OHLC:
+
+    ATR ratio               current 20-bar ATR over its own trailing baseline
+    close position in range where the bar closed inside its own high-low
+    bar return              the 5-minute return itself
+
+The fourth was a volume z-score, which we cannot compute: Angel's index candles
+carry no volume and our live bars are built with 0.0 (arb/candles.py). That gate
+is therefore absent here, not silently approximated - see research/PAPERS.md.
+
+What this module provides is the part we can honestly build: a measure of
+whether the tape is moving enough for a move to clear its own costs, and where
+in the session we are. Neither predicts direction. Both decide whether the
+direction the structure read produced is worth paying friction to act on.
+"""
+from arb.instruments import now_ist
+
+
+def true_range(prev_close, high, low):
+    return max(high - low, abs(high - prev_close), abs(low - prev_close))
+
+
+def atr(candles, period=20):
+    """Average true range over the last ``period`` completed bars.
+
+    ``candles`` are [iso, o, h, l, c, v]. Returns 0.0 when there is not enough
+    history, which callers must treat as "unknown", never as "calm".
+    """
+    if len(candles) < period + 1:
+        return 0.0
+    trs = []
+    for i in range(len(candles) - period, len(candles)):
+        trs.append(true_range(candles[i - 1][4], candles[i][2], candles[i][3]))
+    return sum(trs) / len(trs) if trs else 0.0
+
+
+def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0)):
+    """Current ATR against its own trailing baseline, capped.
+
+    The baseline is the median true range over the preceding ``baseline_bars``,
+    computed on prior bars only. Mesfin fixed this constant over the whole
+    sample and flagged it as mild look-ahead; a trailing median costs nothing
+    and removes that objection.
+
+    Returns 0.0 when history is too short to judge.
+    """
+    if len(candles) < period + 1:
+        return 0.0
+    recent = atr(candles, period)
+    if recent <= 0:
+        return 0.0
+    window = candles[-(baseline_bars + 1):]
+    if len(window) < period + 2:
+        return 0.0
+    trs = sorted(true_range(window[i - 1][4], window[i][2], window[i][3])
+                 for i in range(1, len(window)))
+    mid = len(trs) // 2
+    base = trs[mid] if len(trs) % 2 else 0.5 * (trs[mid - 1] + trs[mid])
+    if base <= 0:
+        return 0.0
+    return max(cap[0], min(cap[1], recent / base))
+
+
+def close_position(candle):
+    """Where the bar closed inside its own range: 0.0 at the low, 1.0 at the high.
+
+    A bar that closes at its extreme is an impulse; one that closes mid-range is
+    indecision wearing the same colour. 0.5 is returned for a zero-range bar.
+    """
+    _, _, high, low, close = candle[0], candle[1], candle[2], candle[3], candle[4]
+    rng = high - low
+    if rng <= 0:
+        return 0.5
+    return (close - low) / rng
+
+
+def efficiency(closes):
+    """Kaufman's efficiency ratio: net move over path length. 1 is a straight
+    line, 0 is price going nowhere however much it wiggles - a sideways tape."""
+    path = sum(abs(b - a) for a, b in zip(closes, closes[1:]))
+    return abs(closes[-1] - closes[0]) / path if path > 0 else 0.0
+
+
+def premium_gate(closes, cost_points, L):
+    """Why the OPTION's own chart refuses this trade, or "".
+
+    Our P&L is the premium, not the index. Theta and IV can hold a premium flat
+    while the index moves, so the premium bought must itself have risen by more
+    than the round trip over the last `premium_rise_bars` (research/PAPERS.md 0e).
+    """
+    n = int(getattr(L, "premium_rise_bars", 0) or 0)
+    if n <= 0:
+        return ""
+    if len(closes) < n + 1:
+        return "premium_chart_warming_up"
+    return "" if closes[-1] - closes[-1 - n] > cost_points else "premium_not_rising"
+
+
+def _minutes(hhmm):
+    hh, mm = (int(x) for x in hhmm.split(":"))
+    return hh * 60 + mm
+
+
+def session_phase(start="09:15", end="15:30", now=None):
+    """Which third of the session we are in, by the clock.
+
+    Gao, Han, Li and Zhou (JFE 2018) find the first half-hour return predicts the
+    last half-hour return, and that the effect concentrates on volatile, high
+    volume days. Heston, Korajczyk and Sadka (JF 2010) find intraday return
+    continuation is strongest in the first and last half-hour periods, and that
+    what happens in between is largely temporary liquidity imbalance and
+    bid-ask bounce - the part a scalper pays for and does not collect.
+
+    Returns one of "open", "midday", "close", or "outside".
+    """
+    n = now or now_ist()
+    mins = n.hour * 60 + n.minute
+    s, e = _minutes(start), _minutes(end)
+    if mins < s or mins > e:
+        return "outside"
+    if mins < s + 60:
+        return "open"
+    if mins >= e - 60:
+        return "close"
+    return "midday"
+
+
+def regime_gate(candles, L, now=None):
+    """The reason to refuse this bar, or "" if the tape is worth trading.
+
+    Refusals are deliberately named after what failed so the dashboard's reject
+    counter stays readable.
+    """
+    # Never trade a sideways market: the index must have travelled at least as
+    # efficiently as a random walk would (expected ratio 1/sqrt(n)), so the bar
+    # is derived from the window, not typed in. Its own switch (sideways_bars =
+    # 0), not use_regime_gate, so it cannot go by accident.
+    n = int(getattr(L, "sideways_bars", 0) or 0)
+    if n > 0 and len(candles) > n + 1:
+        if efficiency([r[4] for r in candles[-(n + 2):-1]]) * n ** 0.5 < L.min_trend_efficiency:
+            return "index_sideways"
+    if not getattr(L, "use_regime_gate", True):
+        return ""
+
+    # "No data" and "quiet tape" are different facts and must not share a
+    # counter. A feed that has died looks exactly like a calm market to every
+    # downstream check, and a reject reason that cannot tell them apart will
+    # report a broken session as a well-behaved one all day.
+    if not candles:
+        return "no_candles"
+
+    ar = 0.0
+    if L.min_atr_ratio > 0:
+        if len(candles) < L.atr_period + 1:
+            return "candles_warming_up"
+        ar = atr_ratio(candles, period=L.atr_period,
+                       baseline_bars=L.atr_baseline_bars)
+        if ar <= 0:
+            # Not enough history to know the tape's own normal. That is a fact
+            # about our data, not about the market, and it is only a refusal
+            # when the operator asked for one.
+            if not getattr(L, "trade_unknown_regime", True):
+                return "regime_unknown"
+        elif ar < L.min_atr_ratio:
+            return "regime_too_quiet"
+
+    mode = str(getattr(L, "midday_mode", "strict"))
+    if getattr(L, "skip_midday", False):
+        mode = "block"
+    if mode != "off" and session_phase(now=now) == "midday":
+        if mode == "block":
+            return "midday_chop"
+        # "strict": the middle of the day is tradable on a day that is actually
+        # moving - that is when the continuation effect survives lunch.
+        need = float(getattr(L, "midday_min_atr_ratio", 1.0))
+        if ar < need:
+            return "midday_chop"
+
+    if L.min_close_position > 0 and len(candles) >= 2:
+        # The last COMPLETED bar. The final row is usually the live bar, whose
+        # close moves with every tick and says nothing yet.
+        cp = close_position(candles[-2])
+        # Symmetric: an impulse in either direction closes near an extreme.
+        if min(cp, 1.0 - cp) > (0.5 - L.min_close_position):
+            return "bar_indecisive"
+
+    return ""
