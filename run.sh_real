@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# REAL MONEY. Start the intraday engine in LIVE mode against the funds in the
+# Angel One account. ./run.sh is paper and stays paper.
+#
+#   ./run.sh_real          pre-flight checks, typed confirmation, then LIVE
+#   ./run.sh_real stop     stop the live engine (open positions are squared off)
+#   ./run.sh_real logs     follow the live session log
+#   ./run.sh_real status   is a live engine running?
+#
+# What happens before a single order can go out:
+#   1. the paper engine is stopped - two engines on one API key starve each other
+#   2. every test suite must pass
+#   3. your available funds, the risk limits and what will trade are shown
+#   4. you type REAL
+# The engine itself then refuses to start if the account already holds positions
+# it did not open, and sizes every trade from the broker's own funds figure.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")"
+
+PY=venv/bin/python
+PORT=8088
+LOGDIR=logs
+PIDFILE=.engine_live.pid
+
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
+dim()   { printf '\033[2m%s\033[0m\n' "$*"; }
+
+[ -x "$PY" ] || { red "venv missing"; exit 1; }
+[ -f .angel.env ] || { red ".angel.env missing"; exit 1; }
+
+live_pid() {
+  pgrep -f "run_bot.py --mode live" | head -n1 || true
+}
+
+cmd="${1:-start}"
+case "$cmd" in
+  stop)
+    pid=$(live_pid)
+    if [ -n "$pid" ]; then
+      kill "$pid" && green "stopping LIVE engine (pid $pid) - it squares off open positions first"
+      for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      kill -0 "$pid" 2>/dev/null && red "still running after 30s - check the log and the Angel app" || green "stopped"
+      rm -f "$PIDFILE"
+    else dim "no live engine running"; fi
+    exit 0 ;;
+  logs)
+    f=$(ls -t "$LOGDIR"/live_session_*.log 2>/dev/null | head -n1)
+    [ -n "$f" ] || { red "no live session logs yet"; exit 1; }
+    exec tail -n 60 -f "$f" ;;
+  status)
+    pid=$(live_pid)
+    [ -n "$pid" ] && green "LIVE engine running (pid $pid)" || dim "no live engine running"
+    exit 0 ;;
+  start) shift || true ;;
+  *) red "unknown command: $cmd  (start | stop | logs | status)"; exit 2 ;;
+esac
+
+if [ -n "$(live_pid)" ]; then
+  red "a LIVE engine is already running (pid $(live_pid)). Stop it first: ./run.sh_real stop"
+  exit 1
+fi
+
+bold "── REAL MONEY: pre-flight ─────────────────────────────────────────────"
+
+# 1. one engine per API key
+paper=$(pgrep -f "venv/bin/python run_bot.py" | head -n1 || true)
+if [ -n "$paper" ]; then
+  dim "stopping the paper engine (pid $paper)"
+  kill "$paper" || true
+  for _ in $(seq 1 15); do kill -0 "$paper" 2>/dev/null || break; sleep 1; done
+  rm -f .engine.pid
+fi
+
+# 2. the test suites
+dim "running the test suites..."
+if ! ./run.sh test >/tmp/run_real_tests.$$ 2>&1 || ! "$PY" tests/test_live.py >>/tmp/run_real_tests.$$ 2>&1; then
+  red "TESTS FAILED - live start refused. Last lines:"; tail -n 25 /tmp/run_real_tests.$$; rm -f /tmp/run_real_tests.$$
+  exit 1
+fi
+rm -f /tmp/run_real_tests.$$
+green "all tests pass"
+
+# 3. what is about to happen, with the account's real figures
+"$PY" - <<'PY' || { red "pre-flight failed - live start refused"; exit 1; }
+import logging, sys
+logging.disable(logging.CRITICAL)
+sys.path.insert(0, ".")
+from arb.config import Credentials, IntradayLimits
+from arb.feed import AngelSession
+from run_bot import live_funds, open_broker_positions
+L = IntradayLimits.load()
+api = AngelSession(Credentials.load()).login().api
+funds, src = live_funds(api)
+held = open_broker_positions(api)
+if funds <= 0:
+    print(f"\033[31mcould not read available funds ({src})\033[0m"); sys.exit(1)
+if held:
+    print("\033[31mthe account already holds positions the engine did not open:\033[0m")
+    for h in held: print("   ", h)
+    print("close them in the Angel app first"); sys.exit(1)
+risk = funds * L.max_risk_pct_per_trade / 100
+halt = funds * L.max_daily_loss_pct / 100
+print(f"  available funds       Rs {funds:,.2f}  ({src})")
+print(f"  risk per trade        Rs {risk:,.0f}  ({L.max_risk_pct_per_trade:g}% of funds)")
+print(f"  daily loss halt       Rs {halt:,.0f}  ({L.max_daily_loss_pct:g}% of funds) - no new trades after this")
+print(f"  max trades / day      {L.max_trades_per_day}, one position at a time")
+print(f"  index options         NIFTY / BANKNIFTY / SENSEX, buying only, ATM +/- {L.max_strike_offset}")
+print(f"  stocks in play        {'ON: cash MIS, long and short, up to %gx leverage' % L.stocks_leverage if L.stocks_enabled else 'off'}")
+print(f"  square-off            everything closed {L.squareoff_minutes:g} min before the session end")
+PY
+
+echo
+red  "This places REAL orders with REAL money. Every trade can lose."
+dim  "The research log (research/PAPERS.md 0f-0i) has not shown a proven edge after costs;"
+dim  "the stock desk has not yet passed its replay. Start small and watch the first day."
+printf 'Type REAL to start live trading: '
+read -r answer
+if [ "$answer" != "REAL" ]; then
+  red "not confirmed - nothing started"; exit 1
+fi
+
+mkdir -p "$LOGDIR"
+log="$LOGDIR/live_session_$(date +%Y%m%d_%H%M%S).log"
+nohup "$PY" run_bot.py --mode live --yes --port "$PORT" "$@" >"$log" 2>&1 &
+echo $! > "$PIDFILE"
+
+for _ in $(seq 1 90); do
+  if grep -q "scanning (live)" "$log" 2>/dev/null; then break; fi
+  if ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    red "LIVE engine exited during startup - last lines:"; tail -n 25 "$log"; rm -f "$PIDFILE"; exit 1
+  fi
+  sleep 1
+done
+
+green "LIVE engine running (pid $(cat "$PIDFILE"))"
+dim  "dashboard  http://127.0.0.1:$PORT"
+dim  "log        $log"
+dim  "stop       ./run.sh_real stop   ·  follow  ./run.sh_real logs"
+grep -E "LIVE funds|stocks  " "$log" | sed 's/^/  /' || true

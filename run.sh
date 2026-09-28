@@ -52,13 +52,18 @@ case "$cmd" in
     echo
     "$PY" tests/test_optionflow.py || exit 1
     echo
-    exec "$PY" tests/test_stocks.py ;;
+    "$PY" tests/test_stocks.py || exit 1
+    echo
+    exec "$PY" tests/test_live.py ;;
   arb)     shift; set -- --strategy arb "$@" ;;
   logs)
     f=$(ls -t "$LOGDIR"/session_*.log 2>/dev/null | head -n1)
     [ -n "$f" ] || { red "no session logs yet"; exit 1; }
     exec tail -n 40 -f "$f" ;;
   stop)
+    if pgrep -f "run_bot.py --mode live" >/dev/null 2>&1; then
+      red "the running engine is LIVE - stop it with ./run.sh_real stop"; exit 1
+    fi
     pid=$(running_pid)
     if [ -n "$pid" ]; then
       kill "$pid" && green "stopped engine (pid $pid)"
@@ -71,6 +76,12 @@ case "$cmd" in
 esac
 
 # ── start ─────────────────────────────────────────────────────────────────────
+# Never touch a LIVE engine from here: restarting it would square off real
+# positions. Real money is started and stopped only by ./run.sh_real.
+if pgrep -f "run_bot.py --mode live" >/dev/null 2>&1; then
+  red "a LIVE engine is running - ./run.sh will not touch it. Use ./run.sh_real stop first."
+  exit 1
+fi
 pid=$(running_pid)
 if [ -n "$pid" ]; then
   dim "engine already running (pid $pid); restarting so today's state is re-read"

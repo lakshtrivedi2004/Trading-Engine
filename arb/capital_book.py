@@ -97,14 +97,32 @@ class CapitalBook:
             self._save()
         return folded, cap
 
-    def record(self, net_pnl):
-        """One closed trade. On disk immediately; folded into capital later."""
+    def record(self, net_pnl, count=True):
+        """One closed trade (or, with count=False, a partial exit of one). On
+        disk immediately; folded into capital later."""
         with self._lock:
             if not self._data.get("day"):
                 self._data["day"] = now_ist().strftime("%Y-%m-%d")
             self._data["day_pnl"] = float(self._data.get("day_pnl", 0.0)) + float(net_pnl)
-            self._data["day_trades"] = int(self._data.get("day_trades", 0)) + 1
+            if count:
+                self._data["day_trades"] = int(self._data.get("day_trades", 0)) + 1
             self._save()
+
+    def sync_to_funds(self, funds, note="broker funds"):
+        """Live mode: the day opens on what the broker says the account holds,
+        not on a figure this process computed. Only on a fresh day - a restart
+        mid-session keeps the day's opening capital so the risk cap and the
+        daily loss halt do not move under an open day."""
+        funds = float(funds)
+        if funds <= 0:
+            return self.capital
+        with self._lock:
+            if int(self._data.get("day_trades", 0)) == 0 and abs(float(self._data.get("day_pnl", 0.0))) < 1e-9:
+                self._data["capital"] = funds
+                self._data["synced"] = {"date": now_ist().strftime("%Y-%m-%d"),
+                                        "funds": round(funds, 2), "note": note}
+                self._save()
+            return float(self._data.get("capital", funds))
 
     def close_day(self, note=""):
         """After the session: fold today's ledger into capital now. Safe to call

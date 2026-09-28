@@ -64,6 +64,43 @@ def cached_spot(name, max_age_days=5.0):
     return 0.0
 
 
+def live_funds(api):
+    """(available rupees, where the figure came from) from Angel's RMS limits."""
+    try:
+        r = api.rmsLimit() or {}
+        d = r.get("data") or {}
+    except Exception as e:
+        return 0.0, f"rmsLimit failed: {e}"
+    for key in ("availablecash", "net"):
+        try:
+            v = float(d.get(key) or 0)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v > 0:
+            return v, key
+    return 0.0, f"rmsLimit returned {str(r)[:120]}"
+
+
+def open_broker_positions(api):
+    """Open positions in the account right now, as readable lines. [] if none.
+    A failed lookup is itself a reason not to start live, so it is reported."""
+    try:
+        r = api.position() or {}
+    except Exception as e:
+        return [f"could not read positions: {e}"]
+    if isinstance(r, dict) and r.get("status") is False:
+        return [f"could not read positions: {r.get('message')}"]
+    out = []
+    for p in (r.get("data") or []) if isinstance(r, dict) else []:
+        try:
+            q = int(float(p.get("netqty") or 0))
+        except (TypeError, ValueError):
+            q = 0
+        if q:
+            out.append(f"{p.get('tradingsymbol')} qty {q} ({p.get('producttype')})")
+    return out
+
+
 def stock_candidates(sm, L):
     """F&O stocks worth subscribing: those whose cached NSE daily history says
     they are liquid enough to ever pass the scan. Without a cache (first run)
@@ -209,15 +246,34 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
     engine's return band does not apply and is not consulted.
     """
     L = IntradayLimits.load()
-    capital = CapitalBook(args.capital or L.starting_capital, log=log)
+    if mode == "live":
+        # Real money: its own ledger and journal, sized from the funds the
+        # broker says the account holds - never from the paper ledger's P&L.
+        funds, detail = live_funds(session.api)
+        open_pos = open_broker_positions(session.api)
+        if open_pos:
+            raise SystemExit(
+                "LIVE START REFUSED: the account already has open positions the engine "
+                "did not open and cannot manage:\n  " + "\n  ".join(open_pos) +
+                "\nClose them in the Angel app (or wait for them to square off), then start again.")
+        if funds <= 0:
+            raise SystemExit(f"LIVE START REFUSED: could not read available funds from Angel ({detail})")
+        if args.capital:
+            funds = min(funds, float(args.capital))
+        capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log)
+        capital.open_day()
+        cap_now = capital.sync_to_funds(funds)
+        log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f}")
+    else:
+        capital = CapitalBook(args.capital or L.starting_capital, log=log)
     interval = args.candle_interval or L.candle_interval
 
     notifier = None
     if not args.no_telegram:
         notifier = TelegramNotifier(creds.telegram_bot_token,
                                     creds.telegram_chat_id).start()
-    journal = Journal()
-    broker = (LiveBroker(session.api, cm, product="INTRADAY")
+    journal = Journal(directory="journal/live") if mode == "live" else Journal()
+    broker = (LiveBroker(session.api, cm, product="INTRADAY", confirm_fills=True, log=log)
               if mode == "live" else PaperBroker(cm))
 
     # Structure is read off index candles, so this is on the critical path now -

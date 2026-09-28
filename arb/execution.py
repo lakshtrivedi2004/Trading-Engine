@@ -73,12 +73,21 @@ class LiveBroker:
     mode = "live"
 
     def __init__(self, smart_connect, cost_model, product="CARRYFORWARD",
-                 duration="IOC", exchange="NFO"):
+                 duration="IOC", exchange="NFO", confirm_fills=False,
+                 confirm_timeout=6.0, log=lambda *_: None):
         self.api = smart_connect
         self.cm = cost_model
         self.product = product
         self.duration = duration
         self.exchange = exchange          # fallback only; legs carry their own
+        # confirm_fills: ask the broker what actually happened before reporting
+        # a leg as filled. The intraday engine needs this: an IOC order that is
+        # ACCEPTED is not an order that FILLED, and a position the engine
+        # believes it holds but does not is closed by a SELL - which, for a
+        # stock under MIS, opens a real short nobody asked for.
+        self.confirm_fills = confirm_fills
+        self.confirm_timeout = float(confirm_timeout)
+        self.log = log
         self._lock = threading.Lock()
 
     def _order_params(self, leg, price=None, market=False):
@@ -106,9 +115,108 @@ class LiveBroker:
         except Exception as e:
             return leg, None, str(e)
 
+    # ── confirmed single orders (the intraday engine) ───────────────────────
+    _FINAL = ("complete", "cancelled", "rejected")
+
+    def _status(self, uid, oid):
+        """(status, filled_qty, avg_price, reason) from the broker, or None."""
+        row = None
+        if uid:
+            try:
+                r = self.api.individual_order_details(uid) or {}
+                row = r.get("data") if isinstance(r, dict) else None
+            except Exception:
+                row = None
+        if not row:
+            try:
+                book = self.api.orderBook() or {}
+                row = next((x for x in (book.get("data") or [])
+                            if str(x.get("orderid")) == str(oid)), None)
+            except Exception:
+                row = None
+        if not row:
+            return None
+        return (str(row.get("status") or row.get("orderstatus") or "").lower(),
+                int(float(row.get("filledshares") or 0)),
+                float(row.get("averageprice") or 0.0),
+                str(row.get("text") or ""))
+
+    def _place_confirmed(self, leg):
+        """Place one order and wait for its real outcome. The leg comes back with
+        filled / qty / fill_price set from the broker, never from hope."""
+        params = self._order_params(leg, leg.get("quote_price"), market=bool(leg.get("market")))
+        leg["filled"], leg["fill_price"], leg["order_id"] = False, 0.0, None
+        try:
+            r = self.api.placeOrderFullResponse(params)
+        except Exception as e:
+            return f"{leg['symbol']}: place failed: {e}"
+        data = (r or {}).get("data") if isinstance(r, dict) else None
+        if not data or not data.get("orderid"):
+            return f"{leg['symbol']}: order refused: {(r or {}).get('message') if isinstance(r, dict) else r}"
+        oid, uid = data.get("orderid"), data.get("uniqueorderid")
+        leg["order_id"] = oid
+        st = None
+        deadline = time.time() + self.confirm_timeout
+        while time.time() < deadline:
+            st = self._status(uid, oid)
+            if st and st[0] in self._FINAL:
+                break
+            time.sleep(0.3)
+        if not st or st[0] not in self._FINAL:
+            # Still working after the timeout: pull it, then read what filled.
+            try:
+                self.api.cancelOrder(oid, "NORMAL")
+            except Exception:
+                pass
+            end = time.time() + 3.0
+            while time.time() < end:
+                st = self._status(uid, oid)
+                if st and st[0] in self._FINAL:
+                    break
+                time.sleep(0.3)
+        if not st:
+            leg["broker_status"] = "unknown"
+            return (f"{leg['symbol']}: order {oid} status UNKNOWN - check the Angel app; "
+                    f"treated as not filled")
+        status, filled, avg, why = st
+        leg["broker_status"], leg["reject_reason"] = status, why
+        if filled > 0:
+            leg["filled"], leg["qty"] = True, filled
+            leg["fill_price"] = avg if avg > 0 else float(leg.get("quote_price") or 0.0)
+            return None
+        return f"{leg['symbol']}: {status or 'not filled'}{(' - ' + why) if why else ''}"
+
+    def net_position(self, symbol):
+        """Net quantity the broker shows in `symbol` today, or None if unknown.
+        The last word when an order's own status cannot be read."""
+        try:
+            r = self.api.position() or {}
+        except Exception:
+            return None
+        if not isinstance(r, dict) or r.get("status") is False:
+            return None
+        q = 0
+        for p in r.get("data") or []:
+            if str(p.get("tradingsymbol")) == str(symbol):
+                try:
+                    q += int(float(p.get("netqty") or 0))
+                except (TypeError, ValueError):
+                    return None
+        return q
+
     def place_structure(self, opp, lots):
         legs = _scale_legs(opp, lots)
         errors = []
+        if self.confirm_fills:
+            for leg in legs:
+                err = self._place_confirmed(leg)
+                if err:
+                    errors.append(err)
+                    self.log(f"[live] {err}")
+            filled = [l for l in legs if l["filled"]]
+            if filled and len(filled) != len(legs):
+                errors.extend(self.unwind(filled))
+            return legs, errors
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(legs)) as pool:
             results = list(pool.map(self._place_one, legs))
 

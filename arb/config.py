@@ -424,9 +424,12 @@ class IntradayLimits:
     # stop is hit by the spread's own wobble. 0 disables.
     min_stop_atr: float = 1.0
     # The day stops here. Not a target - a hard halt.
-    max_daily_loss_pct: float = 30.0
+    max_daily_loss_pct: float = 15.0
     max_open_positions: int = 1
     max_trades_per_day: int = 15
+    # Live exits: an exit is a limit IOC at the touch; after this many unfilled
+    # attempts it goes at MARKET, because a stop that cannot fill is no stop.
+    exit_market_after: int = 3
     trade_cooldown_sec: float = 60.0
     # Do not re-enter the same strike straight after being stopped out of it.
     symbol_cooldown_sec: float = 300.0

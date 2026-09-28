@@ -11,8 +11,32 @@ trades it, and sends a Telegram message for every trade taken.
 ./run.sh test       # strategy correctness suite
 ```
 
-`run.sh` will not start live mode; the 30-day trial is paper only. Live needs a
-deliberate `venv/bin/python run_bot.py --mode live --yes`.
+**Real money has its own launcher.** `./run.sh` is always paper, and it will not
+stop or restart a live engine.
+
+```bash
+./run.sh_real          # REAL MONEY: pre-flight, type REAL, then live
+./run.sh_real stop     # stop live (open positions are squared off first)
+./run.sh_real logs     # follow the live log
+./run.sh_real status
+```
+
+Before any order can go out, `run.sh_real`:
+- stops the paper engine, because two engines on one API key starve each other;
+- runs every test suite, including `tests/test_live.py`;
+- shows the account's available funds (`rmsLimit`), the risk per trade and the daily loss halt;
+- asks you to type `REAL`.
+
+The engine then refuses to start if the account holds positions it did not open, or if funds read as zero.
+
+How live differs from paper:
+- It sizes from the broker's funds and keeps its own ledger and journal in `journal/live/`.
+- It never reports an order as filled until Angel's order status says it filled.
+  - An accepted-but-cancelled IOC is not a fill.
+  - An order still pending after 6 s is cancelled.
+  - Partial fills are booked as partial.
+  - An exit that keeps missing goes at market after `exit_market_after` tries.
+- If an order's status cannot be read, the engine checks the broker's net position rather than re-sending the order. If it cannot tell what it holds, it halts new entries and asks you to check the Angel app.
 
 Restarts are safe. On start the engine re-reads today's journal and restores the
 trade count, P&L, capital deployed and trade-id sequence, so the daily loss limit

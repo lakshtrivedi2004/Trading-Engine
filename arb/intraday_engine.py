@@ -293,6 +293,11 @@ class IntradayEngine:
                "exchange": pos.segment, "underlying": pos.underlying,
                "strike": pos.strike, "opt": pos.opt, "depth": pos.qty,
                "age_ms": 0.0}
+        # A limit at the touch that keeps missing in a running market is how a
+        # stop turns into a disaster. After exit_market_after unfilled tries,
+        # get out at market.
+        if pos.exit_attempts >= int(getattr(self.L, "exit_market_after", 3)):
+            leg["market"] = True
         ticket = _Ticket([leg], pos.qty, "INTRADAY_EXIT",
                          f"exit {pos.symbol} ({reason})", pos.expiry)
         try:
@@ -302,25 +307,72 @@ class IntradayEngine:
             self._note("exit_error")
             return None
         fill = float(legs[0].get("fill_price") or px)
+        if not legs[0].get("filled") and legs[0].get("broker_status") == "unknown":
+            # The order's own status could not be read. Retrying blindly could
+            # sell what is already sold - for a stock under MIS that is a new
+            # short. Ask the broker what we hold instead.
+            held = self.broker.net_position(pos.symbol) if hasattr(self.broker, "net_position") else None
+            want = -pos.qty if short else pos.qty
+            if held is None:
+                self.halted, self.halt_reason = True, f"exit status unknown for {pos.symbol} - check the Angel app"
+                self.log(f"[intraday] HALTED: {self.halt_reason}")
+                if self.notifier:
+                    self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\nExit of <code>{pos.symbol}</code> "
+                                       f"could not be confirmed. New entries halted.")
+                return None
+            if held != want:
+                # Some or all of it did go: book what went, at the price we sent.
+                gone = abs(want - held)
+                legs[0].update(filled=True, qty=min(gone, pos.qty), fill_price=float(px))
+                fill = float(px)
+                self.log(f"[intraday] {pos.symbol}: exit status unknown; broker shows "
+                         f"{held} held, so {gone} closed")
         if not legs[0].get("filled"):
-            self.log(f"[intraday] exit not filled for {pos.symbol}; will retry next tick")
+            pos.exit_attempts += 1
+            self.log(f"[intraday] exit not filled for {pos.symbol} "
+                     f"(try {pos.exit_attempts}, {legs[0].get('broker_status', '')}); "
+                     f"position still open, retrying"
+                     + (" at MARKET" if pos.exit_attempts >= int(getattr(self.L, "exit_market_after", 3)) else ""))
             return None
 
         from arb.costs import leg_cost
         inst = "EQ" if eq else "OPT"
-        cost = (leg_cost(pos.entry, pos.qty, "SELL" if short else "BUY", inst, self.cm)
-                + leg_cost(fill, pos.qty, "BUY" if short else "SELL", inst, self.cm))
-        points = (pos.entry - fill) if short else (fill - pos.entry)
-        gross = points * pos.qty
-        net = gross - cost
-
-        self.book.remove(pos.trade_id)
-        self.realised_pnl += net
+        # What actually filled. A partial exit is booked now - it is realised
+        # money and counts toward the daily loss halt - and the rest of the
+        # position stays open and managed.
+        q = max(1, min(int(legs[0].get("qty") or pos.qty), pos.qty))
+        part_cost = (leg_cost(pos.entry, q, "SELL" if short else "BUY", inst, self.cm)
+                     + leg_cost(fill, q, "BUY" if short else "SELL", inst, self.cm))
+        part_points = (pos.entry - fill) if short else (fill - pos.entry)
+        part_net = part_points * q - part_cost
+        self.realised_pnl += part_net
         if hasattr(self.capital, "record"):
             try:
-                self.capital.record(net)
+                self.capital.record(part_net, count=(q >= pos.qty))
+            except TypeError:
+                self.capital.record(part_net)
             except Exception as e:
                 self.log(f"[capital] ledger write failed: {e}")
+        pos.done_qty += q
+        pos.done_gross += part_points * q
+        pos.done_cost += part_cost
+        pos.done_value += fill * q
+        if q < pos.qty:
+            left = pos.qty - q
+            pos.margin *= left / pos.qty
+            pos.qty = left
+            self.log(f"[intraday] PARTIAL EXIT {pos.symbol}: {q} filled @ {fill:.2f}, "
+                     f"{left} still open and managed")
+            return None
+        qty_total = pos.done_qty
+        fill = pos.done_value / qty_total
+        points = pos.done_gross / qty_total
+        gross = pos.done_gross
+        cost = pos.done_cost
+        net = gross - cost
+        pos.qty = qty_total
+
+        self.book.remove(pos.trade_id)
         if net >= 0:
             self.wins += 1
             self.loss_streak = 0
@@ -624,6 +676,23 @@ class IntradayEngine:
         if desk is not None and desk.active:
             self._hunt_stocks(available)
 
+    def _unknown_entry(self, leg, symbol):
+        """An entry whose status could not be read may still have filled, and a
+        position the engine does not know about has no stop. Stop opening new
+        ones until a human has looked."""
+        if leg.get("broker_status") != "unknown":
+            return
+        held = self.broker.net_position(symbol) if hasattr(self.broker, "net_position") else None
+        if held == 0:
+            return
+        self.halted = True
+        self.halt_reason = f"entry status unknown for {symbol} (broker shows {held}) - check the Angel app"
+        self.log(f"[intraday] HALTED: {self.halt_reason}")
+        if self.notifier:
+            self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\nEntry in <code>{symbol}</code> could not "
+                               f"be confirmed (broker shows {held}). New entries halted; "
+                               f"MIS square-off will close anything left.")
+
     # ── stocks (arb/stockdesk.py) ───────────────────────────────────────────
     @staticmethod
     def _strategy_name(pos):
@@ -736,9 +805,11 @@ class IntradayEngine:
             self._note("entry_error")
             return False
         if not legs[0].get("filled"):
+            self._unknown_entry(legs[0], leg["symbol"])
             self._note("entry_not_filled")
             return False
         fill = float(legs[0]["fill_price"])
+        qty = int(legs[0].get("qty") or qty)     # what the broker actually filled
         self.trade_id += 1
         self.trades_today += 1
         self.last_trade_ts = time.time()
@@ -824,6 +895,7 @@ class IntradayEngine:
             self._note("entry_error")
             return False
         if not legs[0].get("filled"):
+            self._unknown_entry(legs[0], cand.symbol)
             self._note("entry_not_filled")
             return False
         qty = int(legs[0].get("qty") or cand.lot_size * lots)

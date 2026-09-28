@@ -66,6 +66,13 @@ class Position:
     # Cash stocks: what the broker blocks for this position (notional over the
     # intraday leverage). 0 for an option, whose premium IS the capital used.
     margin: float = 0.0
+    # Exit bookkeeping: unfilled attempts (escalates to market), and what has
+    # already been closed if the exit fills in pieces.
+    exit_attempts: int = 0
+    done_qty: int = 0
+    done_gross: float = 0.0
+    done_cost: float = 0.0
+    done_value: float = 0.0
 
     def __post_init__(self):
         if not self.initial_stop:
