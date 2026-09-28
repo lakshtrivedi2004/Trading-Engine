@@ -23,6 +23,12 @@ class QuoteStore:
         self.ltp = z()
         self.oi = z()
         self.volume = z()
+        # The exchange's own day open/high/low (SNAP_QUOTE carries them). A
+        # scanner started mid-session must see the whole day, not just the
+        # minutes since this process began.
+        self.day_open = z()
+        self.day_high = z()
+        self.day_low = z()
         # Monotonic receive time per slot, in nanoseconds. Staleness is judged
         # against this, never against exchange timestamps (clock skew).
         self.recv_ns = np.zeros(capacity, dtype=np.int64)
@@ -44,7 +50,7 @@ class QuoteStore:
         return slot
 
     def update_from_tick(self, slot, bid, ask, bid_qty, ask_qty, ltp,
-                         oi=0.0, volume=0.0, exch_ms=0, now_ns=None):
+                         oi=0.0, volume=0.0, exch_ms=0, now_ns=None, ohl=None):
         self.bid[slot] = bid
         self.ask[slot] = ask
         self.bid_qty[slot] = bid_qty
@@ -52,6 +58,8 @@ class QuoteStore:
         self.ltp[slot] = ltp
         self.oi[slot] = oi
         self.volume[slot] = volume
+        if ohl is not None:
+            self.day_open[slot], self.day_high[slot], self.day_low[slot] = ohl
         self.exch_ms[slot] = exch_ms
         self.recv_ns[slot] = now_ns if now_ns is not None else time.perf_counter_ns()
         self.tick_count[slot] += 1

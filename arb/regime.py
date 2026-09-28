@@ -14,9 +14,10 @@ classifier used four features, and three of them need only OHLC:
     close position in range where the bar closed inside its own high-low
     bar return              the 5-minute return itself
 
-The fourth was a volume z-score, which we cannot compute: Angel's index candles
-carry no volume and our live bars are built with 0.0 (arb/candles.py). That gate
-is therefore absent here, not silently approximated - see research/PAPERS.md.
+The fourth was a volume z-score. An index has no volume of its own, so
+arb/volume.py proxies it from the front future's traded volume, and it is used
+as a confirmation (arb/confluence.py), not as a gate here. Without that series
+every volume check abstains - see research/PAPERS.md section 1.
 
 What this module provides is the part we can honestly build: a measure of
 whether the tape is moving enough for a move to clear its own costs, and where

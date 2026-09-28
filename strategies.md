@@ -11,10 +11,10 @@ Options arbitrage exploits temporary pricing discrepancies across related financ
 In the Indian markets (NSE & BSE), options pricing is bound by non-arbitrage conditions (Put-Call Parity and Box Spread Equivalence). When market noise, institutional order flow, or retail sentiment pushes option premiums beyond these theoretical boundaries by more than the transaction fees and slippage, an arbitrage opportunity opens.
 
 ### Mandatory Pre-Trade Risk Rule
-Every signal must satisfy the **Net ROI Guard**:
-$$\text{Net ROI \%} = \frac{\text{Gross Profit} - \text{STT} - \text{NSE Charges} - \text{SEBI Fees} - \text{GST} - \text{Slippage}}{\text{Capital Deployed}} \ge 2.50\%$$
+Every signal must satisfy the **annualised edge band** (`arb/config.py`: `min_excess_return_pa`, `max_excess_return_pa`, `min_tenor_days`):
+$$\text{Band} = \frac{\text{Gross Edge} - \text{STT} - \text{NSE Charges} - \text{SEBI Fees} - \text{GST} - \text{Stamp} - \text{Slippage}}{S \times \text{Units}} \times \frac{365}{\max(T_{\text{days}}, 1)} \in [2\%,\ 5\%]$$
 
-If $\text{Net ROI} < 2.50\%$, the signal is rejected before reaching the order execution gateway.
+$S \times \text{Units}$ is the contract value the structure controls, so for a box this is how far the market's implied financing rate sits from fair. Below 2% a year the signal is rejected. Above 5% it is treated as a bad print or a frozen quote, not free money. A per-trade 2.5% on capital is unreachable on liquid index options, which is why the old "Net ROI ≥ 2.50%" rule was replaced. Below, $\text{Band}_{\min}$ is the rupee edge that 2% a year comes to on that trade.
 
 ---
 
@@ -33,7 +33,7 @@ A Box Spread combines a **Bull Call Spread** at strikes $K_1 < K_2$ and a **Bear
 - **Guaranteed Payoff at Expiry**: $K_2 - K_1$
 - **Arbitrage Trigger Condition**:
   $$\text{Net Present Value of Payoff} > D + \text{Total Costs}$$
-  $$(K_2 - K_1) e^{-r T} - D - \text{Costs} \ge \text{Capital} \times 0.025$$
+  $$(K_2 - K_1) e^{-r T} - D - \text{Costs} \ge \text{Band}_{\min}$$
 
 #### B. Short Box Spread
 - **Leg 1**: Sell Call at Strike $K_1$ (Receive $C_1^{\text{bid}}$)
@@ -44,7 +44,7 @@ A Box Spread combines a **Bull Call Spread** at strikes $K_1 < K_2$ and a **Bear
 - **Net Credit Received**: $C = (C_1^{\text{bid}} - C_2^{\text{ask}}) + (P_2^{\text{bid}} - P_1^{\text{ask}})$
 - **Guaranteed Payoff Owed at Expiry**: $K_2 - K_1$
 - **Arbitrage Trigger Condition**:
-  $$C - (K_2 - K_1) e^{-r T} - \text{Costs} \ge \text{Capital} \times 0.025$$
+  $$C - (K_2 - K_1) e^{-r T} - \text{Costs} \ge \text{Band}_{\min}$$
 
 ---
 
@@ -61,7 +61,7 @@ Occurs when the Synthetic Long option position ($C - P$) is **underpriced** rela
 
 #### Profit Calculation:
 $$\text{Gross Profit} = F_{\text{bid}} - K e^{-r T} - (C_{\text{ask}} - P_{\text{bid}})$$
-Executed when $\text{Gross Profit} - \text{Total Costs} \ge \text{Capital} \times 0.025$.
+Executed when $\text{Gross Profit} - \text{Total Costs} \ge \text{Band}_{\min}$.
 
 ---
 
@@ -75,7 +75,7 @@ Occurs when the Synthetic Short option position is **underpriced** relative to t
 
 #### Profit Calculation:
 $$\text{Gross Profit} = (C_{\text{bid}} - P_{\text{ask}}) + K e^{-r T} - F_{\text{ask}}$$
-Executed when $\text{Gross Profit} - \text{Total Costs} \ge \text{Capital} \times 0.025$.
+Executed when $\text{Gross Profit} - \text{Total Costs} \ge \text{Band}_{\min}$.
 
 ---
 

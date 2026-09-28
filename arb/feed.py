@@ -185,6 +185,9 @@ class MarketFeed:
                 message.get("volume_trade_for_the_day", 0),
                 message.get("exchange_timestamp", 0),
                 now_ns=now,
+                ohl=(message.get("open_price_of_the_day", 0) * PAISE,
+                     message.get("high_price_of_the_day", 0) * PAISE,
+                     message.get("low_price_of_the_day", 0) * PAISE),
             )
             g = self.slot_group[slot]
             if g >= 0:

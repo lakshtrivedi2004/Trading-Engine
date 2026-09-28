@@ -19,4 +19,4 @@ Every model response, execution engine module, and quantitative evaluation MUST 
 ## 3. Cash Settlement & Cost Model
 - Index Options (Nifty 50, Sensex) are **cash-settled** automatically at CAS equilibrium price. No delivery required.
 - Put-Call Parity formula: $\text{Call} - \text{Put} \approx \text{Spot} - \text{Strike} \times e^{-r t}$, where $t = \text{days\_to\_expiry} / 365.0$.
-- All trades MUST enforce **Net ROI $\ge 2.50\%$** after deducting STT (0.125% sell / 0.02% fut), NSE turnover charges, SEBI fees, GST (18%), Stamp Duty, and slippage.
+- All trades MUST have a net edge, after STT (0.125% sell / 0.02% fut), NSE turnover charges, SEBI fees, GST (18%), Stamp Duty and slippage, of **2% to 5% per year** of the contract value controlled (index level × units), with the tenor floored at one day (`min_excess_return_pa` / `max_excess_return_pa` / `min_tenor_days` in `arb/config.py`). It is not a per-trade ROI on capital.

@@ -180,6 +180,13 @@ def _grade(extras, L):
     return "C"
 
 
+def regrade(v, L):
+    """Re-derive the grade after a read that can only be taken once a contract
+    has been chosen - the option chain's own opinion (arb/optionflow.py)."""
+    v.grade = _grade(v.extras + max(0, len(v.setups) - 1), L)
+    return v.grade
+
+
 def evaluate(ltf_candles, spot, L, strike_step=0.0):
     """Find the setup, pick its side, apply the few vetoes left, grade it.
 

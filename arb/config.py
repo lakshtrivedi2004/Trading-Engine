@@ -82,6 +82,15 @@ class CostModel:
     sebi_fee: float = 0.000001
     gst_rate: float = 0.18
     ipft: float = 0.000005
+    # Cash equity, intraday (MIS). STT 0.025% on the sell side only, stamp
+    # 0.003% on the buy side, NSE cash transaction charge 0.00307%. Angel's
+    # intraday brokerage since 17 Nov 2025 is the lower of Rs 20 and 0.1% of the
+    # order, with a Rs 5 minimum (research/PAPERS.md 0i).
+    eq_stt_sell: float = 0.00025
+    eq_exchange_txn: float = 0.0000307
+    eq_stamp_buy: float = 0.00003
+    eq_brokerage_frac: float = 0.001
+    eq_brokerage_min: float = 5.0
     # Execution friction, in price points per leg, charged on top of the quoted
     # price we cross. Calibrated from live fills by research.py.
     slippage_ticks_per_leg: float = 1.0
@@ -511,6 +520,46 @@ class IntradayLimits:
     min_trend_efficiency: float = 1.0
     premium_rise_bars: int = 0
 
+    # ── the premium's own movement, and the other side (arb/optionflow.py) ──
+    # The owner's rules (research/PAPERS.md 0h). One index point moves an ATM
+    # premium ~0.5-0.6, and on a rally a call earns less than its chain delta
+    # because index IV falls as the index rises (Hull & White 2017). Recorded
+    # books: calls realised ~0.74 of chain delta, puts ~0.94. Target and cost checks use the
+    # contract's measured points-per-point on the last realised_delta_bars
+    # minutes, shrunk toward the prior by R^2 and history length, and never
+    # above the chain delta. Stops and sizing keep the chain delta: losses
+    # realised in full (~1.0x) where gains did not (~0.6x over 30 minutes).
+    use_realised_delta: bool = True
+    realised_delta_bars: int = 30
+    realised_delta_prior_ce: float = 0.8
+    realised_delta_prior_pe: float = 1.0
+    realised_delta_floor: float = 0.3
+    # Cross-side read: the put at the same |delta| as the call being bought
+    # (or the reverse) must mirror the move, and the neighbouring strikes must
+    # be in line. Over cross_side_bars minutes:
+    #   "off"    not read
+    #   "log"    read and journalled only
+    #   "grade"  (default) a confirming read counts as an extra and can raise
+    #            the grade; a contradicting one is journalled, not refused
+    #   "gate"   also refuse fake_move / options_against (and a vol crush
+    #            with cross_side_veto_crush)
+    # Not a gate by default: on two recorded sessions the options' lead had the
+    # predicted sign (+0.15 to +0.24 corr with the next 10 minutes) at t ~ 1-1.5,
+    # which is a hint, not evidence. Re-test with tools/crossside_replay.py.
+    cross_side_mode: str = "grade"
+    cross_side_bars: int = 10
+    # How big the options-vs-index disagreement must be, in index ATRs (1m),
+    # before it means anything, and an absolute floor in index points.
+    cross_side_lean_atr: float = 0.5
+    cross_side_min_points: float = 0.0
+    # A matched strangle falling by this share of the move is writers crushing
+    # volatility; it never confirms a long option.
+    cross_side_crush: float = 0.3
+    cross_side_veto_crush: bool = False
+    # Slack, as a share of our strike's own change, before a strike counts as
+    # out of line with its two neighbours.
+    cross_side_ladder_tol: float = 0.5
+
     # ── confluence (arb/confluence.py) ──────────────────────────────────────
     # How many reads must agree before a trade is taken, COUNTING THE SETUP
     # ITSELF. 1 means one completed, ordered playbook is a trade on its own -
@@ -703,6 +752,44 @@ class IntradayLimits:
     # rather than quietly refusing every bar. A dead feed and a calm market look
     # identical from inside the gates; only the clock distinguishes them.
     candle_starvation_warn_sec: float = 120.0
+
+    # ── stocks in play (arb/scanner.py, research/PAPERS.md 0i) ──────────────
+    # Cash shares, intraday (MIS), both directions. Not stock options: one lot
+    # of a stock option or future controls Rs 3-17 lakh, options are monthly
+    # only and settle by physical delivery, so at this purse the cash market is
+    # the only way to trade a stock at all. Off until tools/stock_backtest.py
+    # shows the scanner's picks beating random picks after costs, in both
+    # periods.
+    stocks_enabled: bool = False
+    stocks_allow_short: bool = True
+    # SEBI peak-margin rules: at least 20% upfront, so 5x is the ceiling. The
+    # broker may give less on a given stock, and a live order above its limit
+    # is refused, not resized.
+    stocks_leverage: float = 5.0
+    # The scan: how many names to trade, when to pick them, how often to re-pick.
+    stocks_top_k: int = 3
+    stocks_pick_at: str = "09:30"
+    stocks_rescan_min: float = 30.0
+    # Universe filters. Liquidity is what makes a scalp possible at all: a
+    # stock that trades Rs 50 crore a day has a one-tick spread on a Rs 50k
+    # order; a thin one does not.
+    stocks_min_price: float = 100.0
+    stocks_min_turnover_cr: float = 50.0
+    stocks_min_atr_pct: float = 1.5
+    # Relative volume floor (1.0 = a normal day by this time). Zarattini,
+    # Barbon & Aziz: per-trade R was -0.02 below 1.0 and +0.08 above it.
+    stocks_min_rvol: float = 1.0
+    # Score weights on cross-sectional ranks: ATR%, relative volume, move from
+    # the previous close in ATRs, range so far in ATRs.
+    stocks_w_atr: float = 1.0
+    stocks_w_rvol: float = 1.0
+    stocks_w_move: float = 0.5
+    stocks_w_range: float = 0.5
+    # A stock trade must clear its round trip by at least this many rupees at
+    # the target (the equity analogue of min_net_points), and a spread
+    # allowance (fraction of price) is charged in the replay.
+    stocks_min_net_inr: float = 100.0
+    stocks_spread_frac: float = 0.0003
 
     @classmethod
     def load(cls, path=None):

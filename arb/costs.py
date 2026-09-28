@@ -18,7 +18,13 @@ def leg_cost(price, qty, side, instrument="OPT", cm: CostModel = None):
     sell = side == "SELL"
 
     brokerage = cm.brokerage_per_order
-    if instrument == "OPT":
+    if instrument == "EQ":
+        brokerage = max(cm.eq_brokerage_min,
+                        min(cm.brokerage_per_order, turnover * cm.eq_brokerage_frac))
+        stt = turnover * cm.eq_stt_sell if sell else 0.0
+        exch = turnover * cm.eq_exchange_txn
+        stamp = 0.0 if sell else turnover * cm.eq_stamp_buy
+    elif instrument == "OPT":
         stt = turnover * cm.opt_stt_sell if sell else 0.0
         exch = turnover * cm.opt_exchange_txn
         stamp = 0.0 if sell else turnover * cm.opt_stamp_buy

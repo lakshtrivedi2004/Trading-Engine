@@ -46,8 +46,6 @@ def work(args):
         D[k]["adr"] = sum(p["hi"] - p["lo"] for p in prev) / len(prev) if prev else 0.0
     for i in range(lo, hi):
         iso = rows[i][0]; m = mins(iso)
-        if m < 9 * 60 + 30 or m > 14 * 60 + 45 or rows[i - 1][0][:10] != iso[:10] and m > 9 * 60 + 15:
-            pass
         if m < 9 * 60 + 30 or m > 14 * 60 + 45:
             continue
         seg = rows[i - 399:i + 1]

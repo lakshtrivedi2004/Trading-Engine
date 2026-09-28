@@ -6,7 +6,7 @@
 #   ./run.sh status       connectivity and universe check, then exit
 #   ./run.sh stop         stop a running engine
 #   ./run.sh logs         follow the current session log
-#   ./run.sh test         run both strategy test suites
+#   ./run.sh test         run the strategy test suites
 #
 # Anything after the command is passed through to run_bot.py, e.g.
 #   ./run.sh --lots 2 --min-edge 0.1
@@ -48,7 +48,11 @@ case "$cmd" in
   test)
     "$PY" tests/test_strategies.py || exit 1
     echo
-    exec "$PY" tests/test_intraday.py ;;
+    "$PY" tests/test_intraday.py || exit 1
+    echo
+    "$PY" tests/test_optionflow.py || exit 1
+    echo
+    exec "$PY" tests/test_stocks.py ;;
   arb)     shift; set -- --strategy arb "$@" ;;
   logs)
     f=$(ls -t "$LOGDIR"/session_*.log 2>/dev/null | head -n1)

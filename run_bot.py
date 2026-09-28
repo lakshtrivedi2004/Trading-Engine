@@ -64,6 +64,31 @@ def cached_spot(name, max_age_days=5.0):
     return 0.0
 
 
+def stock_candidates(sm, L):
+    """F&O stocks worth subscribing: those whose cached NSE daily history says
+    they are liquid enough to ever pass the scan. Without a cache (first run)
+    every F&O stock is subscribed and the scan filters later."""
+    import json
+    import os
+    from arb.scanner import daily_stat, fo_universe
+    uni = fo_universe(sm)
+    hist = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache", "history", "stocks")
+    keep = {}
+    for sym, info in uni.items():
+        p = os.path.join(hist, f"{sym}_1d.json")
+        if os.path.exists(p):
+            try:
+                st = daily_stat(sym, json.load(open(p)))
+            except (OSError, ValueError):
+                st = None
+            # Half the live floors: the subscription is a superset, the scan decides.
+            if st is not None and (st.turnover_cr < 0.5 * L.stocks_min_turnover_cr
+                                   or st.prev_close < 0.5 * L.stocks_min_price):
+                continue
+        keep[sym] = info
+    return keep
+
+
 def build(cfg, creds, args):
     """Log in, pick the universe across every enabled index, wire the feed."""
     log(f"Angel One login as {creds.client_id}")
@@ -107,8 +132,14 @@ def build(cfg, creds, args):
     if not specs:
         raise SystemExit("no tradable index found in the scrip master")
 
+    # Stocks in play (arb/stockdesk.py): the cash tokens of every liquid F&O
+    # stock, subscribed now because the socket only subscribes on connect.
+    stock_universe = {}
+    if getattr(args, "strategy", "intraday") == "intraday" and IntradayLimits.load().stocks_enabled:
+        stock_universe = stock_candidates(sm, IntradayLimits.load())
+        log(f"stocks             {len(stock_universe)} liquid F&O cash stocks subscribed")
     n_tokens = sum(len(c) * 2 for _, _, ch, _ in specs for c in ch.values()) \
-        + sum(len(f) for _, _, _, f in specs) + len(specs)
+        + sum(len(f) for _, _, _, f in specs) + len(specs) + len(stock_universe)
     feed = MarketFeed(
         session, capacity=n_tokens + 256, log=log,
         market_open=lambda: market_phase(start=cfg.session_start,
@@ -164,6 +195,9 @@ def build(cfg, creds, args):
         f"subscribing to {feed.store._next} tokens in SNAP_QUOTE mode")
     feed.spot_slots = spot_slots
     feed.future_slots = future_slots
+    feed.stock_universe = stock_universe
+    feed.stock_slots = {sym: feed.register(info["eq_token"], NSE_CM)
+                        for sym, info in stock_universe.items()}
     return session, feed, bindings, spots
 
 
@@ -191,10 +225,16 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
     candles = CandleStore(session.api, cfg.active_underlyings(),
                           interval=interval, log=log)
     candles.attach_feed(feed.store, getattr(feed, "spot_slots", {}),
-                        getattr(feed, "future_slots", {})).start()
+                        getattr(feed, "future_slots", {}),
+                        extra_slots=getattr(feed, "stock_slots", {})).start()
 
     engine = IntradayEngine(feed, bindings, cfg, cm, L, broker, journal,
                             capital, candles, notifier=notifier, log=log)
+    if L.stocks_enabled and getattr(feed, "stock_slots", None):
+        from arb.nse import NseClient
+        from arb.stockdesk import StockDesk
+        engine.stocks = StockDesk(feed.stock_universe, feed.stock_slots, candles, L,
+                                  api=session.api, nse=NseClient(log=log), log=log).start()
     # One book snapshot a minute (~4 MB a day): Angel serves no history for
     # expired options, so this is the only premium data any rule can be tested on.
     recorder = TickRecorder(feed.store, bindings, hz=1 / 60.0).start() if cfg.record_ticks else None

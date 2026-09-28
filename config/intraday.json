@@ -25,5 +25,6 @@
   "warmup_minutes": 15.0,
   "playbooks": [
     "ob_fvg_retest"
-  ]
+  ],
+  "stocks_enabled": true
 }

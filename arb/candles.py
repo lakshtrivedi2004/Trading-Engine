@@ -61,8 +61,9 @@ class CandleStore:
         # subscribed contract, built from the same ticks. Our P&L is this
         # chart, not the index one (arb/regime.py:premium_gate).
         self._premium = deque(maxlen=120)
+        self._memory_only = set()
 
-    def attach_feed(self, store, spot_slots, future_slots=None):
+    def attach_feed(self, store, spot_slots, future_slots=None, extra_slots=None):
         """Give the store access to the live spot ticks, keyed by index name.
 
         `future_slots` is optional and keyed the same way. Without it the volume
@@ -72,6 +73,13 @@ class CandleStore:
         self._store = store
         self._spot_slots = dict(spot_slots)
         self._future_slots = self._pick_futures(future_slots or {})
+        # Cash stocks (arb/stockdesk.py): live bars only, their own traded
+        # volume, and never written to the cache every minute - two hundred
+        # files a minute would cost more than the bars are worth.
+        for name, slot in (extra_slots or {}).items():
+            self._spot_slots[name] = int(slot)
+            self._future_slots[name] = int(slot)
+            self._memory_only.add(name)
         if self._future_slots:
             self.log(f"[candles] volume proxied from futures: "
                      + ", ".join(sorted(self._future_slots)))
@@ -148,7 +156,8 @@ class CandleStore:
                     # Persist the bar we just built. Without this, a restart
                     # while the historical API is refusing us throws away the
                     # whole morning's structure and the day trend with it.
-                    self._save_cache(name, snap)
+                    if name not in self._memory_only:
+                        self._save_cache(name, snap)
                 self.live[name] = [iso, px, px, px, px, self._volume_delta(name)]
             else:
                 if px > bar[2]:
@@ -291,6 +300,16 @@ class CandleStore:
                 rows.append(list(live))
         return rows[-limit:]
 
+    def seed(self, name, rows):
+        """Merge fetched 1-minute history under the live bars (a new stock pick).
+        History is authoritative for the minutes it covers; newer live bars stay."""
+        if not rows:
+            return
+        with self._lock:
+            mine = self.data.get(name) or []
+            tail = [r for r in mine if r[0] > rows[-1][0]]
+            self.data[name] = (list(rows) + tail)[-int(self.max_rows):]
+
     def premium(self, slot, limit=30):
         """Closing mid of one option per minute, oldest first, live mid last."""
         with self._lock:
@@ -299,6 +318,29 @@ class CandleStore:
         if st is not None and st.bid[slot] > 0 and st.ask[slot] > 0:
             rows.append(float(st.bid[slot] + st.ask[slot]) / 2)
         return [x for x in rows if x > 0][-limit:]
+
+    def premium_series(self, slots, limit=60):
+        """Per-minute values for several slots on the SAME minutes, oldest first.
+
+        Index slots carry their LTP (they quote no bid/ask), so the spot can be
+        passed alongside the options it moves. A minute on which any slot had
+        no price is dropped for all of them: a regression of one premium on the
+        index is only meaningful on minutes where both were observed.
+        Returns {slot: [values]}, every list the same length.
+        """
+        slots = [int(s) for s in slots]
+        with self._lock:
+            snaps = [m for _, m in list(self._premium)[1:]]
+        rows = [[float(m[s]) for s in slots] for m in snaps]
+        st = self._store
+        if st is not None:
+            live = []
+            for s in slots:
+                b, a = float(st.bid[s]), float(st.ask[s])
+                live.append((b + a) / 2 if b > 0 and a > 0 else float(st.ltp[s]))
+            rows.append(live)
+        rows = [r for r in rows if all(x > 0 for x in r)][-limit:]
+        return {s: [r[i] for r in rows] for i, s in enumerate(slots)}
 
     def all(self, limit=120):
         with self._lock:

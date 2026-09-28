@@ -21,14 +21,15 @@ import threading
 import time
 
 from arb.instruments import now_ist
-from arb.intraday import ContractSelector, plan_trade, structural_invalidation
+from arb.intraday import (ContractSelector, chain_delta, plan_trade,
+                          structural_invalidation)
 from arb.positions import EXIT, Position, PositionBook
-from arb.confluence import evaluate, grade_at_least
+from arb.confluence import evaluate, grade_at_least, regrade
 from arb.playbooks import unknown as unknown_playbooks
 from arb.regime import atr, atr_ratio, premium_gate, regime_gate, session_phase
 from arb.smc import BEAR, BULL, RANGE, analyse
 from arb.costs import per_unit_cost_points
-from arb import trailing
+from arb import optionflow, trailing
 
 
 class _Ticket:
@@ -68,6 +69,7 @@ class IntradayEngine:
         self.log = log
 
         self.book = PositionBook(limits, log=log)
+        self.stocks = None              # arb/stockdesk.py:StockDesk, when enabled
         self.selector = ContractSelector(limits, log=log)
         self._running = threading.Event()
         self._thread = None
@@ -172,19 +174,83 @@ class IntradayEngine:
                 best = b
         return best
 
+    def _option_flow(self, b, cv, cand, und, rows):
+        """What this premium really moves per index point, and what the other
+        side of the chain says about the move (arb/optionflow.py).
+
+        Returns (effective delta, its detail, CrossSide or None). Without a
+        premium history both fall back quietly: the chain delta, and no read.
+        """
+        L = self.L
+        eff, note = cand.delta, {"chain_delta": round(cand.delta, 3)}
+        series = getattr(self.candles, "premium_series", None)
+        spot = (getattr(self.feed, "spot_slots", {}) or {}).get(und)
+        ks = [float(k) for k in cv.strikes]
+        if series is None or spot is None or float(cand.strike) not in ks:
+            return eff, note, None
+        i = ks.index(float(cand.strike))
+        mine = b.ce_slots if cand.opt == "CE" else b.pe_slots
+        other = b.pe_slots if cand.opt == "CE" else b.ce_slots
+        me, spot = int(mine[i]), int(spot)
+        limit = max(int(L.realised_delta_bars), 3 * int(L.cross_side_bars)) + 1
+        if getattr(L, "use_realised_delta", True):
+            s = series([me, spot], limit=limit)
+            eff, note = optionflow.effective_delta(cand.delta, cand.opt,
+                                                   s[me], s[spot], L)
+        if str(getattr(L, "cross_side_mode", "grade")) == "off":
+            return eff, note, None
+        j = optionflow.mirror_index(cv, i, cand.opt)
+        if j < 0:
+            return eff, note, optionflow.CrossSide(note="no matched-delta strike")
+        mo = int(other[j])
+        opp = "PE" if cand.opt == "CE" else "CE"
+        dm = chain_delta(cv.pe_ask if opp == "PE" else cv.ce_ask, ks, j, opp)
+        s = series([me, mo, spot], limit=limit)
+        # The neighbours are asked for separately: one unquoted wing strike
+        # must not blank the history the pair itself needs.
+        nb = None
+        if 0 < i < len(ks) - 1:
+            lo, hi = int(mine[i - 1]), int(mine[i + 1])
+            deep, far = (lo, hi) if cand.opt == "CE" else (hi, lo)
+            w = series([deep, far], limit=int(L.cross_side_bars) + 1)
+            nb = (w[deep], w[far]) if w[deep] else None
+        cross = optionflow.read(BULL if cand.opt == "CE" else BEAR,
+                                s[me], s[mo], s[spot], nb, (cand.delta, dm), L,
+                                atr=atr(rows[:-1], period=L.atr_period))
+        cross.detail["mirror_strike"] = ks[j]
+        return eff, note, cross
+
     # ── exits ───────────────────────────────────────────────────────────────
     def _mark_of(self, pos):
+        """The price we could leave at, in the position's own terms.
+
+        A long leaves at the bid. A short stock leaves by buying at the ask, and
+        is carried MIRRORED about its entry (2 x entry - ask), so that every
+        rule written for a long - stop below, breakeven, R, the time stop -
+        reads a short correctly without a second copy of the exit logic.
+        """
         slot = self.feed.store.slot_of_token.get(str(pos.token))
         if slot is None:
             return 0.0
+        if pos.opt == "EQ" and pos.side < 0:
+            ask = float(self.feed.store.ask[slot])
+            return 2.0 * pos.entry - ask if ask > 0 else 0.0
         return float(self.feed.store.bid[slot])
+
+    def _underlying_px(self, pos):
+        """Where the level that manages this trade is read: the index for an
+        option, the stock's own last price for a stock."""
+        if pos.opt != "EQ":
+            return self._spot(pos.underlying)
+        slot = self.feed.store.slot_of_token.get(str(pos.token))
+        return float(self.feed.store.ltp[slot]) if slot is not None else 0.0
 
     def manage(self):
         """Review every open position. Runs before any new entry is considered."""
         mins = self.book.time_to_close(self.cfg.session_end)
         for pos in self.book.snapshot():
             bid = self._mark_of(pos)
-            idx = self._spot(pos.underlying)
+            idx = self._underlying_px(pos)
             self._trail(pos, idx)
             action, reason = self.book.review(pos, bid, index_px=idx,
                                               minutes_to_close=mins)
@@ -215,10 +281,15 @@ class IntradayEngine:
             self.log(f"[intraday] {pos.symbol} {note}")
 
     def close(self, pos, reason):
-        """Sell the position back. A long option is closed by selling it."""
-        bid = self._mark_of(pos) or pos.mark
-        leg = {"symbol": pos.symbol, "token": pos.token, "side": "SELL",
-               "price": float(bid), "qty": pos.qty, "instrument": "OPT",
+        """Close the position: sell a long, buy back a short stock."""
+        eq = pos.opt == "EQ"
+        short = eq and pos.side < 0
+        px = self._mark_of(pos) or pos.mark
+        if short:
+            px = 2.0 * pos.entry - px          # un-mirror: the ask we buy at
+        leg = {"symbol": pos.symbol, "token": pos.token,
+               "side": "BUY" if short else "SELL",
+               "price": float(px), "qty": pos.qty, "instrument": "EQ" if eq else "OPT",
                "exchange": pos.segment, "underlying": pos.underlying,
                "strike": pos.strike, "opt": pos.opt, "depth": pos.qty,
                "age_ms": 0.0}
@@ -230,15 +301,17 @@ class IntradayEngine:
             self.log(f"[intraday] EXIT FAILED {pos.symbol}: {e!r} - position still open")
             self._note("exit_error")
             return None
-        fill = float(legs[0].get("fill_price") or bid)
+        fill = float(legs[0].get("fill_price") or px)
         if not legs[0].get("filled"):
             self.log(f"[intraday] exit not filled for {pos.symbol}; will retry next tick")
             return None
 
         from arb.costs import leg_cost
-        cost = (leg_cost(pos.entry, pos.qty, "BUY", "OPT", self.cm)
-                + leg_cost(fill, pos.qty, "SELL", "OPT", self.cm))
-        gross = (fill - pos.entry) * pos.qty
+        inst = "EQ" if eq else "OPT"
+        cost = (leg_cost(pos.entry, pos.qty, "SELL" if short else "BUY", inst, self.cm)
+                + leg_cost(fill, pos.qty, "BUY" if short else "SELL", inst, self.cm))
+        points = (pos.entry - fill) if short else (fill - pos.entry)
+        gross = points * pos.qty
         net = gross - cost
 
         self.book.remove(pos.trade_id)
@@ -260,7 +333,7 @@ class IntradayEngine:
 
         rec = {
             "trade_id": pos.trade_id, "ts_ist": now_ist().isoformat(),
-            "strategy": f"INTRADAY_{pos.opt}", "mode": getattr(self.broker, "mode", "paper"),
+            "strategy": self._strategy_name(pos), "mode": getattr(self.broker, "mode", "paper"),
             "symbol": pos.symbol, "strike": pos.strike, "opt": pos.opt,
             "underlying": pos.underlying, "expiry": pos.expiry, "qty": pos.qty,
             "entry": round(pos.entry, 2), "exit": round(fill, 2),
@@ -271,18 +344,18 @@ class IntradayEngine:
             "index_stop_final": round(pos.index_invalidation, 2),
             "index_target": round(pos.index_target, 2),
             "index_trailed": pos.index_trailed, "extensions": pos.extensions,
-            "points": round(fill - pos.entry, 2),
-            "r_multiple": round((fill - pos.entry) / pos.risk_points, 2)
+            "points": round(points, 2),
+            "r_multiple": round(points / pos.risk_points, 2)
                           if pos.risk_points else 0.0,
             "gross_inr": round(gross, 2), "cost_inr": round(cost, 2),
             "net_inr": round(net, 2),
-            "capital_inr": round(pos.entry * pos.qty, 2),
+            "capital_inr": round(pos.margin or pos.entry * pos.qty, 2),
             "mae": round(pos.mae, 2), "mfe": round(pos.mfe, 2),
             "held_sec": round(time.time() - pos.opened_at, 1),
             "day_pnl": round(self.realised_pnl, 2),
             "capital": round(self.capital.capital, 2),
             "opportunity": {"underlying": pos.underlying, "expiry": pos.expiry,
-                            "strategy": f"INTRADAY_{pos.opt}"},
+                            "strategy": self._strategy_name(pos)},
             "legs": [dict(leg, fill_price=fill, filled=True)],
             **pos.detail,
         }
@@ -294,14 +367,14 @@ class IntradayEngine:
 
         tgt = self.capital.daily_target(self.L.daily_target_pct)
         self.log(f"[intraday] EXIT {pos.symbol} @ {fill:.2f} ({reason}) "
-                 f"{fill - pos.entry:+.2f}pt  net Rs {net:+,.0f}  "
+                 f"{points:+.2f}pt  net Rs {net:+,.0f}  "
                  f"day Rs {self.realised_pnl:+,.0f} / target Rs {tgt:,.0f}")
         if self.notifier:
             emoji = "✅" if net >= 0 else "🔴"
             pct = 100.0 * self.realised_pnl / self.capital.capital if self.capital.capital else 0
             self.notifier.send(
                 f"{emoji} <b>EXIT</b> {pos.symbol}\n"
-                f"{pos.entry:.2f} → {fill:.2f} ({fill - pos.entry:+.2f} pt) · {reason}\n"
+                f"{pos.entry:.2f} → {fill:.2f} ({points:+.2f} pt) · {reason}\n"
                 f"Net <code>Rs {net:+,.0f}</code>\n"
                 f"Day <code>Rs {self.realised_pnl:+,.0f}</code> "
                 f"(<code>{pct:+.2f}%</code> of Rs {self.capital.capital:,.0f}, "
@@ -375,6 +448,14 @@ class IntradayEngine:
         return ""
 
     def hunt(self):
+        # The stock scan runs on its own clock, whatever the gates say: the
+        # dashboard should show what is in play even while a position is open.
+        desk = self.stocks
+        if desk is not None and desk.due():
+            try:
+                desk.pick(index_moves=self._index_moves())
+            except Exception as e:
+                self.log(f"[stocks] scan failed: {e!r}")
         gate = self._gates()
         if gate:
             self._note(gate)
@@ -480,6 +561,19 @@ class IntradayEngine:
             if veto:
                 self._note(veto)
                 continue
+            # What the premium really moves per index point, and whether the
+            # other side of the chain believes the move (the owner's rules,
+            # research/PAPERS.md 0h).
+            eff_delta, eff_note, cross = self._option_flow(b, cv, cand, und, rows)
+            mode = str(getattr(self.L, "cross_side_mode", "grade"))
+            if cross is not None and mode == "gate" and (
+                    cross.against or (getattr(self.L, "cross_side_veto_crush", False)
+                                      and cross.detail.get("vol_crush"))):
+                self._note(f"cross_side:{cross.verdict}")
+                continue
+            if cross is not None and cross.confirms and mode in ("grade", "gate"):
+                v.confirmations.append(("cross_side", cross.note))
+                regrade(v, self.L)
             # The deepest setup's own invalidation is a better stop than the
             # generic swing: it is the price that particular model says should
             # not trade again. plan_trade ignores it if it sits on the wrong
@@ -501,6 +595,9 @@ class IntradayEngine:
                 continue
             plan["index_entry"] = spot
             plan["entry_bar"] = rows[-1][0] if rows else ""
+            plan["reward_delta"] = eff_delta
+            plan["premium_per_point"] = eff_note
+            plan["cross_side"] = cross.as_dict() if cross is not None else None
             tgt = trailing.initial_target(rows, v.side, spot, plan["index_risk"],
                                           self.L, self._strike_step(b))
             plan["index_target"] = tgt
@@ -511,7 +608,9 @@ class IntradayEngine:
                 if reach < float(getattr(self.L, "min_target_r", 1.5)) * plan["index_risk"]:
                     self._note("target_not_achievable")
                     continue
-                reward_prem = reach * plan["delta"]
+                # At the premium's measured points-per-point, not the chain
+                # delta: a call on a rally earns less than its delta says.
+                reward_prem = reach * eff_delta
                 if reward_prem - cost_pts < self.L.min_net_points:
                     self._note("move_too_small_for_costs")
                     continue
@@ -521,6 +620,164 @@ class IntradayEngine:
                 key = (und, lead_name, v.side)
                 self.playbook_count[key] = self.playbook_count.get(key, 0) + 1
             return
+        # Nothing on the indices: the stocks in play get the same rules.
+        if desk is not None and desk.active:
+            self._hunt_stocks(available)
+
+    # ── stocks (arb/stockdesk.py) ───────────────────────────────────────────
+    @staticmethod
+    def _strategy_name(pos):
+        if pos.opt == "EQ":
+            return "INTRADAY_EQ_" + ("LONG" if pos.side > 0 else "SHORT")
+        return f"INTRADAY_{pos.opt}"
+
+    def _index_moves(self):
+        """Each index's move since the previous close, for relative strength."""
+        out = {}
+        for und in {b.underlying for b in self.bindings}:
+            rows = self.candles.get(und, limit=400) if self.candles else []
+            today = now_ist().strftime("%Y-%m-%d")
+            prev = [r for r in rows if r[0][:10] < today]
+            px = self._spot(und)
+            if prev and px > 0:
+                out[und] = px / prev[-1][4] - 1
+        return out
+
+    def _hunt_stocks(self, available):
+        """The index decision layer, unchanged, on the stocks in play.
+
+        Cash shares, intraday: a long is bought, a short is sold first. The
+        size is the fewest of (risk cap / stop distance) and (free capital x
+        leverage / price), and the trade must pay its round trip - fees both
+        ways, a tick of slippage each way - by stocks_min_net_inr at the target.
+        """
+        L = self.L
+        store = self.feed.store
+        cap_inr = self.capital.capital * L.max_risk_pct_per_trade / 100.0
+        lev = float(getattr(L, "stocks_leverage", 5.0))
+        for pick in list(self.stocks.active):
+            sym = pick.symbol
+            info = self.stocks.universe.get(sym) or {}
+            slot = self.stocks.slots.get(sym)
+            if slot is None:
+                continue
+            rows = self.candles.get(sym, limit=400) if self.candles else []
+            if len(rows) < L.min_structure_bars:
+                self._note("stock_warming_up")
+                continue
+            veto = regime_gate(rows, L)
+            if veto:
+                self._note(f"stock:{veto}")
+                continue
+            px = float(store.ltp[slot]) or rows[-1][4]
+            v = evaluate(rows, px, L, strike_step=0.0)
+            self.verdicts[sym] = v
+            if not v.tradable:
+                self._note("stock:" + (v.veto or ("no_setup" if not v.setups else "confluence")))
+                continue
+            if v.side < 0 and not getattr(L, "stocks_allow_short", True):
+                self._note("stock:short_disabled")
+                continue
+            if self.careful and not grade_at_least(v.grade, getattr(L, "grade_after_streak", "B")):
+                self._note("grade_too_low_after_streak")
+                continue
+            if time.time() - self._symbol_cooldown.get(info.get("eq_symbol", sym), -1e9) \
+                    < L.symbol_cooldown_sec:
+                self._note("symbol_cooldown")
+                continue
+            st = analyse(rows, strength=L.swing_strength, min_bars=L.min_structure_bars)
+            lead = v.setups[0] if v.setups else None
+            inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
+            ref = st.closes[-1] if st.closes else px
+            risk = abs(ref - inv) if inv else 0.0
+            a = atr(rows[:-1], period=L.atr_period)
+            if risk <= 0 or (a > 0 and risk < L.min_stop_atr * a):
+                self._note("stock:no_viable_stop")
+                continue
+            bid, ask = float(store.bid[slot]), float(store.ask[slot])
+            if bid <= 0 or ask <= 0:
+                self._note("stock:no_quote")
+                continue
+            fill_px = ask if v.side > 0 else bid
+            qty = min(int(cap_inr // risk), int(max(0.0, available) * lev // fill_px))
+            if qty <= 0:
+                self._note("stock:risk_too_large")
+                continue
+            from arb.costs import leg_cost
+            rt = (leg_cost(fill_px, qty, "BUY", "EQ", self.cm)
+                  + leg_cost(fill_px, qty, "SELL", "EQ", self.cm)
+                  + 2 * self.cm.slippage_points() * qty + (ask - bid) * qty)
+            if rt > L.max_cost_frac_of_risk * risk * qty:
+                self._note("stock:cost_too_large_for_stop")
+                continue
+            tgt = trailing.initial_target(rows, v.side, px, risk, L, 0.0)
+            reach = abs(tgt - px) if tgt else L.reward_risk * risk
+            if reach < float(getattr(L, "min_target_r", 1.0)) * risk:
+                self._note("stock:target_not_achievable")
+                continue
+            if reach * qty - rt < float(getattr(L, "stocks_min_net_inr", 100.0)):
+                self._note("stock:move_too_small_for_costs")
+                continue
+            if self._enter_stock(sym, info, slot, v, st, px, inv, risk, tgt, qty, fill_px, rt, rows, pick):
+                return
+
+    def _enter_stock(self, sym, info, slot, v, st, px, inv, risk, tgt, qty, quote, rt, rows, pick):
+        L = self.L
+        side = "BUY" if v.side > 0 else "SELL"
+        leg = {"symbol": info.get("eq_symbol", sym), "token": info.get("eq_token"),
+               "side": side, "price": quote, "qty": qty, "instrument": "EQ",
+               "exchange": "NSE", "underlying": sym, "strike": 0.0, "opt": "EQ",
+               "depth": qty, "age_ms": 0.0}
+        ticket = _Ticket([leg], qty, f"INTRADAY_EQ", f"{side.lower()} {sym}", "")
+        try:
+            legs, _ = self.broker.place_structure(ticket, 1)
+        except Exception as e:
+            self.log(f"[intraday] stock entry failed: {e!r}")
+            self._note("entry_error")
+            return False
+        if not legs[0].get("filled"):
+            self._note("entry_not_filled")
+            return False
+        fill = float(legs[0]["fill_price"])
+        self.trade_id += 1
+        self.trades_today += 1
+        self.last_trade_ts = time.time()
+        # Premium-space fields carry the stock in the position's own terms: a
+        # short is mirrored about its entry (see _mark_of), so the stop sits
+        # below entry for both sides and the target is the index-style level.
+        pos = Position(
+            trade_id=self.trade_id, symbol=info.get("eq_symbol", sym),
+            token=str(info.get("eq_token")), strike=0.0, opt="EQ", side=v.side,
+            qty=qty, entry=fill, stop=fill - risk, target=fill * 100.0,
+            risk_points=risk, index_invalidation=inv, opened_at=time.time(),
+            underlying=sym, segment="NSE", cost_points=rt / qty,
+            detail={"entry_reason": v.reason, "confirmations": v.names(),
+                    "playbooks": v.plays(), "setup_chain": v.chain(),
+                    "grade": v.grade, "reversal": v.reversal,
+                    "structure": st.last_event, "instrument": "EQ",
+                    "direction": "long" if v.side > 0 else "short",
+                    "in_play": {"score": round(pick.score, 3), "rvol": round(pick.rvol, 2),
+                                "atr_pct": round(100 * pick.atr_pct, 2),
+                                "move_pct": round(100 * pick.move, 2),
+                                "rs": round(100 * pick.rs, 2), "reasons": pick.reasons},
+                    "cost_round_trip_inr": round(rt, 2)})
+        pos.margin = fill * qty / max(1.0, float(getattr(L, "stocks_leverage", 5.0)))
+        pos.index_entry, pos.index_risk, pos.index_target = px, risk, float(tgt or 0.0)
+        pos.delta, pos.entry_bar = 1.0, rows[-1][0] if rows else ""
+        self.book.add(pos)
+        word = "BUY" if v.side > 0 else "SHORT"
+        self.log(f"[intraday] ENTRY {word} {sym} x{qty} @ {fill:.2f} = Rs {fill * qty:,.0f} "
+                 f"(margin Rs {pos.margin:,.0f}) | grade {v.grade} {' + '.join(v.plays())} | "
+                 f"stop {inv:.2f} target {pos.index_target:.2f} | risk Rs {risk * qty:,.0f} "
+                 f"cost Rs {rt:,.0f} | in play: rvol {pick.rvol:.1f}, ATR {100 * pick.atr_pct:.1f}%")
+        if self.notifier:
+            self.notifier.send(
+                f"🔵 <b>{word}</b> <code>{sym}</code> (stock, intraday)\n"
+                f"Entry <code>{fill:.2f}</code> x {qty} = <code>Rs {fill * qty:,.0f}</code>\n"
+                f"Why <code>{' + '.join(v.plays())}</code> · grade <code>{v.grade}</code>\n"
+                f"Stop <code>{inv:.2f}</code> · Target <code>{pos.index_target:.2f}</code>\n"
+                f"Risk <code>Rs {risk * qty:,.0f}</code> · cost <code>Rs {rt:,.0f}</code>")
+        return True
 
     def _check_starved(self, und, rows):
         """Warn when an index has gone without usable candles for too long.
@@ -606,6 +863,8 @@ class IntradayEngine:
                     "strike_offset": cand.offset,
                     "spread": round(cand.detail.get("spread", 0.0), 2),
                     "cost_round_trip_pt": round(plan["cost_points_round_trip"], 3),
+                    "premium_per_point": plan.get("premium_per_point"),
+                    "cross_side": plan.get("cross_side"),
                     "index_at_entry": round(structure.closes[-1], 2)
                                       if structure.closes else 0.0})
         # Index-side management. With an index target the premium target is
@@ -619,7 +878,8 @@ class IntradayEngine:
         if mode != "fixed" and pos.index_entry > 0:
             pos.index_target = float(plan.get("index_target") or 0.0)
             pos.target = fill * 100.0
-            est = abs(pos.index_target - pos.index_entry) * pos.delta \
+            est = abs(pos.index_target - pos.index_entry) \
+                * float(plan.get("reward_delta") or pos.delta) \
                 if pos.index_target > 0 else 0.0
             pos.detail["index_target"] = round(pos.index_target, 2)
             pos.detail["target_premium_est"] = round(fill + est, 2) if est else None
@@ -630,7 +890,9 @@ class IntradayEngine:
         grade = verdict.grade if verdict else ""
         self.log(f"[intraday] ENTRY BUY {cand.symbol} @ {fill:.2f} x{qty} "
                  f"= Rs {fill * qty:,.0f} | grade {grade} {why} "
-                 f"delta {cand.delta:.2f} offset {cand.offset:+d} | "
+                 f"delta {cand.delta:.2f} (moves {plan.get('reward_delta') or cand.delta:.2f}/pt) "
+                 f"offset {cand.offset:+d} | cross-side "
+                 f"{(plan.get('cross_side') or {}).get('verdict', 'off')} | "
                  f"stop {pos.stop:.2f} target {self._target_text(pos)} "
                  f"(risk Rs {plan['risk_inr'] * lots:,.0f} : "
                  f"reward Rs {plan['reward_inr'] * lots:,.0f})")
@@ -708,6 +970,7 @@ class IntradayEngine:
                                "atr_ratio": round(self._atr_ratio(k), 2)}
                            for k, v in self.structures.items()},
             "session_phase": session_phase(),
+            "stocks": self.stocks.summary() if self.stocks is not None else None,
             "confluence": {k: {"side": v.side, "day_trend": v.day_trend,
                                "count": v.count, "need": self.L.min_confirmations,
                                "grade": v.grade, "bias_source": v.bias_source,

@@ -513,6 +513,167 @@ That is about 96% less loss, almost entirely from taking fewer trades. It is sti
 - Only 76 in-sample and 33 held-out trades. Per-trade noise is about ±0.1–0.2R, so this is a hint, not proof. NIFTY alone was negative held out, on 4 trades.
 - Decay is not charged.
 - Re-check it on each new month of data.
+
+### 0h. The premium's own movement, and checking the other side (28 Sep 2026)
+
+**The owner's rules.**
+- The lower the premium bought, the less it moves. Even near the money, one index point moves the premium only 0.5–0.6 points. So the stop and target must follow how far *the premium bought* actually moves, not the index.
+- Before believing a move, look at the other side. When buying a call on an up move, find the put with the same |delta|. It should fall about as much as the call rises. Check the strikes above and below too.
+- If the call rises but the put does not fall in the same way, something is wrong, and the move may be fake or made by institutions. Go with the institutions.
+
+**Data.** Two recorded books, using the nearest non-expiring contract per index. Strikes with spreads above 3 / 6 / 8 points (NIFTY / BANKNIFTY / SENSEX) are blanked.
+- 17 Sep 2026: 3 hours at 4 Hz, thinned to one snapshot a minute.
+- 28 Sep 2026: 80 minutes from the engine's own one-a-minute recorder.
+
+The SENSEX weekly on 17 Sep had broken quotes and dominated a first unfiltered pass, which was discarded. Replay with `python tools/crossside_replay.py data/book_*.f4`.
+
+**1. The premium moves less than its delta says, and calls on a rally move least.**
+
+| | Calls | Puts |
+|---|---:|---:|
+| Realised points per index point ÷ chain delta, 1-minute changes (strikes at 0.3–0.7 delta) | **0.74** (IQR 0.71–0.79) | **0.94** (IQR 0.85–0.99) |
+| Same, 5-minute changes, per index-session | 0.71–0.86 | 0.83–1.27 |
+| Actual 30-minute gain ÷ chain-delta forecast, on a favourable move | **0.43** (88 samples) | 1.19 (72 samples) |
+| Actual 30-minute loss ÷ chain-delta forecast, on an adverse move (all expiries) | ~0.98 | ~0.84 |
+
+- A call converted at chain delta **over-promised its 30-minute gain 90% of the time.**
+- The losses arrive in full.
+- This matches the literature exactly:
+  - **Hull & White (2017)**, *Optimal delta hedging for options*, JBF 82 [verified by the research pass]. The minimum-variance delta sits below Black-Scholes delta in every bucket: calls are under-hedged and puts over-hedged. The cause is that index IV falls as the index rises.
+  - **Simon (2013)**, JFM 33 [abstract]. Intraday SPY option moves deviate "often substantially" from delta projections, for the same reason.
+  - **Derman (1999)**, *Regimes of Volatility* [secondary]. Realised delta depends on the volatility regime.
+  - **Bakshi, Cao & Chen (2000)**, RFS 13(3). Calls often fall while the index rises.
+- Kumar (2012) confirms that India VIX moves against NIFTY. No study of realised deltas on NIFTY weekly options was found; the recordings above are the evidence.
+
+**2. The other side, measured properly.**
+- A call and a put at the same |delta| sit at different strikes, with different skew and vega. An uneven move between them is normal, so "equal and opposite" is the wrong yardstick.
+- Instead, each leg is judged against its **own** usual response to the index, regressed on the minutes before the window. The matched pair then splits into:
+  - C − P, the index move the options priced;
+  - C + P, roughly delta-neutral, which reads a volatility bid or crush.
+- Over 5–10 minute windows, the pair's *lean* is the options-implied move minus the actual move. Its correlation with the next move:
+
+  | Window → horizon | Correlation with next index move | t (overlap-adjusted, rough) |
+  |---|---:|---:|
+  | 5 → 10 min | +0.15 | ~0.9 |
+  | 10 → 10 min | +0.24 | ~1.5 |
+  | 5 or 10 → 30 min | −0.05 | ~−0.2 |
+
+  The sign is what the owner's idea predicts: when the index runs ahead of what the options priced, it tends to come back. It is short-lived and **not significant** on two sessions.
+- On a trade basis (10-minute momentum entries, one at a time, 30-minute hold, ask in, bid out, ₹75 a lot) there were 11 trades. The 4 that the read "confirmed" all lost. That is too few to mean anything either way, but it is not support.
+- What the literature says:
+  - **Goncalves-Pinto, Grundy, Hameed, van der Heijden & Zhu (2020)**, *Management Science* 66(9) [abstract]. When the stock and the option-implied price disagree, the predictability comes mainly from price pressure on the stock, which reverts toward the option-implied level. This is the mechanism behind "fake_move", and it is daily cross-sectional stock evidence, not intraday index evidence.
+  - **Muravyev, Pearson & Broussard (2013)**, JFE 107(2) [abstract]. No economically significant price discovery in option quotes: when parity disagrees, the option quotes move. This is the strongest argument against treating "options_lead" as a signal.
+  - **Chakravarty, Gulen & Mayhew (2004)**, JF 59(3) [abstract]. Options carry about 17% of price discovery.
+  - **Holowczak, Simaan & Wu (2006)** [abstract]. Options are informative mainly during heavy option trading.
+  - **Vipul (2008)**, JFM 28 [abstract]. NIFTY put-call parity gaps "do not persist even for two minutes". A one-minute divergence is mostly already gone.
+  - **Chan, Chung & Johnson (1993)**, JF 48, and **Pérignon (2006)**, J. Derivatives 14 [abstract / working paper]. Most wrong-way option moves are stale quotes and bid-ask bounce. That is why this uses mids, a 10-minute window, a disagreement threshold in ATR, and the neighbour-strike check.
+  - Cross-sectional IV-spread papers (Cremers & Weinbaum 2010; An, Ang, Bali & Cakici 2014; Xing, Zhang & Zhao 2010) work at weekly-to-monthly horizons on single stocks and say nothing about a 10-minute index read.
+- **"Go with the institutions": what SEBI's Jane Street order (3 July 2025) actually shows [read in full by the research pass].**
+  - From 09:15 to about 11:46, BANKNIFTY constituents and futures were bought aggressively while the firm was short calls and long puts. The cash and futures longs were then sold into the close.
+  - SEBI says the pushed index left "artificially inflated call option premiums and subdued put option premiums". In other words, **the options priced faithfully off the manipulated index**, and a cross-side check would *not* have flagged it.
+  - The footprint was in cash and futures aggression and in the time of day on expiry days. The better-supported institutional-flow ideas are expiry-day timing and dealer-gamma or OI concentration: Baltussen, Da, Lammers & Martens (2021, JFE); Barbon & Buraschi; Ni, Pearson & Poteshman (2005, JFE). None is built yet. They need OI by strike, which the feed records but nothing reads.
+
+**Implemented** (`arb/optionflow.py`, wired in `arb/intraday_engine.py:hunt`):
+- **Effective delta** (`use_realised_delta = True`).
+  - The bought contract's own premium change per index point, regressed over the last `realised_delta_bars = 30` minutes on the minute premium chart.
+  - Shrunk toward a prior (`realised_delta_prior_ce = 0.8`, `_pe = 1.0`) by R² × history length, and capped at the chain delta.
+  - It sets the momentum target's premium estimate and the `min_net_points` cost check.
+  - **Stops and sizing keep the chain delta**, because losses realised in full.
+  - On the replay, calls' mean absolute error fell from 11.6 to 8.6 points, and over-promising from 90% to 78%. Puts got slightly worse (7.3 → 8.1), because the cap refuses to credit their larger moves. **Calls are still over-promised**: the one-minute fit misses the IV drift that builds over a 30-minute rally.
+- **Cross-side read** (`cross_side_mode = "grade"`).
+  - Picks the matched-|delta| opposite contract and the two same-type neighbours.
+  - Classifies the last `cross_side_bars = 10` minutes as `confirmed`, `options_lead`, `fake_pullback` (a retrace the options did not price), `fake_move`, `options_against`, `pullback_priced` or `quiet`.
+  - A disagreement must exceed `cross_side_lean_atr = 0.5` ATR to count.
+  - A confirming read, with the ladder in order and no vol crush, is one more extra for the grade. It is never needed and never refuses.
+  - `"gate"` refuses `fake_move` / `options_against`, and `cross_side_veto_crush` adds the vol crush.
+  - Every trade journals both reads (`premium_per_point`, `cross_side`), so the next study can use real entries rather than a momentum stand-in.
+
+**Not implemented, and why.**
+- *A gate on the cross-side read.* Two sessions, t ≈ 1.5 at best, and 11 trades that lean the other way. By section 0's own lesson, a gate that cannot be shown to help only removes trades.
+- *A lower call prior, or a horizon haircut, to close the remaining 30-minute gap.* It would be one number fitted on two sessions. Revisit it after a month of the minute recorder: rerun `tools/crossside_replay.py` and read the journal's `premium_per_point` against realised exits.
+- *Using the front future instead of spot as the index series.* Khan et al. (2022) find NIFTY futures lead spot at one minute, which would reduce staleness further. The engine's stops live on spot, so the two are kept consistent for now.
+
+### 0i. Stocks in play (28 Sep 2026)
+
+**The owner's request.** When the three indices are not moving, trade the most volatile stocks instead, in both directions. That includes the NIFTY and BANKNIFTY constituents on their own ("HDFC falls more than the other banks"). Find them with NSE and BSE data and trade them with the same rules.
+
+**Why there were no trades on 28 Sep.**
+- The engine was restarted four times between 10:41 and 10:44. The day's move was over by 09:50: the ATR ratio was 1.5–2.0× from 09:15 to about 09:50, then under 1.0× for the rest of the morning.
+- Replaying the whole session's bars through `regime_gate` and `evaluate`, only 14–19 bars per index passed the pace gate. None completed an `ob_fvg_retest` setup.
+- So nothing was broken. It is the selectivity of section 0g, about one trade every two sessions.
+- Separately, the historical API refused calls for rate about every 5 minutes. The candle cache still held every bar from 09:15.
+
+**What can be bought with ₹10–14k** [verified by the research pass from SEBI and NSE circulars].
+- Stock F&O contracts are worth ₹3–17 lakh a lot (median ₹6.5 lakh; HDFCBANK ₹4.76 lakh; NSE/FAOP/73549).
+- Stock options are monthly only and settle **physically** (SEBI/HO/MRD/DP/CIR/P/2018/67): an in-the-money option held to expiry becomes delivery of the full lot.
+- Stock futures cannot be margined at all.
+- A near-the-money stock-option lot costs more than the whole purse.
+- **The cash market intraday (MIS) is the only way to trade a stock here.** SEBI's peak-margin rules (SEBI/HO/MIRSD/DOP/CIR/P/2020/146) cap leverage at 5×, so ₹10k controls about ₹50k.
+- Costs:
+  - STT 0.025% on the sell side, NSE 0.00307%, stamp 0.003% on the buy side, SEBI fee and GST.
+  - Angel's intraday brokerage since 17 Nov 2025 is the lower of ₹20 and 0.1% per order, with a ₹5 minimum.
+  - Round trip: ₹65.5 on ₹50k (0.13%) and ₹27.3 on ₹10k (0.27%).
+
+**Literature.**
+
+| Source | Finding | For this rule |
+|---|---|---|
+| Zarattini, Barbon & Aziz (2024), SSRN 4729284 [read in full] | US stocks. Take the top 20 by relative volume: first-5-minute volume ÷ its own 14-day average. Trade the 5-minute opening-range breakout, stop at 10% of ATR, exit at the close. Sharpe 2.81 against 0.48 unfiltered. Per-trade R: −0.02 below 1× RVOL, +0.08 above, +0.38 above 30×. Commission only; no spread or slippage; no held-out period | The **relative-volume filter is the edge**, not the entry. Built as `stocks_min_rvol` and a scoring weight |
+| Parkinson (1980); Corsi (2009) HAR-RV | Range-based volatility is efficient and persistent at daily horizons | Rank on ATR%, not on close-to-close moves |
+| Barber & Odean (2008), RFS [read in full] | Retail buys attention stocks on both big up and big down days | The crowd is in these names. That is flow, not an edge |
+| Seasholes & Wu (2007); Lou, Polk & Skouras (2019); Branch & Ma (2012) | Extreme movers continue briefly, then revert. Overnight and intraday returns pull against each other. Stock gaps tend to fade | Do not trade the gap or yesterday's mover by direction |
+| Hendershott, Livdan & Rösch (2020), JFE | Intraday, returns are *negatively* related to beta | High beta is no reason to prefer a stock |
+| Heston, Korajczyk & Sadka (2010) | Sub-hour reversals are liquidity and bid-ask bounce | No 1-minute fades at retail cost |
+| SEBI PR 13/2024 | 71% of individual equity intraday traders lost money in FY23, and 80% of those with 500+ trades a year. Loss-makers paid a further 57% of their losses in costs | The base rate |
+
+No peer-reviewed study of relative volume or opening-range breakouts on NSE single stocks was found.
+
+**Evidence from NSE's own daily bars** (`tools/stock_study.py`, 210 F&O stocks, 23 Sep 2025 – 25 Sep 2026, split at 25 May). Correlations are Spearman, computed per day and averaged, with t over days.
+
+| | In-sample | Held-out |
+|---|---:|---:|
+| 14-day ATR% → today's range | **+0.43** (t 51) | **+0.40** (t 50) |
+| Yesterday's range → today's range | +0.34 | +0.33 |
+| \|Opening gap\| → today's range | +0.16 | +0.14 |
+| Top-decile ATR stocks, mean daily range | 3.68% (rest 2.62%) | 3.21% (rest 2.36%) |
+| Gap ≥ 2%: open-to-close in the gap's direction | −24 bp (t −3.9) | +22 bp (t +1.4) |
+| Yesterday's top/bottom 10 movers: continuation next day | −5 bp | −17 bp (t −3.3) |
+| Big movers on < 35% delivery: next day | −16 bp | −15 bp |
+| Bank betas to BANKNIFTY, rank correlation window to window | +0.40, +0.54, +0.02 | |
+
+- **Volatility persists; direction does not.** The list of stocks to watch can be drawn up before the open and holds up. Which way to trade cannot be read off the gap or yesterday's move.
+- The extreme movers' next-day reversal, and the speculative movers' reversal, have the same sign in both halves. At 5–17 bp they are below the 13 bp round trip.
+- **"HDFC falls more than the other banks" is not in the data.** Over the latest 60 days HDFCBANK's beta to BANKNIFTY was 1.08, mid-pack (AUBANK 1.28, AXISBANK 1.24, PNB 0.53). Bank betas reshuffle from one quarter to the next. HDFCBANK's beta to NIFTY is 1.40, because it is 17% of BANKNIFTY. Relative strength is therefore computed live every scan and reported, not assumed.
+
+**Implemented.**
+- `arb/nse.py` reads NSE's own public data, cached, paced and failure-tolerant:
+  - top gainers and losers (F&O), volume gainers, most active, and the pre-open book for all 210 F&O stocks;
+  - index members, the daily F&O ban list, and daily bars with delivery %.
+  - `equity-stockIndices` refuses non-browser clients, so live ranks come from the engine's own websocket instead.
+- `arb/scanner.py` ranks by ATR%, relative volume, move in ATRs and range so far in ATRs, as cross-sectional ranks. It filters:
+  - price ≥ ₹100;
+  - median turnover ≥ ₹50 cr;
+  - ATR ≥ 1.5%;
+  - relative volume ≥ 1.0;
+  - not in the ban list.
+
+  Relative volume uses the paper's same-minute definition where 1-minute history exists, and a U-shaped volume curve × average daily volume otherwise.
+- `arb/stockdesk.py` and `run_bot.py`:
+  - subscribes the liquid F&O cash tokens at startup;
+  - picks the top `stocks_top_k = 3` at 09:30, and again every 30 minutes;
+  - loads four days of 1-minute history for the picks only.
+- `arb/intraday_engine.py:_hunt_stocks` runs **the same** regime gate, playbooks, stop, momentum target, trail and discipline rules on the picks, but only when the indices offered nothing.
+  - Size is the lesser of (risk cap ÷ stop) and (free capital × leverage ÷ price).
+  - The trade must clear its round trip by `stocks_min_net_inr`, and the cost must be at most `max_cost_frac_of_risk` of the risk.
+  - Shorts are carried mirrored about their entry, so every existing exit rule reads them correctly.
+- **`stocks_enabled = False`.**
+
+**The test that decides it** (`tools/stock_backtest.py`). One-minute bars from Angel for all F&O stocks, 120 days, split at 10 Aug.
+- The scanner's top-K picks are traded through the engine's own decision and exit code.
+- Against them: K random liquid stocks, and the K *least* in play, on the same sessions.
+- Plus the paper's 5-minute opening-range breakout on the same picks.
+- The scanner earns its place only if its picks beat random picks after costs in both periods. Results are recorded below once the fetch completes.
+
 ### Also added from the literature
 
 - `vwap_pullback`: from **Zarattini & Aziz**, VWAP trend on QQQ, SSRN 4631351.

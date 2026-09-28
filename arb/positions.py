@@ -63,6 +63,9 @@ class Position:
     entry_bar: str = ""          # iso of the bar the trade was entered on
     extensions: int = 0
     last_bar: str = ""           # last completed bar the trail was updated on
+    # Cash stocks: what the broker blocks for this position (notional over the
+    # intraday leverage). 0 for an option, whose premium IS the capital used.
+    margin: float = 0.0
 
     def __post_init__(self):
         if not self.initial_stop:
@@ -112,7 +115,7 @@ class PositionBook:
     def deployed(self):
         """Rupees currently tied up at entry cost."""
         with self._lock:
-            return sum(p.entry * p.qty for p in self.open.values())
+            return sum(p.margin or p.entry * p.qty for p in self.open.values())
 
     def snapshot(self):
         with self._lock:
