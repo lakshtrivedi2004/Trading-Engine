@@ -285,6 +285,15 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
     if not args.no_dashboard:
         dstate = DashboardState(None, None, None, None, cfg, mode, None)
         dstate.intraday_mode = True
+        # Last known values, read from disk only (no broker/NSE calls): the
+        # page should still show yesterday's spots and capital while idle,
+        # not a blank screen, even before this process has run a single day.
+        dstate.spots = {u.name: cached_spot(u.name) for u in cfg.active_underlyings()}
+        cap_path = "journal/live/capital_live.json" if mode == "live" else "journal/capital.json"
+        try:
+            dstate.boot_capital = CapitalBook(0.0, path=cap_path).capital
+        except Exception:
+            dstate.boot_capital = 0.0
         dash = Dashboard(dstate, port=args.port).start()
         dash_holder["dash"], dash_holder["dstate"] = dash, dstate
         log(f"dashboard   {dash.url}")

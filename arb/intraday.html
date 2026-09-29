@@ -49,6 +49,7 @@
   <h1>Intraday Scalper</h1>
   <p class="sub" id="sub">connecting…</p>
   <p class="sub"><b>Directional trading, not arbitrage.</b> Every position here can lose money.</p>
+  <p class="sub" id="closedWarn" style="display:none"></p>
 
   <div class="ctlrow" id="ctl"></div>
 
@@ -208,26 +209,23 @@ async function tick(){
   try{
     const d = await (await fetch("/api/state")).json();
     if(d.error){ document.getElementById("sub").textContent = "error: "+d.error; return; }
-    if(d.waiting){
-      document.getElementById("sub").innerHTML =
-        `${esc(d.now)} IST · ${esc(d.phase)} · no session running — resumes at ${esc(d.session_start)} IST`;
-      document.getElementById("ctl").innerHTML = `<button class="btn" id="btnLogs">View logs</button>`;
-      document.getElementById("btnLogs").onclick = () => window.open("/logs", "_blank");
-      document.getElementById("tiles").innerHTML = "";
-      document.getElementById("open").innerHTML = "<p class='empty'>waiting for the next trading session</p>";
-      document.getElementById("struct").innerHTML = "";
-      document.getElementById("trades").innerHTML = "";
-      document.getElementById("rejects").innerHTML = "";
-      return;
-    }
     const spots = Object.entries(d.spots||{}).map(([k,v])=>`${k} ${f2(v)}`).join(" · ");
     const marketClosed = d.phase==="closed" || d.phase==="weekend";
     const feedTxt = d.connected ? "feed live"
       : marketClosed ? "feed paused (market closed)"
       : "<b class='down'>feed down</b>";
     document.getElementById("sub").innerHTML =
-      `${esc(d.now)} IST · ${esc(d.phase)} · ${feedTxt} · ${f0(d.ticks)} ticks · ${esc(spots)}`
+      `${esc(d.now)} IST · ${esc(d.phase)} · ${feedTxt} · ${f0(d.ticks)} ticks · ${esc(spots||"no spots cached yet")}`
       + (d.halted ? ` · <b class="down">HALTED: ${esc(d.halt_reason)}</b>` : "");
+    const warn = document.getElementById("closedWarn");
+    if(marketClosed){
+      warn.style.display = "";
+      warn.innerHTML = `<b class="warn">⚠ market is closed — showing last known data`
+        + (d.waiting ? `; next session begins ${esc(d.session_start||"")} IST` : "")
+        + `.</b>`;
+    } else {
+      warn.style.display = "none";
+    }
     controls(d);
     tiles(d);
     const pct = Math.max(0, Math.min(100, d.progress_pct||0));
@@ -243,7 +241,7 @@ async function tick(){
     tradeTable(d.recent_trades);
     rejectTable(d.rejects);
     const L = d.limits||{};
-    document.getElementById("foot").textContent =
+    document.getElementById("foot").textContent = !("max_strike_offset" in L) ? "" :
       `ATM ±${L.max_strike_offset} · 1 lot · buying ${L.allow_selling?"and selling":"only"} · `
       + `stop at structure, 1:${L.reward_risk} target, breakeven at +${L.trail_trigger_r}R · `
       + `min ${L.min_net_points} net points · daily loss halt ${L.max_daily_loss_pct}% · `

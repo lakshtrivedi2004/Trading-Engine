@@ -282,14 +282,31 @@ class DashboardState:
         rates, the return band, stake, capital utilisation - have no meaning
         here and are deliberately absent rather than shown as zero."""
         if self.intraday is None:
-            # Idling between trading days: no engine/feed exists yet. The
-            # page shows this instead of falling back to the arb layout or
-            # crashing on a None engine.
+            # Idling between trading days: no engine/feed exists yet (either
+            # this process has not run a single day yet, or it is between
+            # yesterday's close and the next session_start). The page shows
+            # the same shape as a normal day - last known spots, capital,
+            # controls - just with everything at rest, instead of crashing on
+            # a None engine or hiding the whole page.
             return {"strategy": "intraday", "waiting": True,
                     "now": now_ist().strftime("%H:%M:%S"),
                     "phase": market_phase(start=self.cfg.session_start,
                                           end=self.cfg.session_end),
-                    "mode": self.mode, "session_start": self.cfg.session_start}
+                    "mode": self.mode, "session_start": self.cfg.session_start,
+                    "connected": False, "uptime_s": 0,
+                    "spots": {k: round(v, 2) for k, v in (self.spots or {}).items()},
+                    "indices": sorted((self.spots or {}).keys()),
+                    "ticks": 0, "tick_rate": 0.0, "passes": 0,
+                    "minutes_to_close": 0.0,
+                    "capital": round(getattr(self, "boot_capital", 0.0), 2),
+                    "day_pnl": 0.0, "day_pct": 0.0,
+                    "target_inr": 0.0, "target_pct": 0.0, "target_hit": False,
+                    "progress_pct": 0.0,
+                    "trades": 0, "wins": 0, "losses": 0,
+                    "open_positions": [],
+                    "halted": False, "halt_reason": "",
+                    "rejects": {}, "structures": {}, "confluence": {},
+                    "limits": {}, "recent_trades": []}
         e, f = self.intraday, self.feed
         up = time.time() - self.started
         s = e.summary()
@@ -487,8 +504,10 @@ def make_handler(state):
         def _control_intraday(self, fn, action):
             e = getattr(state, "intraday", None)
             if e is None:
-                return self._control({"ok": False, "action": action,
-                    "error": "no intraday engine running (arb strategy is active)"})
+                msg = ("no trading session running right now (market closed / "
+                       "idle between sessions)" if getattr(state, "intraday_mode", False)
+                       else "no intraday engine running (arb strategy is active)")
+                return self._control({"ok": False, "action": action, "error": msg})
             fn(e)
             self._control({"ok": True, "action": action})
 
