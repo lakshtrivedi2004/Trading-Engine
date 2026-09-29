@@ -7,6 +7,7 @@ distance-to-profitable is throttled so a refreshing browser cannot drive it.
 """
 import json
 import os
+import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -419,6 +420,59 @@ def make_handler(state):
                 try:
                     self._send(json.dumps({"error": str(exc)}).encode(),
                                "application/json")
+                except Exception:
+                    pass
+
+        def _control(self, body):
+            self._send(json.dumps(body).encode(), "application/json")
+
+        def _control_intraday(self, fn, action):
+            e = getattr(state, "intraday", None)
+            if e is None:
+                return self._control({"ok": False, "action": action,
+                    "error": "no intraday engine running (arb strategy is active)"})
+            fn(e)
+            self._control({"ok": True, "action": action})
+
+        def _switch_mode(self):
+            """Flip .trading_mode and restart the single trading-engine unit.
+
+            Runs as a detached transient unit (systemd-run), not a child of this
+            process: the switch script restarts the very unit this process may
+            be running under, so it must sit outside this unit's cgroup to
+            survive that restart.
+            """
+            target = "paper" if state.mode == "live" else "live"
+            script = os.path.join(os.path.dirname(HERE), "deployment", "switch_mode.sh")
+            unit = f"trading-switch-{int(time.time() * 1000)}"
+            try:
+                subprocess.Popen(
+                    ["systemd-run", "--collect", f"--unit={unit}",
+                     "/bin/bash", script, target],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except FileNotFoundError:
+                return self._control({"ok": False,
+                    "error": "systemd-run not found - mode switching only works "
+                             "on the deployed host (systemd), not this environment"})
+            self._control({"ok": True, "switching_to": target})
+
+        def do_POST(self):
+            try:
+                if self.path == "/api/control/exit_all":
+                    self._control_intraday(lambda e: e.manual_exit_all(), "exit_all")
+                elif self.path == "/api/control/stop_trading":
+                    self._control_intraday(
+                        lambda e: e.manual_stop("manual stop (dashboard)"), "stop_trading")
+                elif self.path == "/api/control/switch_mode":
+                    self._switch_mode()
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as exc:
+                try:
+                    self._control({"ok": False, "error": str(exc)})
                 except Exception:
                     pass
     return Handler

@@ -38,3 +38,4 @@ config/calibration.json
 
 # Runtime
 .engine.pid
+.trading_mode

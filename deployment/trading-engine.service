@@ -1,0 +1,34 @@
+# One unit for both modes. Which one runs is read from .trading_mode (repo
+# root, "paper" or "live") by run_engine.sh at every start - switching mode
+# means changing that file and restarting this unit, not swapping units.
+# Use the dashboard's Switch button, or by hand: deployment/switch_mode.sh.
+#
+# systemctl daemon-reload
+# systemctl enable --now trading-engine
+# systemctl status trading-engine      # is it running, and in which mode?
+# systemctl stop trading-engine        # stop (squares off open positions)
+# tail -f /root/Trading-Engine/engine.log
+# journalctl -u trading-engine -n 50
+
+[Unit]
+Description=Trading-Engine (mode read from .trading_mode at each start)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Trading-Engine
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/Trading-Engine/deployment/run_engine.sh
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGUSR1
+TimeoutStopSec=30
+StandardOutput=append:/root/Trading-Engine/engine.log
+StandardError=append:/root/Trading-Engine/engine.log
+
+[Install]
+WantedBy=multi-user.target

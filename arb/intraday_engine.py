@@ -83,6 +83,7 @@ class IntradayEngine:
         self.wins = self.losses = 0
         self.halted = False
         self.halt_reason = ""
+        self.exit_all_requested = False
         self.last_trade_ts = 0.0
         self._symbol_cooldown = {}
         self.structures = {}            # underlying -> Structure, for the dashboard
@@ -357,8 +358,28 @@ class IntradayEngine:
         slot = self.feed.store.slot_of_token.get(str(pos.token))
         return float(self.feed.store.ltp[slot]) if slot is not None else 0.0
 
+    def manual_stop(self, reason="manual stop (dashboard)"):
+        """Operator-initiated halt: block new entries and flatten everything now.
+
+        Runs through the exit_all_requested flag on the engine's own thread
+        (manage(), next pass) rather than placing orders from the caller's
+        thread, so it can never race the scan loop's own exits.
+        """
+        self.halted = True
+        self.halt_reason = reason
+        self.exit_all_requested = True
+        self.log(f"[intraday] HALTED: {reason}")
+
+    def manual_exit_all(self):
+        """Flatten every open position at the next pass, without halting new entries."""
+        self.exit_all_requested = True
+
     def manage(self):
         """Review every open position. Runs before any new entry is considered."""
+        if self.exit_all_requested:
+            self.exit_all_requested = False
+            for pos in self.book.snapshot():
+                self.close(pos, "manual_exit_all")
         mins = self.book.time_to_close(self.cfg.session_end)
         for pos in self.book.snapshot():
             bid = self._mark_of(pos)
