@@ -92,7 +92,9 @@ function controls(d){
   el.innerHTML = `
     <button class="btn" id="btnSwitch" ${CTL_BUSY?"disabled":""}>Switch to ${live?"PAPER":"LIVE"}</button>
     <button class="btn danger" id="btnStop" ${CTL_BUSY?"disabled":""}>Stop ${live?"real ":""}trading</button>
-    <button class="btn danger" id="btnExit" ${CTL_BUSY?"disabled":""}>Exit all trades</button>`;
+    <button class="btn danger" id="btnExit" ${CTL_BUSY?"disabled":""}>Exit all trades</button>
+    <button class="btn" id="btnLogs">View logs</button>`;
+  document.getElementById("btnLogs").onclick = () => window.open("/logs", "_blank");
   document.getElementById("btnSwitch").onclick = async () => {
     const verb = live ? "back to PAPER" : "to LIVE — real money";
     if(!confirm(`Switch ${verb}?\n\nThe running engine stops (squaring off first) and the other one starts.`)) return;
@@ -207,8 +209,12 @@ async function tick(){
     const d = await (await fetch("/api/state")).json();
     if(d.error){ document.getElementById("sub").textContent = "error: "+d.error; return; }
     const spots = Object.entries(d.spots||{}).map(([k,v])=>`${k} ${f2(v)}`).join(" · ");
+    const marketClosed = d.phase==="closed" || d.phase==="weekend";
+    const feedTxt = d.connected ? "feed live"
+      : marketClosed ? "feed paused (market closed)"
+      : "<b class='down'>feed down</b>";
     document.getElementById("sub").innerHTML =
-      `${esc(d.now)} IST · ${esc(d.phase)} · ${d.connected?"feed live":"<b class='down'>feed down</b>"} · ${f0(d.ticks)} ticks · ${esc(spots)}`
+      `${esc(d.now)} IST · ${esc(d.phase)} · ${feedTxt} · ${f0(d.ticks)} ticks · ${esc(spots)}`
       + (d.halted ? ` · <b class="down">HALTED: ${esc(d.halt_reason)}</b>` : "");
     controls(d);
     tiles(d);

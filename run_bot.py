@@ -12,6 +12,7 @@ the broker and nothing else, so what paper trades is exactly what live trades.
 import argparse
 import signal
 import sys
+import threading
 import time
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
@@ -238,13 +239,90 @@ def build(cfg, creds, args):
     return session, feed, bindings, spots
 
 
-def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, phase):
-    """Directional intraday option buying, managed with market structure.
+def _wait_until_session(cfg, stopping, log):
+    """Block until the market is open, making no broker/NSE calls while
+    waiting. Returns False if ``stopping`` fired before that happened."""
+    phase = market_phase(start=cfg.session_start, end=cfg.session_end)
+    if phase == "open":
+        return not stopping.is_set()
+    log(f"market {phase}; idle until {cfg.session_start} IST "
+        f"(no API calls while waiting)")
+    while not stopping.is_set():
+        if market_phase(start=cfg.session_start, end=cfg.session_end) == "open":
+            log("market open; resuming")
+            return True
+        stopping.wait(30)
+    return False
+
+
+def run_intraday_forever(cfg, cm, creds, args, mode):
+    """Run the intraday strategy day after day in one long-lived process.
+
+    Each trading day is a fresh Angel One login and a fresh universe
+    (build()), run until close; then the process goes idle - no broker or
+    NSE calls at all - until the next session_start, and builds again. The
+    dashboard HTTP server is created once and stays up the whole time,
+    rendering whichever day's state is current - including the frozen final
+    snapshot of the last completed day while idle.
+
+    ``--duration`` (a bounded test run) opts out of the loop entirely and
+    keeps the old one-day-then-exit behaviour, since that flag exists for
+    manual smoke tests, not production.
+    """
+    stopping = threading.Event()
+    dash_holder = {"dash": None, "dstate": None}
+    current = {"engine": None}
+
+    notifier = None
+    if not args.no_telegram:
+        notifier = TelegramNotifier(creds.telegram_bot_token,
+                                    creds.telegram_chat_id).start()
+
+    def on_signal(*_):
+        stopping.set()
+        e = current["engine"]
+        if e is not None:
+            e.stop()
+
+    def on_restart(*_):
+        # ./run.sh restart / systemd KillSignal=SIGUSR1: open positions go to
+        # the next process (open_positions.json) instead of being squared off.
+        e = current["engine"]
+        if e is not None:
+            e.handover = True
+        on_signal()
+    signal.signal(signal.SIGINT, on_signal)
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGUSR1, on_restart)
+
+    try:
+        if args.duration:
+            _run_intraday_day(cfg, cm, creds, args, mode, notifier,
+                              dash_holder, current, stopping)
+            return
+        while not stopping.is_set():
+            if not _wait_until_session(cfg, stopping, log):
+                break
+            _run_intraday_day(cfg, cm, creds, args, mode, notifier,
+                              dash_holder, current, stopping)
+    finally:
+        if dash_holder["dash"]:
+            dash_holder["dash"].stop()
+        if notifier:
+            notifier.stop()
+
+
+def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
+                       current, stopping):
+    """Directional intraday option buying, managed with market structure, for
+    one trading day: login, build the universe, run until close, clean up.
 
     Not arbitrage. Every trade here is a bet on where the index goes next, held
     for minutes, protected by a stop and closed before the bell. The arbitrage
     engine's return band does not apply and is not consulted.
     """
+    session, feed, bindings, spots = build(cfg, creds, args)
+    phase = market_phase(start=cfg.session_start, end=cfg.session_end)
     L = IntradayLimits.load()
     if mode == "live":
         # Real money: its own ledger and journal, sized from the funds the
@@ -268,10 +346,6 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
         capital = CapitalBook(args.capital or L.starting_capital, log=log)
     interval = args.candle_interval or L.candle_interval
 
-    notifier = None
-    if not args.no_telegram:
-        notifier = TelegramNotifier(creds.telegram_bot_token,
-                                    creds.telegram_chat_id).start()
     journal = Journal(directory="journal/live") if mode == "live" else Journal()
     broker = (LiveBroker(session.api, cm, product="INTRADAY", confirm_fills=True, log=log)
               if mode == "live" else PaperBroker(cm))
@@ -286,6 +360,7 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
 
     engine = IntradayEngine(feed, bindings, cfg, cm, L, broker, journal,
                             capital, candles, notifier=notifier, log=log)
+    current["engine"] = engine
     if L.stocks_enabled and getattr(feed, "stock_slots", None):
         from arb.nse import NseClient
         from arb.stockdesk import StockDesk
@@ -295,14 +370,30 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
     # expired options, so this is the only premium data any rule can be tested on.
     recorder = TickRecorder(feed.store, bindings, hz=1 / 60.0).start() if cfg.record_ticks else None
 
-    dash = None
-    if not args.no_dashboard:
+    dash = dash_holder["dash"]
+    if dash is None and not args.no_dashboard:
         dstate = DashboardState(engine, feed, None, None, cfg, mode, journal,
                                 candles=candles)
         dstate.intraday = engine
         dash = Dashboard(dstate, port=args.port).start()
         dash.state.spots = dict(spots)
+        dash_holder["dash"], dash_holder["dstate"] = dash, dstate
         log(f"dashboard   {dash.url}")
+    elif dash is not None:
+        # Rebind the running dashboard to today's fresh objects in place: the
+        # HTTP handler closed over this DashboardState instance when the
+        # server started, so reassigning dash.state would not be seen - only
+        # mutating the same object's attributes reaches the live page.
+        dstate = dash_holder["dstate"]
+        dstate.engine = engine
+        dstate.intraday = engine
+        dstate.feed = feed
+        dstate.journal = journal
+        dstate.candles = candles
+        dstate.mode = mode
+        dstate.spots = dict(spots)
+        dstate.started = time.time()
+        log(f"dashboard   {dash.url} (rebound to today's session)")
 
     feed.start()
     log("websocket connecting...")
@@ -346,27 +437,12 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
         return market_phase(start=cfg.session_start,
                             end=cfg.session_end) == "closed" and phase == "open"
 
-    running = {"v": True}
-
-    def on_signal(*_):
-        running["v"] = False
-        engine.stop()
-
-    def on_restart(*_):
-        # ./run.sh restarting a paper engine: open positions go to the next
-        # process (open_positions.json) instead of being squared off.
-        engine.handover = True
-        on_signal()
-    signal.signal(signal.SIGINT, on_signal)
-    signal.signal(signal.SIGTERM, on_signal)
-    signal.signal(signal.SIGUSR1, on_restart)
-
     engine.start(stop_predicate=should_stop)
     log(f"scanning ({mode}); Ctrl+C to stop")
 
     last = 0.0
     try:
-        while running["v"] and engine._running.is_set():
+        while not stopping.is_set() and engine._running.is_set():
             time.sleep(1.0)
             if time.time() - last >= 60:
                 last = time.time()
@@ -430,8 +506,7 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
         else:
             log("no trades today; capital unchanged")
         feed.stop()
-        if dash:
-            dash.stop()
+        current["engine"] = None
 
 
 def main():
@@ -474,14 +549,13 @@ def main():
     phase = market_phase(start=cfg.session_start, end=cfg.session_end)
     log(f"market phase: {phase} ({now_ist().strftime('%a %d %b %H:%M IST')})")
 
+    if args.strategy == "intraday" and not args.status:
+        return run_intraday_forever(cfg, cm, creds, args, mode)
+
     session, feed, bindings, spots = build(cfg, creds, args)
     if args.status:
         log("status check complete")
         return
-
-    if args.strategy == "intraday":
-        return run_intraday(cfg, cm, creds, args, session, feed, bindings,
-                            spots, mode, phase)
 
     notifier = None
     if not args.no_telegram:

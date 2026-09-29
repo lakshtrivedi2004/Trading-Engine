@@ -5,12 +5,14 @@ never writes, never locks, and never touches the hot path - the scanner does not
 know it exists. State is assembled per request; the probe that computes
 distance-to-profitable is throttled so a refreshing browser cannot drive it.
 """
+import glob
 import json
 import os
 import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from arb import history as hist
 from arb.instruments import market_phase, now_ist, years_to_expiry
@@ -20,6 +22,36 @@ from arb.settlement import LegMarker, SettlementBook
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "dashboard.html")
 STATIC = os.path.join(HERE, "static")
+REPO_ROOT = os.path.dirname(HERE)
+LOG_PATH = os.path.join(REPO_ROOT, "engine.log")
+
+
+def _log_source():
+    """The engine's log: production's systemd-redirected engine.log
+    (deployment/trading-engine.service), or the newest local dev session log
+    (./run.sh writes logs/session_*.log) when that file does not exist."""
+    if os.path.isfile(LOG_PATH):
+        return LOG_PATH
+    sessions = sorted(glob.glob(os.path.join(REPO_ROOT, "logs", "session_*.log")))
+    return sessions[-1] if sessions else None
+
+
+def _tail_lines(path, n=400, chunk=65536, max_bytes=8_000_000):
+    """Last ``n`` lines of ``path`` without reading the whole file - a
+    long-running engine.log can grow to hundreds of MB over weeks."""
+    with open(path, "rb") as fh:
+        fh.seek(0, os.SEEK_END)
+        pos = fh.tell()
+        data = b""
+        read = 0
+        while pos > 0 and data.count(b"\n") <= n and read < max_bytes:
+            step = min(chunk, pos)
+            pos -= step
+            fh.seek(pos)
+            data = fh.read(step) + data
+            read += step
+    text = data.decode("utf-8", errors="replace")
+    return text.splitlines()[-n:]
 
 
 class DashboardState:
@@ -386,6 +418,16 @@ def make_handler(state):
                 elif self.path.startswith("/api/candles"):
                     rows = state.candles.all(180) if state.candles else {}
                     self._send(json.dumps(rows).encode(), "application/json")
+                elif self.path.startswith("/api/logs"):
+                    q = parse_qs(urlparse(self.path).query)
+                    n = max(50, min(5000, int(q.get("lines", ["400"])[0])))
+                    src = _log_source()
+                    body = {"path": src or "", "available": bool(src),
+                            "lines": _tail_lines(src, n) if src else []}
+                    self._send(json.dumps(body).encode(), "application/json")
+                elif self.path in ("/logs", "/logs.html"):
+                    with open(os.path.join(HERE, "logs.html"), "rb") as fh:
+                        self._send(fh.read(), "text/html; charset=utf-8")
                 elif self.path.startswith("/static/"):
                     # Fonts are served locally rather than from a CDN so the
                     # dashboard renders identically with no network.
