@@ -26,5 +26,8 @@
   "playbooks": [
     "ob_fvg_retest"
   ],
+  "min_atr_ratio": 1.3,
+  "midday_min_atr_ratio": 1.5,
+  "extend_giveback_r": 0.25,
   "stocks_enabled": true
 }

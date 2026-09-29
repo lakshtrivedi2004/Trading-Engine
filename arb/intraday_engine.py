@@ -17,8 +17,11 @@ Honest naming: nothing here is arbitrage. The scanners this file replaces
 produced structures whose profit was fixed at entry; a long call is a bet on
 direction that decays while you hold it.
 """
+import json
+import os
 import threading
 import time
+from dataclasses import asdict, fields
 
 from arb.instruments import now_ist
 from arb.intraday import (ContractSelector, chain_delta, plan_trade,
@@ -123,6 +126,115 @@ class IntradayEngine:
         if stale:
             self.log(f"[intraday] config names unknown playbooks: "
                      f"{', '.join(stale)} - they are not running")
+        # The day's record survives a restart: the trades already closed come
+        # back from the journal, and a position the last process died holding
+        # (flat battery, crash) comes back from its own file.
+        jdir = getattr(journal, "dir", None)
+        self._open_path = os.path.join(jdir, "open_positions.json") if jdir else None
+        self._open_saved_at = 0.0
+        self.handover = False           # set by a paper restart: keep positions for the next process
+        self._resume_trades()
+        self._restore_open()
+
+    # ── the day's record across restarts ────────────────────────────────────
+    def _resume_trades(self):
+        """Today's closed trades, from the journal the engine already writes.
+
+        Without this a restart blanked the dashboard's trade list, the win and
+        loss counts, and restarted trade ids at 1 - while the capital ledger
+        (open_day above) kept the day's P&L. The journal is the record.
+        """
+        path = getattr(self.journal, "jsonl_path", None)
+        if not path or not os.path.exists(path):
+            return
+        try:
+            with open(path) as fh:
+                recs = [json.loads(line) for line in fh if line.strip()]
+        except (OSError, ValueError) as e:
+            self.log(f"[intraday] journal unreadable, today's trades not shown: {e}")
+            return
+        recs = [r for r in recs if "exit_reason" in r]
+        if not recs:
+            return
+        self.records = recs
+        self.wins = sum(1 for r in recs if float(r.get("net_inr") or 0.0) >= 0)
+        self.losses = len(recs) - self.wins
+        self.trade_id = max(int(r.get("trade_id") or 0) for r in recs)
+        self.log(f"[intraday] today's journal: {len(recs)} closed trades "
+                 f"(W{self.wins}/L{self.losses}) restored to the dashboard")
+
+    def _save_open(self, force=False):
+        """Open positions to disk: on every entry and exit, and every few
+        seconds while one is open so a trailed stop is not lost. A clean stop
+        squares off and leaves the file empty; anything left in it is a
+        position the process died holding."""
+        if not self._open_path:
+            return
+        now = time.time()
+        if not force and now - self._open_saved_at < 5.0:
+            return
+        self._open_saved_at = now
+        data = {"day": now_ist().strftime("%Y-%m-%d"),
+                "mode": getattr(self.broker, "mode", "paper"),
+                "positions": [asdict(p) for p in self.book.snapshot()]}
+        try:
+            tmp = self._open_path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump(data, fh, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+            os.replace(tmp, self._open_path)
+        except Exception as e:
+            self.log(f"[intraday] could not save open positions: {e}")
+
+    def _restore_open(self):
+        """Put back the positions the last process died holding.
+
+        Paper only, and only on the same day: an intraday position cannot
+        outlive its session. A live position is never restored blindly - the
+        broker is the only one who knows if it is still open - so new entries
+        halt until a human has looked, as for an entry whose status is unknown.
+        """
+        path = self._open_path
+        if not path or not os.path.exists(path):
+            return
+        try:
+            with open(path) as fh:
+                data = json.load(fh)
+        except (OSError, ValueError) as e:
+            self.log(f"[intraday] open-position file unreadable: {e}")
+            return
+        rows = data.get("positions") or []
+        if not rows:
+            return
+        names = ", ".join(str(r.get("symbol", "?")) for r in rows)
+        if data.get("day") != now_ist().strftime("%Y-%m-%d"):
+            self.log(f"[intraday] {names} from {data.get('day')} was never closed by the "
+                     f"engine; an intraday position does not outlive its day - not restored")
+            self._save_open(force=True)
+            return
+        if getattr(self.broker, "mode", "paper") != "paper" or data.get("mode") != "paper":
+            self.halted = True
+            self.halt_reason = f"{names} was open when the engine stopped - check the Angel app"
+            self.log(f"[intraday] HALTED: {self.halt_reason}; not restored")
+            if self.notifier:
+                self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\n<code>{names}</code> was open "
+                                   f"when the engine stopped. New entries halted.")
+            return
+        known = {f.name for f in fields(Position)}
+        slots = getattr(getattr(self.feed, "store", None), "slot_of_token", {}) or {}
+        for r in rows:
+            pos = Position(**{k: v for k, v in r.items() if k in known})
+            if str(pos.token) not in slots:
+                self.log(f"[intraday] cannot restore {pos.symbol}: not subscribed this session")
+                continue
+            pos.detail = dict(pos.detail or {}, restored=True)
+            self.book.add(pos)
+            # Counted at entry in-session; the ledger only counts it at exit.
+            self.trades_today += 1
+            self.trade_id = max(self.trade_id, int(pos.trade_id))
+            self.log(f"[intraday] RESTORED {pos.symbol} x{pos.qty} @ {pos.entry:.2f} "
+                     f"(stop {pos.stop:.2f}, index stop {pos.index_invalidation:.1f}) - "
+                     f"the engine stopped without closing it")
+        self._save_open(force=True)
 
     # ── helpers ─────────────────────────────────────────────────────────────
     def _note(self, reason):
@@ -267,6 +379,8 @@ class IntradayEngine:
                          f"({pos.r_multiple:+.2f}R)")
             if action == EXIT:
                 self.close(pos, reason)
+        if self.book.count():
+            self._save_open()
 
     def _trail(self, pos, idx):
         """Move the index stop along the swings, once per completed bar."""
@@ -363,6 +477,7 @@ class IntradayEngine:
             pos.qty = left
             self.log(f"[intraday] PARTIAL EXIT {pos.symbol}: {q} filled @ {fill:.2f}, "
                      f"{left} still open and managed")
+            self._save_open(force=True)
             return None
         qty_total = pos.done_qty
         fill = pos.done_value / qty_total
@@ -373,6 +488,7 @@ class IntradayEngine:
         pos.qty = qty_total
 
         self.book.remove(pos.trade_id)
+        self._save_open(force=True)
         if net >= 0:
             self.wins += 1
             self.loss_streak = 0
@@ -836,6 +952,7 @@ class IntradayEngine:
         pos.index_entry, pos.index_risk, pos.index_target = px, risk, float(tgt or 0.0)
         pos.delta, pos.entry_bar = 1.0, rows[-1][0] if rows else ""
         self.book.add(pos)
+        self._save_open(force=True)
         word = "BUY" if v.side > 0 else "SHORT"
         self.log(f"[intraday] ENTRY {word} {sym} x{qty} @ {fill:.2f} = Rs {fill * qty:,.0f} "
                  f"(margin Rs {pos.margin:,.0f}) | grade {v.grade} {' + '.join(v.plays())} | "
@@ -956,6 +1073,7 @@ class IntradayEngine:
             pos.detail["index_target"] = round(pos.index_target, 2)
             pos.detail["target_premium_est"] = round(fill + est, 2) if est else None
         self.book.add(pos)
+        self._save_open(force=True)
 
         why = " + ".join(verdict.plays()) if verdict and verdict.plays() \
             else structure.last_event
@@ -1005,9 +1123,18 @@ class IntradayEngine:
                 self.hunt()
             except Exception as e:
                 self.log(f"[intraday] loop error: {e!r}")
-        # Never leave the desk with a position on it.
-        for pos in self.book.snapshot():
-            self.close(pos, "squareoff")
+        # Never leave the desk with a position on it - unless this is a paper
+        # restart (./run.sh sends SIGUSR1): then the position is handed to the
+        # next process, which restores it from open_positions.json, instead of
+        # being cut by the restart. Live always squares off.
+        if self.handover and getattr(self.broker, "mode", "paper") == "paper" \
+                and self.book.count():
+            self._save_open(force=True)
+            self.log(f"[intraday] restart: {self.book.count()} open position(s) "
+                     f"handed to the next engine, not squared off")
+        else:
+            for pos in self.book.snapshot():
+                self.close(pos, "squareoff")
         self._running.clear()
 
     def start(self, **kw):

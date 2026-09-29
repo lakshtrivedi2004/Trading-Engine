@@ -351,8 +351,15 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
     def on_signal(*_):
         running["v"] = False
         engine.stop()
+
+    def on_restart(*_):
+        # ./run.sh restarting a paper engine: open positions go to the next
+        # process (open_positions.json) instead of being squared off.
+        engine.handover = True
+        on_signal()
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGUSR1, on_restart)
 
     engine.start(stop_predicate=should_stop)
     log(f"scanning ({mode}); Ctrl+C to stop")
@@ -364,12 +371,17 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
             if time.time() - last >= 60:
                 last = time.time()
                 s = engine.summary()
+                # The pace gate refuses most of the day by design; printing the
+                # reading against its bar says so, instead of looking like a fault.
+                pace = " ".join(f"{k} {v['atr_ratio']:.2f}x"
+                                for k, v in sorted(s["structures"].items()))
                 log(f"ticks={feed.ticks:,} passes={engine.passes:,} "
                     f"trades={s['trades']} (W{s['wins']}/L{s['losses']}) "
                     f"open={s['open']} "
                     f"pnl={_inr(s['day_pnl'])} ({s['day_pct']:+.2f}%) "
                     f"target={_inr(s['target_inr'])} "
-                    f"| {s['rejects'] or 'scanning'}")
+                    + (f"| pace {pace} (need {engine.L.min_atr_ratio:g}x) " if pace else "")
+                    + f"| {s['rejects'] or 'scanning'}")
     except KeyboardInterrupt:
         pass
     finally:
@@ -624,6 +636,7 @@ def main():
         engine.stop()
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGUSR1, on_signal)     # ./run.sh restart: a normal stop here
 
     engine.start(lots=args.lots, min_edge_points=args.min_edge,
                  stop_predicate=should_stop)

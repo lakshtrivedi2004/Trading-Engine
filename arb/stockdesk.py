@@ -53,6 +53,10 @@ class StockDesk:
         self._lock = threading.Lock()
         self._ready = threading.Event()
         self._seeded = set()
+        # Picks trading on saved bars (before today) because the API refused
+        # them. Not "seeded": today's bars are still missing, so the next
+        # rescan asks the API again rather than leaving the gap all session.
+        self._disk_only = set()
 
     # ── reference data ──────────────────────────────────────────────────────
     def load(self):
@@ -234,16 +238,20 @@ class StockDesk:
             if rows:
                 self.candles.seed(sym, rows)
                 self._seeded.add(sym)
+                self._disk_only.discard(sym)
                 self.log(f"[stocks] {sym}: {len(rows)} bars of history loaded")
                 return True
         except Exception as e:
             if not quiet:
+                if sym in self._disk_only:
+                    return True        # already on saved bars; the next rescan asks again
                 rows = self._disk_history(sym)
                 if rows:
                     self.candles.seed(sym, rows)
-                    self._seeded.add(sym)
+                    self._disk_only.add(sym)
                     self.log(f"[stocks] {sym}: API refused ({str(e)[:60]}); "
-                             f"{len(rows)} saved bars loaded from disk instead")
+                             f"{len(rows)} saved bars loaded from disk instead, "
+                             f"today's asked for again at the next rescan")
                     return True
                 self.log(f"[stocks] {sym}: history seed failed ({str(e)[:90]}); "
                          f"trading on live bars only")

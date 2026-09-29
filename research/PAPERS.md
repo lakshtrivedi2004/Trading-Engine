@@ -674,6 +674,44 @@ No peer-reviewed study of relative volume or opening-range breakouts on NSE sing
 - Plus the paper's 5-minute opening-range breakout on the same picks.
 - The scanner earns its place only if its picks beat random picks after costs in both periods. Results are recorded below once the fetch completes.
 
+### 0j. No trades on 28–29 Sep, and the settings re-tested (29 Sep 2026)
+
+**The owner's question.** The engine traded 2–7 times a day on 21–25 Sep and not once on 28 Sep or the morning of 29 Sep.
+
+**What changed.** Nothing broke. On the evening of 25 Sep the paper config went from pace 1.2 with all seven playbooks to pace 1.5 with `ob_fvg_retest` only (section 0g). Replaying the cached 1-minute bars through `regime_gate` and `evaluate`:
+
+| Setting | Setups 28 Sep | Setups 29 Sep |
+|---|---:|---:|
+| pace 1.5, `ob_fvg_retest` (the config then) | 0 | 1 (SENSEX 09:43) |
+| pace 1.2, all seven (21–25 Sep) | 12 | 7 |
+
+- The one setup on 29 Sep came before the engine was started (10:04). Run through the real `IntradayEngine.hunt()` with a recorded SENSEX chain and `PaperBroker`, it opens `SENSEX 72600PE`.
+- A closed lid suspended the laptop from 10:20 to 10:38 (`journalctl`: "Lid closed. Suspending"). `run.sh` now holds a `systemd-inhibit` sleep/lid lock for as long as the engine runs.
+- The engine took its first trade at 11:25 once NIFTY's pace reached 1.6×: `NIFTY 22500CE`, +₹2,114.
+
+**Full re-test** (`tools/backtest.py`, a year of three indices, split 25 May, decay not charged):
+
+| Setting | Trades | Win in / out | Net in / out | Year | Months + |
+|---|---:|---:|---:|---:|---:|
+| pace 1.2, all seven (21–25 Sep) | ~930 | 43% / 49% | −₹27,779 / −₹1,171 | loss | – |
+| pace 1.5, strict midday (25–29 Sep) | 109 | 45% / 58% | +₹4,848 / +₹5,637 | +₹10,485 | 46% |
+| **pace 1.3, midday only at ≥ 1.5×, lock 0.25R (new)** | **178** | 46% / 52% | +₹1,797 / +₹6,796 | +₹8,593 | **69%** |
+| pace 1.3, midday blocked, lock 0.25R | 147 | 49% / 52% | +₹3,983 / +₹6,935 | +₹10,918 | 62% |
+| pace 1.5, midday blocked | 74 | 49% / 61% | +₹3,987 / +₹6,464 | +₹10,451 | 69% |
+| pace 1.5, book at the target (`on_target: exit`) | 109 | 45% / 58% | −₹3,249 / +₹3,102 | −₹147 | 38% |
+
+- **Only `ob_fvg_retest` is positive in both periods.** `choch_bos` behind the two big wins of 24–25 Sep was −₹58k in-sample at pace 1.2.
+- **Below pace 1.3 every variant loses.**
+- **Booking at the target does not raise the win rate.** A trade that reaches its target is a win either way, because the extension locks the stop above entry. It removes 80–100% of the year, which the runners earn. Locking the extension 0.25R under the old target instead of 0.75R keeps nearly the whole target at no measurable cost.
+- **The midday entries** at pace 1.3–1.5 are about break-even over the year. They are kept on a fast tape so a late start is not an idle day.
+- **The top rows are within noise of each other.** At 75–180 trades a year, per-trade noise is ±₹8–9k on the year.
+
+**Stocks.** The stock desk, replayed with an extended `tools/stock_backtest.py` (84 sessions, top 8 picks, loosest settings), made 19 trades. Of the bars with a valid setup:
+- 57% were refused because costs were over 20% of the risk.
+- 34% were refused because the stop was inside one ATR.
+
+At ₹14k × 5×, a round trip is ₹100–125, so a stop must be at least 0.7–0.9% of the price. One-minute structure gives 0.2–0.4%. More or more volatile picks cannot fix that. Structure read on 5- or 15-minute bars might, and is the next thing to test.
+
 ### Also added from the literature
 
 - `vwap_pullback`: from **Zarattini & Aziz**, VWAP trend on QQQ, SSRN 4631351.

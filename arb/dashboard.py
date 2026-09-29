@@ -211,6 +211,32 @@ class DashboardState:
                             f"{b.underlying} {b.expiry}")})
         return out
 
+    @staticmethod
+    def _levels(p):
+        """The levels that actually manage a position, live.
+
+        With an index target the premium target is parked out of reach
+        (entry x 100) so the index level decides the exit; that parked number
+        is not a price and must not be shown as one. What is shown instead is
+        the index target and stop as they stand now (both move: extensions,
+        trailing), and the premium the target should be worth, at the points
+        per index point measured at entry rather than the chain delta.
+        """
+        if p.index_target <= 0 or p.index_entry <= 0:
+            return {"index_target": 0.0, "index_stop": round(p.index_invalidation, 2),
+                    "target_est": None, "extensions": p.extensions}
+        d = p.detail or {}
+        ppp = p.delta
+        est0, tgt0 = d.get("target_premium_est"), d.get("index_target")
+        if est0 and tgt0 and abs(float(tgt0) - p.index_entry) > 0:
+            ppp = (float(est0) - p.entry) / abs(float(tgt0) - p.index_entry)
+        # A stock is its own underlying: its target is a share price already.
+        est = None if p.opt == "EQ" else p.entry + abs(p.index_target - p.index_entry) * ppp
+        return {"index_target": round(p.index_target, 2),
+                "index_stop": round(p.index_invalidation, 2),
+                "target_est": round(est, 2) if est else None,
+                "extensions": p.extensions}
+
     def intraday_snapshot(self):
         """State for the intraday strategy. The arbitrage figures - implied
         rates, the return band, stake, capital utilisation - have no meaning
@@ -230,6 +256,7 @@ class DashboardState:
             "mae": round(p.mae, 2), "mfe": round(p.mfe, 2),
             "held_s": int(time.time() - p.opened_at),
             "detail": p.detail,
+            **self._levels(p),
         } for p in e.book.snapshot()]
         return {
             "strategy": "intraday",

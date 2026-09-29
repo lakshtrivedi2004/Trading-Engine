@@ -738,6 +738,104 @@ with tempfile.TemporaryDirectory() as d:
           eng4.halted and eng4.realised_pnl <= -3_000.0, eng4.halt_reason)
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+section("7. The day's record survives a restart")
+
+import csv as _csv
+import json as _json
+from arb.journal import Journal
+
+with tempfile.TemporaryDirectory() as d:
+    j = Journal(directory=d)
+    base = {"strategy": "INTRADAY_CE", "mode": "paper", "symbol": "NIFTY24000CE", "opt": "CE",
+            "strike": 24000.0, "underlying": "NIFTY", "expiry": "29SEP2026", "qty": 65,
+            "entry": 100.0, "exit": 110.0, "exit_reason": "target", "points": 10.0,
+            "r_multiple": 1.0, "gross_inr": 650.0, "cost_inr": 80.0, "held_sec": 300.0,
+            "grade": "B", "playbooks": ["ob_fvg_retest"], "legs": [], "opportunity": {}}
+    j.record_trade(dict(base, trade_id=1, net_inr=570.0))
+    j.record_trade(dict(base, trade_id=2, exit_reason="stop_loss", net_inr=-300.0))
+    with open(j.intraday_csv_path) as fh:
+        sheet = list(_csv.DictReader(fh))
+    check("an intraday trade gets a spreadsheet row (it used to fail on 'description')",
+          len(sheet) == 2 and sheet[0]["net_inr"] == "570.0" and sheet[0]["playbooks"] == "ob_fvg_retest",
+          f"{len(sheet)} rows")
+
+    feed = _Feed(24000.0)
+    feed.store.slot_of_token = {"1001": 0}
+
+    def _restart(broker=None):
+        return IntradayEngine(feed, [_Binding()], _Cfg(), CostModel(), IntradayLimits(),
+                              broker or PaperBroker(CostModel()), j, _Cap(), _Candles(day),
+                              log=lambda *_: None)
+
+    e = _restart()
+    check("a restart shows today's closed trades again, with the win/loss count",
+          len(e.records) == 2 and (e.wins, e.losses) == (1, 1), f"{len(e.records)} W{e.wins}/L{e.losses}")
+    check("...and trade ids carry on instead of starting again at 1", e.trade_id == 2)
+
+    p = Position(trade_id=3, symbol="NIFTY24000CE", token="1001", strike=24000.0, opt="CE", side=1,
+                 qty=65, entry=120.0, stop=110.0, target=12000.0, risk_points=10.0,
+                 index_invalidation=23950.0, opened_at=time.time())
+    p.index_entry, p.index_target, p.trailed = 24000.0, 24100.0, True
+    e.book.add(p)
+    e._save_open(force=True)
+    # The process dies here: no clean stop, nothing squares the position off.
+    e2 = _restart()
+    got = e2.book.snapshot()
+    check("a position the last process died holding is managed again after a restart",
+          len(got) == 1 and got[0].symbol == "NIFTY24000CE" and got[0].index_target == 24100.0
+          and got[0].trailed and got[0].detail.get("restored"), str(got))
+    check("...counted in today's trades, and the next trade id follows it",
+          e2.trades_today == 1 and e2.trade_id == 3, f"{e2.trades_today} trades, id {e2.trade_id}")
+
+    e2.close(got[0], "target")
+    with open(e2._open_path) as fh:
+        left = _json.load(fh)["positions"]
+    e3 = _restart()
+    check("a clean exit empties the file, so the next start restores nothing",
+          left == [] and e3.book.count() == 0)
+    check("...and the exit is in the journal the dashboard reads back",
+          len(e3.records) == 3 and e3.records[-1]["trade_id"] == 3)
+
+    def _plant(day_, mode_="paper", token="1001"):
+        with open(e3._open_path, "w") as fh:
+            _json.dump({"day": day_, "mode": mode_,
+                        "positions": [dict(_json.loads(_json.dumps(p.__dict__)), token=token)]}, fh)
+
+    _plant("2026-01-02")
+    check("a position left from another day is not brought back", _restart().book.count() == 0)
+    _plant(datetime.now(IST).strftime("%Y-%m-%d"), token="9999")
+    check("a position whose contract is not subscribed is not restored blind", _restart().book.count() == 0)
+
+    # ./run.sh restart (SIGUSR1): the position goes to the next engine, uncut.
+    with open(e3._open_path, "w") as fh:
+        _json.dump({"day": "", "mode": "paper", "positions": []}, fh)
+    before = len(e3.records)
+    p4 = Position(trade_id=4, symbol="NIFTY24000CE", token="1001", strike=24000.0, opt="CE", side=1,
+                  qty=65, entry=130.0, stop=125.0, target=13000.0, risk_points=5.0,
+                  index_invalidation=23990.0, opened_at=time.time())
+    e3.book.add(p4)
+    e3.handover = True
+    e3.run(stop_predicate=lambda: True)
+    e6 = _restart()
+    check("a paper restart hands the open position to the next engine instead of squaring it off",
+          len(e6.records) == before and [q.trade_id for q in e6.book.snapshot()] == [4],
+          f"{len(e6.records)} closed, open {[q.trade_id for q in e6.book.snapshot()]}")
+    e6.run(stop_predicate=lambda: True)
+    e7 = _restart()
+    check("...while a plain stop still squares off and journals it",
+          e7.book.count() == 0 and len(e7.records) == before + 1
+          and e7.records[-1]["exit_reason"] == "squareoff")
+
+    class _LiveStub(PaperBroker):
+        mode = "live"
+
+    _plant(datetime.now(IST).strftime("%Y-%m-%d"), mode_="live")
+    e5 = _restart(_LiveStub(CostModel()))
+    check("live: a position left open is never restored blindly - entries halt until checked",
+          e5.book.count() == 0 and e5.halted and "Angel" in e5.halt_reason, e5.halt_reason)
+
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

@@ -25,6 +25,18 @@ CSV_COLUMNS = [
 ]
 
 
+# An intraday trade is one position opened and closed, not a structure of legs
+# with detection latencies, so it has its own sheet. It used to be pushed
+# through the arbitrage columns above, which it does not have: every intraday
+# CSV row failed on the first missing key and only the JSONL was written.
+INTRADAY_COLUMNS = [
+    "trade_id", "ts_ist", "mode", "strategy", "underlying", "symbol", "opt",
+    "strike", "expiry", "qty", "entry", "exit", "exit_reason", "points",
+    "r_multiple", "gross_inr", "cost_inr", "net_inr", "held_sec", "mae", "mfe",
+    "grade", "playbooks", "day_pnl", "capital",
+]
+
+
 class Journal:
     def __init__(self, directory="journal", day=None):
         self.dir = directory
@@ -32,6 +44,7 @@ class Journal:
         day = day or now_ist().strftime("%Y-%m-%d")
         self.jsonl_path = os.path.join(self.dir, f"trades_{day}.jsonl")
         self.csv_path = os.path.join(self.dir, f"trades_{day}.csv")
+        self.intraday_csv_path = os.path.join(self.dir, f"intraday_{day}.csv")
         self.rejects_path = os.path.join(self.dir, f"rejects_{day}.jsonl")
         self._lock = threading.Lock()
         if not os.path.exists(self.csv_path):
@@ -42,7 +55,34 @@ class Journal:
         with self._lock:
             with open(self.jsonl_path, "a") as fh:
                 fh.write(json.dumps(fill, default=str) + "\n")
-        self._append_csv(fill)
+        if "exit_reason" in fill:
+            self._append_intraday_csv(fill)
+        else:
+            self._append_csv(fill)
+
+    def _append_intraday_csv(self, t):
+        with self._lock:
+            new = not os.path.exists(self.intraday_csv_path)
+            with open(self.intraday_csv_path, "a", newline="") as fh:
+                w = csv.writer(fh)
+                if new:
+                    w.writerow(INTRADAY_COLUMNS)
+                w.writerow(["+".join(t.get(c) or []) if c == "playbooks" else t.get(c, "")
+                            for c in INTRADAY_COLUMNS])
+
+    def rebuild_intraday_csv(self):
+        """Regenerate this day's intraday sheet from its JSONL. Returns rows written."""
+        if not os.path.exists(self.jsonl_path):
+            return 0
+        with open(self.jsonl_path) as fh:
+            trades = [t for t in (json.loads(line) for line in fh if line.strip())
+                      if "exit_reason" in t]
+        with self._lock:
+            if os.path.exists(self.intraday_csv_path):
+                os.remove(self.intraday_csv_path)
+        for t in trades:
+            self._append_intraday_csv(t)
+        return len(trades)
 
     def _append_csv(self, fill):
         o = fill["opportunity"]

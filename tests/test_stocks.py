@@ -255,6 +255,24 @@ check("history refused for rate is retried, not given up on",
       "AAA" in c.seeded and desk.api.calls == 3,
       f"{desk.api.calls} calls")
 
+# Refused on every try: trade on saved bars now, but ask again at the next
+# rescan - saved bars end yesterday, so today's morning would stay a gap.
+c = _DeskCandles()
+desk = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, c, IntradayLimits(), api=_Api(fail=99))
+saved = [["2026-09-28T15:29:00+05:30", 500, 501, 499, 500, 100]]
+desk._disk_history = lambda sym: saved
+desk._seed_all(["AAA"], gap_sec=0.0, tries=2, backoff_sec=0.0)
+check("history refused on every try falls back to the saved bars",
+      c.seeded.get("AAA") == saved, str(c.seeded))
+check("...without counting the pick as seeded, so a rescan asks the API again",
+      "AAA" not in desk._seeded and "AAA" in desk._disk_only)
+calls = desk.api.calls
+desk.api.fail = 0
+desk._seed_all(["AAA"], gap_sec=0.0, tries=2, backoff_sec=0.0)
+check("...and the next rescan loads today's history once the API answers",
+      desk.api.calls == calls + 1 and "AAA" in desk._seeded and "AAA" not in desk._disk_only
+      and c.seeded["AAA"] != saved, f"{desk.api.calls - calls} more calls")
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

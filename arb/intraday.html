@@ -84,16 +84,38 @@ function tiles(d){
     `<div class="box"><div class="k">${k}</div><div class="v ${c||''}">${v}</div><div class="n">${esc(n||"")}</div></div>`).join("");
 }
 
+// With an index target the engine parks the premium target at entry x 100 so
+// the index level decides the exit. That number is not a price: show the level
+// it is really aiming at, and what the option should be worth there.
+// index_target / target_est are live; an engine started before they existed
+// only has the entry-time values in detail, so those are the fallback.
+function targetCell(p){
+  const d = p.detail || {};
+  const lvl = p.index_target || d.index_target;
+  const est = p.target_est ?? d.target_premium_est;
+  if(lvl > 0){
+    const ext = p.extensions ? ` <span class="muted">(extended ×${p.extensions})</span>` : "";
+    const opt = p.opt === "EQ" ? "" : `<div class="muted">≈ ₹${f2(est)} option</div>`;
+    return `${esc(p.underlying)} ${f2(lvl)}${ext}${opt}`;
+  }
+  if(p.target >= p.entry * 50) return '<span class="muted">trail only</span>';
+  return f2(p.target);
+}
+function stopLevel(p){
+  return p.index_stop > 0 && p.opt !== "EQ"
+    ? `<div class="muted">${esc(p.underlying)} ${f2(p.index_stop)}</div>` : "";
+}
+
 function openTable(rows){
   const el = document.getElementById("open");
   if(!rows.length){ el.innerHTML = '<p class="empty">No position open. The engine is waiting for structure and an affordable strike to agree.</p>'; return; }
   el.innerHTML = `<table><tr><th>Contract</th><th>Qty</th><th>Entry</th><th>Mark</th>
     <th>Stop</th><th>Target</th><th>R</th><th>P&amp;L</th><th>Held</th><th>Why</th></tr>` +
     rows.map(p => `<tr>
-      <td>${esc(p.symbol)}${p.trailed?' <span class="pill">breakeven</span>':''}</td>
+      <td>${esc(p.symbol)}${p.trailed?' <span class="pill">breakeven</span>':''}${p.detail&&p.detail.restored?' <span class="pill" title="carried across an engine restart">restored</span>':''}</td>
       <td>${p.qty}</td><td>${f2(p.entry)}</td>
       <td class="${cls(p.pnl_points)}">${f2(p.mark)}</td>
-      <td>${f2(p.stop)}</td><td>${f2(p.target)}</td>
+      <td>${f2(p.stop)}${stopLevel(p)}</td><td>${targetCell(p)}</td>
       <td class="${cls(p.r)}">${f2(p.r)}R</td>
       <td class="${cls(p.pnl_inr)}">${rs(p.pnl_inr)}</td>
       <td>${Math.floor(p.held_s/60)}m</td>

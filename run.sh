@@ -85,7 +85,11 @@ fi
 pid=$(running_pid)
 if [ -n "$pid" ]; then
   dim "engine already running (pid $pid); restarting so today's state is re-read"
-  kill "$pid"; sleep 3
+  # USR1, not TERM: a restart hands any open paper position to the new engine
+  # (journal/open_positions.json) instead of squaring it off. Wait for the old
+  # one to finish writing it before the new one reads it.
+  kill -USR1 "$pid"
+  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 fi
 
 # Refuse a live start from here. The trial is paper-only; live needs a
@@ -101,6 +105,21 @@ log="$LOGDIR/session_$(date +%Y%m%d_%H%M%S).log"
 nohup "$PY" run_bot.py --mode paper --port "$PORT" "$@" >"$log" 2>&1 &
 echo $! > "$PIDFILE"
 
+# Keep the machine awake for as long as the engine runs. On 29 Sep a closed lid
+# suspended it from 10:20 to 10:38: no ticks, no exits, a hole in the candles.
+# The lock lives in its own process tied to the engine's pid, so stop/restart
+# and the pid file are unchanged, and it is released the moment the engine exits.
+inhibit_ok=0
+if command -v systemd-inhibit >/dev/null 2>&1; then
+  epid=$(cat "$PIDFILE")
+  nohup systemd-inhibit --what=sleep:idle:handle-lid-switch --mode=block \
+    --who="Trading-Engine" --why="paper engine running (pid $epid)" \
+    tail --pid="$epid" -f /dev/null >/dev/null 2>&1 &
+  ipid=$!
+  sleep 1
+  kill -0 "$ipid" 2>/dev/null && inhibit_ok=1
+fi
+
 # Wait for the engine to report it is scanning, then open the browser.
 for _ in $(seq 1 60); do
   if grep -q "scanning (paper)" "$log" 2>/dev/null; then break; fi
@@ -114,5 +133,10 @@ green "engine running (pid $(cat "$PIDFILE"))"
 dim  "dashboard  http://127.0.0.1:$PORT"
 dim  "log        $log"
 dim  "stop       ./run.sh stop     ·  follow  ./run.sh logs"
+if [ "$inhibit_ok" = 1 ]; then
+  dim "sleep      blocked while the engine runs (closing the lid will not suspend)"
+else
+  red "could not block sleep - keep the lid open, or the session pauses when it suspends"
+fi
 grep -E "restored today|indices;|spot " "$log" | sed 's/^/  /' || true
 open_dashboard
