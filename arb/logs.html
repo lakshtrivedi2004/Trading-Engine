@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Engine Logs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink:#202122; --dim:#54595d; --rule:#a2a9b1; --hair:#c8ccd1;
+    --bg:#ffffff; --panel:#f8f9fa; --link:#3366cc;
+    --up:#14866d; --down:#d33; --warn:#edab00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.6 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+       font-variant-numeric:tabular-nums}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:28px;
+     margin:0 0 2px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 12px}
+  .ctlrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 14px}
+  .btn{border:1px solid var(--hair);background:#fff;padding:6px 12px;font-size:13px;
+       cursor:pointer;border-radius:2px;font-family:inherit}
+  .btn:hover{background:var(--panel)}
+  .btn:disabled{opacity:.5;cursor:default}
+  label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:5px}
+  pre{background:#1e1e1e;color:#d4d4d4;padding:12px 14px;overflow:auto;
+      max-height:78vh;font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+      white-space:pre-wrap;word-break:break-all;border-radius:2px}
+  .down{color:var(--down)}
+</style>
+<div class="wrap">
+  <h1>Engine Logs</h1>
+  <p class="sub" id="sub">loading…</p>
+  <div class="ctlrow">
+    <button class="btn" id="btnRefresh">Refresh now</button>
+    <label><input type="checkbox" id="chkAuto" checked> auto-refresh (5s)</label>
+    <label><input type="checkbox" id="chkBottom" checked> follow bottom</label>
+  </div>
+  <pre id="log">loading…</pre>
+</div>
+<script>
+const esc = s => String(s??"").replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+let timer = null;
+
+async function refresh(){
+  const pre = document.getElementById("log");
+  const sub = document.getElementById("sub");
+  const followBottom = document.getElementById("chkBottom").checked;
+  const nearBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+  try{
+    const r = await fetch("/api/logs?lines=500", {cache: "no-store"});
+    const d = await r.json();
+    if(!d.available){
+      sub.innerHTML = "<b class='down'>no log file found</b>";
+      pre.textContent = "";
+      return;
+    }
+    sub.textContent = d.path + " · " + d.lines.length + " lines · " + new Date().toLocaleTimeString();
+    pre.textContent = d.lines.join("\n");
+    if(followBottom && nearBottom) pre.scrollTop = pre.scrollHeight;
+  }catch(e){
+    sub.innerHTML = "<b class='down'>fetch failed: " + esc(e) + "</b>";
+  }
+}
+
+function schedule(){
+  if(timer) clearInterval(timer);
+  timer = document.getElementById("chkAuto").checked ? setInterval(refresh, 5000) : null;
+}
+
+document.getElementById("btnRefresh").onclick = refresh;
+document.getElementById("chkAuto").onchange = schedule;
+refresh().then(() => { document.getElementById("log").scrollTop = 1e9; });
+schedule();
+</script>
