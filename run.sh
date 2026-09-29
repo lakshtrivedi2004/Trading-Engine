@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 
 PY=venv/bin/python
-PORT=8088
+PORT=8089
 LOGDIR=logs
 PIDFILE=.engine.pid
 

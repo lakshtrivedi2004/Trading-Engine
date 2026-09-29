@@ -425,7 +425,7 @@ def make_handler(state):
 
 
 class Dashboard:
-    def __init__(self, state, port=8088, host="127.0.0.1"):
+    def __init__(self, state, port=8089, host="127.0.0.1"):
         self.state = state
         self.port, self.host = port, host
         self.httpd = None

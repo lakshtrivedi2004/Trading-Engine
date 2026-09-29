@@ -444,7 +444,7 @@ def main():
     ap.add_argument("--status", action="store_true", help="check and exit")
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--duration", type=float, default=0.0, help="seconds; 0 = until close")
-    ap.add_argument("--port", type=int, default=8088, help="dashboard port")
+    ap.add_argument("--port", type=int, default=8089, help="dashboard port")
     ap.add_argument("--no-dashboard", action="store_true")
     ap.add_argument("--candle-interval", default=None,
                     choices=("1m", "5m", "15m", "1h", "1d"),
