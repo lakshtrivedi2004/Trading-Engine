@@ -65,7 +65,7 @@ numerals instead). Profit and loss are green and red from Wikipedia's own palett
 validated with the data-viz skill's `validate_palette.js` against white; they pass
 every gate including colourblind separation.
 
-While it runs, the live dashboard is at **http://127.0.0.1:8089** (`--port` to
+While it runs, the live dashboard is at **http://0.0.0.0:8089** (`--port` to
 move it, `--no-dashboard` to skip it). It shows spot, tick rate, scan latency,
 trades with their legs, the live chain with per-quote ages, and the panel that
 matters most - **distance to profitable**: the best violation currently on screen

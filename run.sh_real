@@ -135,7 +135,7 @@ for _ in $(seq 1 90); do
 done
 
 green "LIVE engine running (pid $(cat "$PIDFILE"))"
-dim  "dashboard  http://127.0.0.1:$PORT"
+dim  "dashboard  http://0.0.0.0:$PORT"
 dim  "log        $log"
 dim  "stop       ./run.sh_real stop   ·  follow  ./run.sh_real logs"
 grep -E "LIVE funds|stocks  " "$log" | sed 's/^/  /' || true

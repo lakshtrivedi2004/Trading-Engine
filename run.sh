@@ -37,7 +37,7 @@ running_pid() {
 }
 
 open_dashboard() {
-  local url="http://127.0.0.1:$PORT"
+  local url="http://0.0.0.0:$PORT"
   if command -v xdg-open >/dev/null 2>&1; then (nohup xdg-open "$url" >/dev/null 2>&1 &) ; true
   elif command -v open >/dev/null 2>&1; then open "$url" || true; fi
 }
@@ -130,7 +130,7 @@ for _ in $(seq 1 60); do
 done
 
 green "engine running (pid $(cat "$PIDFILE"))"
-dim  "dashboard  http://127.0.0.1:$PORT"
+dim  "dashboard  http://0.0.0.0:$PORT"
 dim  "log        $log"
 dim  "stop       ./run.sh stop     ·  follow  ./run.sh logs"
 if [ "$inhibit_ok" = 1 ]; then
