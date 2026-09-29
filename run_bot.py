@@ -32,7 +32,7 @@ from arb.journal import Journal
 from arb.recorder import TickRecorder
 from arb.margin import MarginService
 from arb.risk import RiskManager
-from arb.settlement import SettlementBook
+from arb.settlement import LegMarker, SettlementBook
 from arb.telegram import TelegramNotifier, _inr
 
 
@@ -278,6 +278,17 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
         notifier = TelegramNotifier(creds.telegram_bot_token,
                                     creds.telegram_chat_id).start()
 
+    # Built once, before the first session even logs in, so the dashboard is
+    # reachable the instant the process starts - including a restart that
+    # lands outside market hours, when it would otherwise sit idle with
+    # nothing listening on the port at all.
+    if not args.no_dashboard:
+        dstate = DashboardState(None, None, None, None, cfg, mode, None)
+        dstate.intraday_mode = True
+        dash = Dashboard(dstate, port=args.port).start()
+        dash_holder["dash"], dash_holder["dstate"] = dash, dstate
+        log(f"dashboard   {dash.url}")
+
     def on_signal(*_):
         stopping.set()
         e = current["engine"]
@@ -371,19 +382,13 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
     recorder = TickRecorder(feed.store, bindings, hz=1 / 60.0).start() if cfg.record_ticks else None
 
     dash = dash_holder["dash"]
-    if dash is None and not args.no_dashboard:
-        dstate = DashboardState(engine, feed, None, None, cfg, mode, journal,
-                                candles=candles)
-        dstate.intraday = engine
-        dash = Dashboard(dstate, port=args.port).start()
-        dash.state.spots = dict(spots)
-        dash_holder["dash"], dash_holder["dstate"] = dash, dstate
-        log(f"dashboard   {dash.url}")
-    elif dash is not None:
+    if dash is not None:
         # Rebind the running dashboard to today's fresh objects in place: the
         # HTTP handler closed over this DashboardState instance when the
         # server started, so reassigning dash.state would not be seen - only
-        # mutating the same object's attributes reaches the live page.
+        # mutating the same object's attributes reaches the live page. This
+        # is also how the very first day fills in the placeholder dashboard
+        # that run_intraday_forever created before ever logging in.
         dstate = dash_holder["dstate"]
         dstate.engine = engine
         dstate.intraday = engine
@@ -393,7 +398,8 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
         dstate.mode = mode
         dstate.spots = dict(spots)
         dstate.started = time.time()
-        log(f"dashboard   {dash.url} (rebound to today's session)")
+        dstate.marker = LegMarker(feed.store, dstate.settlements, candles)
+        log(f"dashboard   {dash.url} (bound to today's session)")
 
     feed.start()
     log("websocket connecting...")

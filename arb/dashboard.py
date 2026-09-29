@@ -66,10 +66,17 @@ class DashboardState:
         self.margin = margin
         self.settlements = settlements or SettlementBook()
         # Exit price and P&L per leg: live mid before expiry, intrinsic at the
-        # recorded settlement level after it.
-        self.marker = LegMarker(feed.store, self.settlements, candles)
+        # recorded settlement level after it. None only for the placeholder
+        # state built before any trading day has run yet (see intraday_mode).
+        self.marker = LegMarker(feed.store, self.settlements, candles) \
+            if feed is not None else None
         # Set by the intraday runner; when present the snapshot, the
-        # history feed and the page all switch to that strategy.
+        # history feed and the page all switch to that strategy. This can be
+        # True while `intraday` (the engine) is still None - the process is
+        # up and idling between trading days, with no engine/feed attached
+        # yet - so the page must not fall back to the arb layout meant for
+        # an always-attached engine.
+        self.intraday_mode = False
         self.intraday = None
         self._hist = None
         self._hist_at = 0.0
@@ -274,6 +281,15 @@ class DashboardState:
         """State for the intraday strategy. The arbitrage figures - implied
         rates, the return band, stake, capital utilisation - have no meaning
         here and are deliberately absent rather than shown as zero."""
+        if self.intraday is None:
+            # Idling between trading days: no engine/feed exists yet. The
+            # page shows this instead of falling back to the arb layout or
+            # crashing on a None engine.
+            return {"strategy": "intraday", "waiting": True,
+                    "now": now_ist().strftime("%H:%M:%S"),
+                    "phase": market_phase(start=self.cfg.session_start,
+                                          end=self.cfg.session_end),
+                    "mode": self.mode, "session_start": self.cfg.session_start}
         e, f = self.intraday, self.feed
         up = time.time() - self.started
         s = e.summary()
@@ -335,7 +351,7 @@ class DashboardState:
         }
 
     def snapshot(self):
-        if getattr(self, "intraday", None) is not None:
+        if getattr(self, "intraday_mode", False):
             return self.intraday_snapshot()
         e, f, r = self.engine, self.feed, self.risk
         st = e.stats.summary()
@@ -447,7 +463,7 @@ def make_handler(state):
                         self.send_response(404); self.end_headers()
                 elif self.path in ("/", "/index.html"):
                     page = PAGE
-                    if getattr(state, "intraday", None) is not None:
+                    if getattr(state, "intraday_mode", False):
                         alt = os.path.join(os.path.dirname(PAGE), "intraday.html")
                         if os.path.isfile(alt):
                             page = alt

@@ -11,6 +11,7 @@
 #   systemctl stop trading-engine        # stop (squares off open positions)
 #   tail -f /root/Trading-Engine/engine.log
 #   journalctl -u trading-engine -n 50
+#   systemctl restart trading-engine
 
 [Unit]
 Description=Trading-Engine (mode read from .trading_mode at each start)
