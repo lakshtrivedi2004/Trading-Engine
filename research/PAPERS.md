@@ -712,6 +712,86 @@ No peer-reviewed study of relative volume or opening-range breakouts on NSE sing
 
 At ₹14k × 5×, a round trip is ₹100–125, so a stop must be at least 0.7–0.9% of the price. One-minute structure gives 0.2–0.4%. More or more volatile picks cannot fix that. Structure read on 5- or 15-minute bars might, and is the next thing to test.
 
+### 0k. The owner's 30 Sep setups, tested on a model that prices the option (30 Sep 2026)
+
+**The request.**
+1. Market orders instead of limits.
+2. Liquidity from the last 4-5 daily candles, and a day trend from daily or 4-hour bars.
+3. The pace (ATR ratio) per index and per half-day, at the owner's values.
+4. A special rule for expiry day.
+5. The stock desk's pace from data.
+6. Capital fixed at Rs 13,466.9: a profit is not compounded, a loss shrinks it.
+
+**Why tools/backtest.py was not enough.** It prices a trade as index move × a fixed delta. It charges no theta, no spread and no lot-cost limit, and on expiry day those decide the trade. Every candidate was therefore re-priced as the contract the engine would buy:
+- **Contract choice:** ATM ± `max_strike_offset`, the risk-cap delta, `ask × lot ≤ capital`, the most expensive that fits. This is the rule in arb/intraday.py.
+- **Premium:** Black-Scholes on trading time.
+- **Stops:** the premium stop and the +1R breakeven, checked on every bar.
+
+The model was checked on real premiums. Across 20-minute windows near the money it tracked actual changes with correlation 0.95 (NIFTY 29SEP2026, 4-23 DTE, 3,039 windows) and 0.96 (the 29 Sep expiry-day book, 776 windows). Two corrections came out of that check:
+- **Decay speed.** Plain trading-time decay is twice too fast. The model is unbiased with time running at 0.5 (4-23 DTE) to 0.6 (0 DTE) of that speed intraday, because implied vol rose through expiry day, from 13% to 18%. 0.55 was used.
+- **IV and spreads, from the recorded books at 1-9 DTE:**
+  - NIFTY: IV 11.8%, spread 0.15-0.45 points.
+  - BANKNIFTY: IV 15.0%, spread 0.5-1.6 points.
+  - SENSEX: IV 12.2%, spread about 1 point.
+  - Expiry-day IV is ×1.15.
+  - At least one lot sits at the touch 90% of the time.
+
+Scripts and outputs are in `research_out/2026-09-30/`. That folder is git-ignored and was rebuilt after a reboot wiped /tmp.
+
+**Result.** Rs 13,466.9, the five indices now in config/engine.json, one position at a time, a year of 1-minute bars, split 25 May. The owner's per-index values are 1.3/1.5, 1.5/1.5, 1.2/1.2, 0.8/0.8 and 1.5/1.7.
+
+| Design | Trades | Win | Sep-May | May-Sep | Year | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| D0: settings until today (1.3, midday 1.5) | 178 | 46% | −₹733 | −₹946 | −₹1,679 | ₹12,099 |
+| D1: owner's per-index half-day pace | 230 | 45% | +₹10,751 | −₹3,559 | +₹7,192 | ₹19,798 |
+| D2: D1 + 4-hour trend (5 bars) with the trade | 122 | 51% | +₹12,394 | +₹4,766 | +₹17,160 | ₹6,195 |
+| D2d: D1 + daily 5-day trend instead | 120 | 48% | +₹9,986 | −₹3,012 | +₹6,974 | ₹10,027 |
+| D3: D2 + no trades on expiry day | 89 | 55% | +₹11,345 | +₹6,788 | +₹18,133 | ₹5,400 |
+| **D4: D2 + next expiry on expiry day (implemented)** | **111** | **52%** | **+₹13,476** | **+₹4,646** | **+₹18,122** | **₹5,226** |
+| D4 on NIFTY + BANKNIFTY + SENSEX only | 97 | 55% | +₹12,488 | +₹7,927 | +₹20,415 | ₹3,482 |
+
+**Pace (ATR) per index.** Implemented as `atr_by_index`, halves split at `atr_half_split` (12:15). It replaces `min_atr_ratio` and the midday rule for the listed indices. Taken alone, each index at the owner's values over the year:
+- NIFTY 1.3/1.5: +₹1,168, but the May-Sep half is −₹4,032. No NIFTY pace was positive in both halves.
+- BANKNIFTY 1.5: +₹1,295.
+- SENSEX 1.2: +₹9,844.
+- MIDCPNIFTY 0.8: +₹1,624 on 21 trades. Most setups cannot be bought at Rs 13.5k; an ATM lot costs Rs 20-34k.
+- FINNIFTY 1.5/1.7: −₹1,361. FINNIFTY loses at every pace and in every variant tested. Dropping it would add about ₹1,700 a year to D4.
+
+**Trend: 4-hour bars, not daily.** `trend_4h_bars = 5`: enter only in the direction of the last five completed 4-hour index bars (09:15-13:14 and 13:15 to close, about 2.5 sessions).
+- Every lookback from 2 to 10 bars was positive in both halves on the three weekly-expiry indices. 3-6 bars form the plateau.
+- Daily 3-5-day trends were weaker: May-Sep turns negative.
+- This fits the literature. Lehmann (1990 QJE) and Jegadeesh (1990 JF) find a weekly reversal. Gao et al. (2018 JFE) and Baltussen et al. (2021 JFE) find intraday momentum that reverses over days.
+- The literature's own suggestion, the sign of today's return since the previous close, did worse: +₹7,120 against +₹20,415 on the three indices.
+- Taken alone the filter costs NIFTY money, but NIFTY has only 17-37 trades. A per-index exception would be fitting noise.
+
+**Expiry day.** `expiry_trade_next`: on an index's own expiry day, buy the next expiry, not the 0DTE contract. The owner's premise was that ATR "always looks high" on expiry day. That holds for the premium, not for the gate: the INDEX's ATR ratio averages 1.20 on expiry days against 1.14 on other days, and the gap is mostly after 14:00. The literature:
+- SEBI's July 2024 consultation paper: the last 30 minutes of expiry day are the most volatile, and an ATM premium falls to about 1/5 of the previous close 30 minutes before expiry.
+- Stoll & Whaley (1987): expiry-day last-hour volatility.
+- Beckmeyer, Branger & Gayda (2023): 0DTE retail buyers lose.
+
+In the backtest, the next expiry (D4) and skipping the day (D3) came out the same over the year. D4 keeps 22 more trades. A 13:30 entry cut-off and a higher expiry-day pace were both worse or no better.
+
+**Market orders.** `market_orders` sends entries and exits as marketable limits: the touch ± `market_protection_pct` (2.5%, Angel's own market-price-protection band for index options above Rs 50), IOC.
+- A plain MARKET order is not an option. NSE rejects market orders sent through an API in F&O (NSE/FAOP/69296, effective 4 Aug 2025; NSE retail-algo FAQ Q11). Angel accepts only limits on BSE F&O.
+- **This also fixes a live bug.** The old exit fallback after `exit_market_after` misses sent MARKET, which Angel would reject on every SENSEX exit.
+- Evidence behind the choice: Fu, Li, Musto & Pearson (2025, SEC DERA) find in 0DTE options that crossing after a short wait costs about half-spread plus 0.6 ticks. The recorded books show one lot at the touch 90% of the time, so a one-lot marketable limit almost always fills at the touch.
+
+**Not implemented, and why.**
+- **Multi-day liquidity pools (previous 2-5 days' highs and lows).**
+  - As entry filters, none was better in both halves: "no pool before target", "pool ≥ 1R or 2R away" and "pool just swept" were all tested.
+  - As extra target and extension levels they changed one trade (+₹353). That is no evidence of an effect, and it would need about 25 lines threaded through arb/trailing.py.
+  - Osler (2000, 2003) supports levels for stops and targets over roughly 5 days, but no study of multi-day levels in index futures was found. PDH/PDL and the opening range stay the engine's pools.
+- **Stock pace.** With the gate switched off entirely, the stock desk took 2 trades in 120 sessions (tools/stock_backtest.py, Rs 13,466.9). Pace is not what stops stock trades: cost against a 1-minute stop is (0j). No `STOCKS` entry was added, so stocks keep `min_atr_ratio` and the midday rule.
+  - Aside: the same replay's 5-minute opening-range breakout on the scanner's picks made +₹19,351 in-sample and +₹11,032 held out (250 trades). Worth its own study.
+
+**Capital.** `capital_ceiling = 13466.9`. The ledger keeps the true equity, and the traded capital is min(ceiling, equity). Sizing, the risk cap, the daily target and the daily loss halt all use the traded figure. In live mode the equity is the broker's funds figure.
+
+**Caveats.**
+- These settings were chosen after seeing the whole year, May-Sep included, so May-Sep is not a clean held-out test for them.
+- IV is modelled from realised vol plus a premium fitted on one week of books. Spreads for FINNIFTY and MIDCPNIFTY are assumed at 0.5% of premium; no books exist for them.
+- Per-index samples are small: NIFTY 17-37 trades, BANKNIFTY 9-18.
+- Earlier caveat, unchanged: at 100-200 trades a year, per-trade noise is about ±₹8-9k on the year.
+
 ### Also added from the literature
 
 - `vwap_pullback`: from **Zarattini & Aziz**, VWAP trend on QQQ, SSRN 4631351.

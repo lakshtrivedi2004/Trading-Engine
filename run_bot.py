@@ -291,7 +291,8 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
         dstate.spots = {u.name: cached_spot(u.name) for u in cfg.active_underlyings()}
         cap_path = "journal/live/capital_live.json" if mode == "live" else "journal/capital.json"
         try:
-            dstate.boot_capital = CapitalBook(0.0, path=cap_path).capital
+            dstate.boot_capital = CapitalBook(0.0, path=cap_path,
+                                              ceiling=IntradayLimits.load().capital_ceiling).capital
         except Exception:
             dstate.boot_capital = 0.0
         dash = Dashboard(dstate, port=args.port).start()
@@ -358,22 +359,25 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
             raise SystemExit(f"LIVE START REFUSED: could not read available funds from Angel ({detail})")
         if args.capital:
             funds = min(funds, float(args.capital))
-        capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log)
+        capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log,
+                              ceiling=L.capital_ceiling)
         capital.open_day()
         cap_now = capital.sync_to_funds(funds)
         log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f}")
     else:
-        capital = CapitalBook(args.capital or L.starting_capital, log=log)
+        capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=L.capital_ceiling)
     interval = args.candle_interval or L.candle_interval
 
     journal = Journal(directory="journal/live") if mode == "live" else Journal()
     broker = (LiveBroker(session.api, cm, product="INTRADAY", confirm_fills=True, log=log)
               if mode == "live" else PaperBroker(cm))
+    broker.protection_pct = L.market_protection_pct
 
     # Structure is read off index candles, so this is on the critical path now -
     # not a dashboard ornament. It starts whether or not the dashboard runs.
+    # Seven calendar days: trend_4h needs three sessions before today.
     candles = CandleStore(session.api, cfg.active_underlyings(),
-                          interval=interval, log=log)
+                          interval=interval, lookback_days=7, log=log)
     candles.attach_feed(feed.store, getattr(feed, "spot_slots", {}),
                         getattr(feed, "future_slots", {}),
                         extra_slots=getattr(feed, "stock_slots", {})).start()
@@ -491,7 +495,7 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
             # it stays in the ledger and is folded when the next day opens, so
             # a mid-day restart resumes the day instead of splitting it.
             before = capital.capital
-            after = before + capital.day_pnl
+            after = capital.traded(capital.equity + capital.day_pnl)
             folded_now = market_phase() in ("closed", "weekend")
             if folded_now:
                 before, after = capital.close_day(note=mode)

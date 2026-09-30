@@ -103,8 +103,12 @@ api, l, e = place(["refuse"])
 check("an order the broker refuses is not a fill, and says why",
       not l["filled"] and "margin" in e[0], e[0])
 api, l, e = place([(["complete"], 65, 99.0)], market=True)
-check("a market leg is sent as MARKET with no price",
-      api.params[0]["ordertype"] == "MARKET" and api.params[0]["price"] == "0")
+check("a market leg goes as a marketable limit, touch + 2.5%, IOC (NSE refuses API MARKET orders)",
+      api.params[0]["ordertype"] == "LIMIT" and api.params[0]["price"] == "102.50"
+      and api.params[0]["duration"] == "IOC", str(api.params[0]))
+api, l, e = place([(["complete"], 65, 99.0)], market=True, side="SELL", exchange="BFO")
+check("a market SELL on BFO is a limit 2.5% under the touch, rounded down to the tick",
+      api.params[0]["ordertype"] == "LIMIT" and api.params[0]["price"] == "97.50", str(api.params[0]))
 check("intraday orders go as INTRADAY (MIS), IOC at a limit",
       place([(["complete"], 65, 99.0)])[0].params[0]["producttype"] == "INTRADAY"
       and place([(["complete"], 65, 99.0)])[0].params[0]["duration"] == "IOC")

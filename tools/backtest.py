@@ -50,7 +50,7 @@ def work(args):
             continue
         seg = rows[i - 399:i + 1]
         spot = seg[-1][4]
-        if regime_gate(seg, L, now=datetime.fromisoformat(iso)):
+        if regime_gate(seg, L, now=datetime.fromisoformat(iso), name=name):
             continue
         v = evaluate(seg, spot, L, strike_step=STEP[name])
         if not v.tradable:

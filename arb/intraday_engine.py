@@ -23,13 +23,13 @@ import threading
 import time
 from dataclasses import asdict, fields
 
-from arb.instruments import now_ist
+from arb.instruments import now_ist, parse_expiry
 from arb.intraday import (ContractSelector, chain_delta, plan_trade,
                           structural_invalidation)
 from arb.positions import EXIT, Position, PositionBook
 from arb.confluence import evaluate, grade_at_least, regrade
 from arb.playbooks import unknown as unknown_playbooks
-from arb.regime import atr, atr_ratio, premium_gate, regime_gate, session_phase
+from arb.regime import atr, atr_ratio, premium_gate, regime_gate, session_phase, trend_4h
 from arb.scanner import scan_cost_ratio
 from arb.smc import BEAR, BULL, RANGE, analyse
 from arb.costs import per_unit_cost_points
@@ -285,14 +285,14 @@ class IntradayEngine:
 
     def _binding_for(self, underlying):
         """Nearest live expiry for this index - the one with the tightest
-        spreads and the most delta per rupee."""
-        best = None
-        for b in self.bindings:
-            if b.underlying != underlying:
-                continue
-            if best is None or b.T < best.T:
-                best = b
-        return best
+        spreads and the most delta per rupee. With expiry_trade_next, not the
+        one expiring today: 0DTE premium decays fastest and the last half-hour
+        is the day's most volatile (research/PAPERS.md 0k)."""
+        mine = [b for b in self.bindings if b.underlying == underlying]
+        if getattr(self.L, "expiry_trade_next", False):
+            today = now_ist().date()
+            mine = [b for b in mine if parse_expiry(b.expiry).date() != today] or mine
+        return min(mine, key=lambda b: b.T, default=None)
 
     def _option_flow(self, b, cv, cand, und, rows):
         """What this premium really moves per index point, and what the other
@@ -438,7 +438,8 @@ class IntradayEngine:
         # A limit at the touch that keeps missing in a running market is how a
         # stop turns into a disaster. After exit_market_after unfilled tries,
         # get out at market.
-        if pos.exit_attempts >= int(getattr(self.L, "exit_market_after", 3)):
+        if getattr(self.L, "market_orders", False) or \
+                pos.exit_attempts >= int(getattr(self.L, "exit_market_after", 3)):
             leg["market"] = True
         ticket = _Ticket([leg], pos.qty, "INTRADAY_EXIT",
                          f"exit {pos.symbol} ({reason})", pos.expiry)
@@ -685,7 +686,7 @@ class IntradayEngine:
             # survive its own round trip, and whether we are in a part of the
             # session where continuation is a real effect rather than bid-ask
             # bounce. Cheapest refusal available, so it runs first.
-            veto = regime_gate(rows, self.L)
+            veto = regime_gate(rows, self.L, name=und)
             if veto:
                 self._note(veto)
                 continue
@@ -713,6 +714,12 @@ class IntradayEngine:
             if cap and self.playbook_count.get((und, lead_name, v.side), 0) >= cap:
                 self._note(f"playbook_cap:{lead_name}")
                 continue
+            n4 = int(getattr(self.L, "trend_4h_bars", 0) or 0)
+            if n4:
+                tr = trend_4h(self.candles.get(und, limit=3000) if self.candles else [], n4)
+                if tr != v.side:
+                    self._note("4h_trend_unknown" if tr == 0 else "against_4h_trend")
+                    continue
 
             # Only buy the retracement into the order block, never the breakout
             # candle itself: entering on the impulse puts the stop a full leg
@@ -905,7 +912,7 @@ class IntradayEngine:
             if len(rows) < L.min_structure_bars:
                 self._note("stock_warming_up")
                 continue
-            veto = regime_gate(rows, L)
+            veto = regime_gate(rows, L, name="STOCKS")
             if veto:
                 self._note(f"stock:{veto}")
                 continue
@@ -969,7 +976,7 @@ class IntradayEngine:
         leg = {"symbol": info.get("eq_symbol", sym), "token": info.get("eq_token"),
                "side": side, "price": quote, "qty": qty, "instrument": "EQ",
                "exchange": "NSE", "underlying": sym, "strike": 0.0, "opt": "EQ",
-               "depth": qty, "age_ms": 0.0}
+               "depth": qty, "age_ms": 0.0, "market": bool(getattr(L, "market_orders", False))}
         ticket = _Ticket([leg], qty, f"INTRADAY_EQ", f"{side.lower()} {sym}", "")
         try:
             legs, _ = self.broker.place_structure(ticket, 1)
@@ -1058,7 +1065,7 @@ class IntradayEngine:
                "price": cand.ask, "qty": cand.lot_size, "instrument": "OPT",
                "exchange": cand.segment, "underlying": cand.underlying,
                "strike": cand.strike, "opt": cand.opt, "depth": cand.depth,
-               "age_ms": cand.age_ms}
+               "age_ms": cand.age_ms, "market": bool(getattr(L, "market_orders", False))}
         ticket = _Ticket([leg], cand.lot_size, f"INTRADAY_{cand.opt}",
                          f"buy {cand.symbol}", cand.expiry)
         lots = max(1, int(lots))

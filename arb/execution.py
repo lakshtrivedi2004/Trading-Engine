@@ -6,6 +6,7 @@ with its unwind cost, never as profit. The old bot booked the theoretical edge
 straight to cash and never modelled a fill at all.
 """
 import concurrent.futures
+import math
 import random
 import threading
 import time
@@ -90,7 +91,30 @@ class LiveBroker:
         self.log = log
         self._lock = threading.Lock()
 
+    # A plain MARKET order is refused for API orders on NSE F&O (NSE/FAOP/69296,
+    # NSE retail-algo FAQ Q11) and Angel takes only limits on BFO. "At market"
+    # is therefore a marketable limit: the touch plus market_protection_pct
+    # (Angel's own MPP band for index options above Rs 50 is 2.5%), IOC, so it
+    # fills now against the book or not at all. Cash legs get a 0.5% band.
+    protection_pct = 2.5
+
+    @staticmethod
+    def _tick(px, instrument):
+        if instrument != "EQ":
+            return 0.05
+        return 0.05 if px < 1000 else (0.10 if px < 5000 else (0.50 if px < 10000 else 1.0))
+
+    def _protected(self, leg, price):
+        eq = leg.get("instrument") == "EQ"
+        pct = (0.5 if eq else self.protection_pct) / 100.0
+        tick = self._tick(price, leg.get("instrument"))
+        if leg["side"] == "BUY":
+            return math.ceil(price * (1 + pct) / tick - 1e-9) * tick
+        return max(tick, math.floor(price * (1 - pct) / tick + 1e-9) * tick)
+
     def _order_params(self, leg, price=None, market=False):
+        if market and price and price > 0:
+            price, market = self._protected(leg, float(price)), False
         return {
             "variety": "NORMAL",
             "tradingsymbol": leg["symbol"],

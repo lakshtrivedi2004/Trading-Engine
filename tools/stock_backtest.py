@@ -71,7 +71,7 @@ def trades_for(name, rows, lo, hi, capital):
             i += 1; continue
         seg = rows[max(0, i - 399):i + 1]
         px = seg[-1][4]
-        if regime_gate(seg, L, now=datetime.fromisoformat(iso)):
+        if regime_gate(seg, L, now=datetime.fromisoformat(iso), name="STOCKS"):
             i += 1; continue
         v = evaluate(seg, px, L, strike_step=0.0)
         if not v.tradable:

@@ -136,12 +136,20 @@ def session_phase(start="09:15", end="15:30", now=None):
     return "midday"
 
 
-def regime_gate(candles, L, now=None):
+def regime_gate(candles, L, now=None, name=None):
     """The reason to refuse this bar, or "" if the tape is worth trading.
 
     Refusals are deliberately named after what failed so the dashboard's reject
-    counter stays readable.
+    counter stays readable. `name` picks a per-index pace from L.atr_by_index
+    (first half, second half of the day), which replaces min_atr_ratio and the
+    midday rule for that index.
     """
+    halves = (getattr(L, "atr_by_index", None) or {}).get(name) if name else None
+    need = float(L.min_atr_ratio)
+    if halves:
+        t = now or now_ist()
+        second = t.hour * 60 + t.minute >= _minutes(str(getattr(L, "atr_half_split", "12:15")))
+        need = float(halves[1 if second else 0])
     # Never trade a sideways market: the index must have travelled at least as
     # efficiently as a random walk would (expected ratio 1/sqrt(n)), so the bar
     # is derived from the window, not typed in. Its own switch (sideways_bars =
@@ -161,7 +169,7 @@ def regime_gate(candles, L, now=None):
         return "no_candles"
 
     ar = 0.0
-    if L.min_atr_ratio > 0:
+    if need > 0:
         if len(candles) < L.atr_period + 1:
             return "candles_warming_up"
         ar = atr_ratio(candles, period=L.atr_period,
@@ -172,13 +180,13 @@ def regime_gate(candles, L, now=None):
             # when the operator asked for one.
             if not getattr(L, "trade_unknown_regime", True):
                 return "regime_unknown"
-        elif ar < L.min_atr_ratio:
+        elif ar < need:
             return "regime_too_quiet"
 
     mode = str(getattr(L, "midday_mode", "strict"))
     if getattr(L, "skip_midday", False):
         mode = "block"
-    if mode != "off" and session_phase(now=now) == "midday":
+    if not halves and mode != "off" and session_phase(now=now) == "midday":
         if mode == "block":
             return "midday_chop"
         # "strict": the middle of the day is tradable on a day that is actually
@@ -196,3 +204,22 @@ def regime_gate(candles, L, now=None):
             return "bar_indecisive"
 
     return ""
+
+
+def trend_4h(candles, bars=5, split="13:15"):
+    """+1 / -1: the direction of the last `bars` completed 4-hour bars of the
+    1-minute series (each session cut at `split`), 0 with too little history.
+    The bucket still forming is left out. research/PAPERS.md 0k: 3-6 bars all
+    helped out of sample; daily 3-5 day trends did not (short-term reversal)."""
+    closes, key = [], None
+    for r in candles:
+        k = (r[0][:10], r[0][11:16] >= split)
+        if k != key:
+            closes.append(r[4]); key = k
+        else:
+            closes[-1] = r[4]
+    closes = closes[:-1]
+    if len(closes) <= bars:
+        return 0
+    d = closes[-1] - closes[-1 - bars]
+    return (d > 0) - (d < 0)

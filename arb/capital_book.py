@@ -19,6 +19,11 @@ next trading day opens (`open_day`) or after the close. So:
     instead of starting from zero, so the daily loss halt cannot be reset by
     restarting the bot;
   * a crash loses nothing: the ledger is on disk after every trade.
+
+The ceiling (IntradayLimits.capital_ceiling, owner's request of 30 Sep 2026).
+The ledger keeps compounding - it is the account's real equity - but what is
+TRADED is min(ceiling, equity): a profit stays in the account untouched, a
+loss shrinks the purse until profits bring it back up to the ceiling.
 """
 import json
 import os
@@ -28,8 +33,9 @@ from arb.instruments import now_ist
 
 
 class CapitalBook:
-    def __init__(self, starting, path="journal/capital.json", log=lambda *_: None):
+    def __init__(self, starting, path="journal/capital.json", log=lambda *_: None, ceiling=0.0):
         self.path = path
+        self.ceiling = float(ceiling or 0.0)
         self.log = log
         self.starting = float(starting)
         self._lock = threading.Lock()
@@ -56,10 +62,19 @@ class CapitalBook:
         except Exception as e:
             self.log(f"[capital] save failed: {e}")
 
+    def traded(self, equity):
+        """The traded figure for a given equity: min(ceiling, equity)."""
+        return min(equity, self.ceiling) if self.ceiling > 0 else equity
+
     @property
-    def capital(self):
+    def equity(self):
         with self._lock:
             return float(self._data.get("capital", self.starting))
+
+    @property
+    def capital(self):
+        """What is traded: the equity, capped at the ceiling."""
+        return self.traded(self.equity)
 
     def daily_target(self, pct):
         """The day's goal in rupees. A goal, not a gate - nothing stops trading
@@ -93,7 +108,7 @@ class CapitalBook:
                 self._data["day"] = today
                 self._data["day_pnl"] = 0.0
                 self._data["day_trades"] = 0
-            cap = float(self._data.get("capital", self.starting))
+            cap = self.traded(float(self._data.get("capital", self.starting)))
             self._save()
         return folded, cap
 
@@ -122,7 +137,7 @@ class CapitalBook:
                 self._data["synced"] = {"date": now_ist().strftime("%Y-%m-%d"),
                                         "funds": round(funds, 2), "note": note}
                 self._save()
-            return float(self._data.get("capital", funds))
+            return self.traded(float(self._data.get("capital", funds)))
 
     def close_day(self, note=""):
         """After the session: fold today's ledger into capital now. Safe to call
@@ -138,7 +153,7 @@ class CapitalBook:
             self._data["day"] = day
             self._data["day_pnl"] = 0.0
             self._save()
-            return before, before + folded
+            return self.traded(before), self.traded(before + folded)
 
     def _fold_locked(self, day, note):
         pnl = float(self._data.get("day_pnl", 0.0))
@@ -180,7 +195,9 @@ class CapitalBook:
         with self._lock:
             hist = self._data.get("history", [])
             return {
-                "capital": round(float(self._data.get("capital", self.starting)), 2),
+                "capital": round(self.traded(float(self._data.get("capital", self.starting))), 2),
+                "equity": round(float(self._data.get("capital", self.starting)), 2),
+                "ceiling": round(self.ceiling, 2),
                 "starting": round(self.starting, 2),
                 "days": len(hist),
                 "total_return_pct": round(

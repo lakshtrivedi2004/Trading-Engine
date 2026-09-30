@@ -817,6 +817,27 @@ class IntradayLimits:
     stocks_min_net_inr: float = 100.0
     stocks_spread_frac: float = 0.0003
 
+    # ── 30 Sep 2026 settings (research/PAPERS.md 0k) ──────────────────────────
+    # Trading capital is min(capital_ceiling, the account's real equity): a
+    # profit stays in the account but is not traded, a loss shrinks what is.
+    # 0 = no ceiling (the day's P&L compounds, the old behaviour).
+    capital_ceiling: float = 0.0
+    # Pace gate per index: {"NIFTY": [first_half, second_half], ...}, halves
+    # split at atr_half_split. A listed index uses these instead of
+    # min_atr_ratio and the midday rule; "STOCKS" covers the stock desk.
+    atr_by_index: dict = field(default_factory=dict)
+    atr_half_split: str = "12:15"
+    # Enter only with the last N completed 4-hour index bars (09:15-13:14,
+    # 13:15-close). 0 = off. Daily 3-5 day trends tested worse (0k).
+    trend_4h_bars: int = 0
+    # On an index's expiry day buy the NEXT expiry, not the 0DTE contract.
+    expiry_trade_next: bool = False
+    # Entries and exits as marketable limits: the touch +/- protection, IOC.
+    # A plain MARKET order is refused for API orders on NSE F&O
+    # (NSE/FAOP/69296) and by Angel on BFO, so this is the fill-now order.
+    market_orders: bool = False
+    market_protection_pct: float = 2.5
+
     @classmethod
     def load(cls, path=None):
         path = path or os.path.join(ROOT, "config", "intraday.json")

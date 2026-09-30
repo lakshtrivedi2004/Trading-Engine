@@ -625,6 +625,68 @@ check("the daily target is a goal, never a halt - only loss halts",
       and IntradayLimits().daily_target_pct == 10.0)
 check("strike range is ATM +/- 5", IntradayLimits().max_strike_offset == 5)
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("12. Per-index pace, 4-hour trend, expiry, capital ceiling (PAPERS.md 0k)")
+import tempfile
+from types import SimpleNamespace
+from arb.regime import trend_4h
+from arb.intraday_engine import IntradayEngine
+from arb.instruments import now_ist as _now
+
+ar_calm = atr_ratio(calm)
+Lh = IntradayLimits(sideways_bars=0, min_atr_ratio=5.0, midday_mode="strict", midday_min_atr_ratio=5.0,
+                    atr_by_index={"NIFTY": [ar_calm - 0.1, ar_calm + 0.5]})
+check("a listed index uses its first-half pace, and the midday rule does not apply",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 10, 30, tzinfo=IST), name="NIFTY") == "",
+      f"ratio {ar_calm:.2f}")
+check("after the half-day split the second-half pace applies",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 13, 0, tzinfo=IST), name="NIFTY") == "regime_too_quiet")
+check("an index not in the map keeps the global pace",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 10, 30, tzinfo=IST), name="SENSEX") == "regime_too_quiet")
+
+def sessions(closes_per_day, start="2026-09-21"):
+    from datetime import date as _d, timedelta as _td
+    rows, d = [], _d.fromisoformat(start)
+    for c in closes_per_day:
+        t0 = datetime(d.year, d.month, d.day, 9, 15, tzinfo=IST)
+        for m in range(375):
+            px = c + m * 0.01
+            rows.append([(t0 + _td(minutes=m)).isoformat(), px, px + 1, px - 1, px, 0])
+        d += _td(days=1)
+    return rows
+up4 = sessions([100, 110, 120, 130])
+check("four rising sessions read as a rising 4-hour trend", trend_4h(up4, 5) == 1)
+check("four falling sessions read as a falling 4-hour trend", trend_4h(sessions([130, 120, 110, 100]), 5) == -1)
+check("too little history is 0 (unknown), never a direction", trend_4h(sessions([100, 110]), 5) == 0)
+crash = up4 + [[up4[-1][0][:11] + "15:29:00+05:30", 50.0, 51.0, 49.0, 50.0, 0]]
+check("the 4-hour bar still forming is left out", trend_4h(up4[:-60] + crash[-1:], 5) == 1)
+
+today = _now().strftime("%d%b%Y").upper()
+b0 = SimpleNamespace(underlying="NIFTY", expiry=today, T=0.0005)
+b1 = SimpleNamespace(underlying="NIFTY", expiry="31DEC2099", T=0.02)
+eng = SimpleNamespace(bindings=[b1, b0], L=IntradayLimits(expiry_trade_next=True))
+check("on expiry day the NEXT expiry is traded when expiry_trade_next is on",
+      IntradayEngine._binding_for(eng, "NIFTY") is b1)
+eng.L = IntradayLimits()
+check("by default the nearest expiry is traded, 0DTE included", IntradayEngine._binding_for(eng, "NIFTY") is b0)
+eng.bindings = [b0]; eng.L = IntradayLimits(expiry_trade_next=True)
+check("with only today's expiry subscribed it is still traded rather than nothing",
+      IntradayEngine._binding_for(eng, "NIFTY") is b0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    cb = CapitalBook(13466.9, path=os.path.join(tmp, "c.json"), ceiling=13466.9)
+    cb.open_day("2026-10-01"); cb.record(+500.0); cb.close_day()
+    check("a profit stays in the equity but the traded capital stays at the ceiling",
+          abs(cb.capital - 13466.9) < 1e-6 and abs(cb.equity - 13966.9) < 1e-6, f"{cb.capital} / {cb.equity}")
+    cb.open_day("2026-10-02"); cb.record(-1000.0); cb.close_day()
+    check("a loss below the ceiling shrinks the traded capital to the equity",
+          abs(cb.capital - 12966.9) < 1e-6, f"{cb.capital}")
+    check("the day's target and risk cap use the traded capital",
+          abs(cb.daily_target(10.0) - 1296.69) < 1e-6)
+    cc = CapitalBook(10000.0, path=os.path.join(tmp, "d.json"))
+    cc.open_day("2026-10-01"); cc.record(+500.0); cc.close_day()
+    check("without a ceiling the day's profit still compounds", abs(cc.capital - 10500.0) < 1e-6)
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)
