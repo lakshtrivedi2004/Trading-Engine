@@ -10,6 +10,7 @@ Paper mode is the default and is the only mode that runs without an explicit
 the broker and nothing else, so what paper trades is exactly what live trades.
 """
 import argparse
+import os
 import signal
 import sys
 import threading
@@ -300,6 +301,27 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
                                               ceiling=L.capital_ceiling).capital
         except Exception:
             dstate.boot_capital = 0.0
+        if mode == "live" and not os.path.exists(cap_path) \
+                and market_phase(start=cfg.session_start, end=cfg.session_end) != "open":
+            # Live with no ledger yet (a fresh checkout, never run a live day):
+            # there is no figure on disk, so ask the broker once, in the
+            # background, for what the account holds - what the day would open
+            # on. One login + one RMS read, never repeated while idle.
+            def _boot_funds():
+                try:
+                    s = AngelSession(creds).login(retry_for_sec=60.0, log=log)
+                    funds, detail = live_funds(s.api)
+                    if funds > 0:
+                        if args.capital:
+                            funds = min(funds, float(args.capital))
+                        ceiling = IntradayLimits.load().capital_ceiling
+                        dstate.boot_capital = min(funds, ceiling) if ceiling > 0 else funds
+                        log(f"dashboard   live funds Rs {funds:,.2f} ({detail}) shown while idle")
+                    else:
+                        log(f"dashboard   live funds unavailable while idle: {detail}")
+                except Exception as e:
+                    log(f"dashboard   live funds unavailable while idle: {e}")
+            threading.Thread(target=_boot_funds, name="boot-funds", daemon=True).start()
         dash = Dashboard(dstate, port=args.port).start()
         dash_holder["dash"], dash_holder["dstate"] = dash, dstate
         log(f"dashboard   {dash.url}")
