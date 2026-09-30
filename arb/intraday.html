@@ -240,9 +240,15 @@ function structTable(s){
 function tradeTable(rows){
   const el = document.getElementById("trades");
   if(!rows||!rows.length){ el.innerHTML = '<p class="empty">Nothing closed yet today.</p>'; return; }
-  el.innerHTML = `<table><tr><th>Contract</th><th>Entry</th><th>Exit</th><th>Reason</th>
-    <th>Points</th><th>R</th><th>Cost</th><th>Net</th></tr>` +
-    rows.map(t => `<tr><td>${esc(t.symbol)}</td><td>${f2(t.entry)}</td><td>${f2(t.exit)}</td>
+  // Trades journaled before invested_inr existed: an option's premium is exactly
+  // entry x qty; for a stock the recorded margin is the best figure there is.
+  const invested = t => t.invested_inr != null ? t.invested_inr
+    : (t.opt === "EQ" ? t.capital_inr : t.entry * t.qty);
+  el.innerHTML = `<table><tr><th>Contract</th><th>Entry</th><th>Qty</th><th>Invested</th>
+    <th>Exit</th><th>Reason</th><th>Points</th><th>R</th><th>Cost</th><th>Net</th></tr>` +
+    rows.map(t => `<tr><td>${esc(t.symbol)}</td><td>${f2(t.entry)}</td><td>${f0(t.qty)}</td>
+      <td title="${t.opt === "EQ" ? "margin blocked (leveraged stock)" : "premium paid"}">₹${f0(invested(t))}</td>
+      <td>${f2(t.exit)}</td>
       <td class="muted">${esc(t.exit_reason)}</td>
       <td class="${cls(t.points)}">${f2(t.points)}</td>
       <td class="${cls(t.r_multiple)}">${f2(t.r_multiple)}R</td>

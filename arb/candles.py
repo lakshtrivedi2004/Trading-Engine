@@ -246,6 +246,12 @@ class CandleStore:
                     self._save_cache(name, snap)
                     if self._fetch_errors.pop(name, None):
                         self.log(f"[candles] {name}: historical API recovered")
+                else:
+                    # An accepted request with no bars is never right for a
+                    # multi-day window, and silently ignoring it leaves the
+                    # index on live bars alone with nothing in the log to say so.
+                    raise RuntimeError(f"empty response - no candles returned for "
+                                       f"token {u.spot_token} on {u.spot_exchange}")
             except Exception as e:
                 self._report_fetch_error(name, e)
             # The historical endpoint is rate limited; space the calls generously.

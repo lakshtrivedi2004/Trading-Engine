@@ -540,6 +540,11 @@ class IntradayEngine:
             "gross_inr": round(gross, 2), "cost_inr": round(cost, 2),
             "net_inr": round(net, 2),
             "capital_inr": round(pos.margin or pos.entry * pos.qty, 2),
+            # What left the account at entry, for the whole position: the premium
+            # for an option, the margin for a leveraged stock. Not pos.margin,
+            # which partial exits scale down to the last remaining piece.
+            "invested_inr": round(pos.entry * pos.qty / (
+                max(1.0, float(getattr(self.L, "stocks_leverage", 5.0))) if eq else 1.0), 2),
             "mae": round(pos.mae, 2), "mfe": round(pos.mfe, 2),
             "held_sec": round(time.time() - pos.opened_at, 1),
             "day_pnl": round(self.realised_pnl, 2),
