@@ -1,5 +1,5 @@
 {
-  "starting_capital": 10000.0,
+  "starting_capital": 13466.0,
   "daily_target_pct": 10.0,
   "max_strike_offset": 5,
   "min_delta": 0.15,

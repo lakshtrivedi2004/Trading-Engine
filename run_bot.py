@@ -291,8 +291,13 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
         dstate.spots = {u.name: cached_spot(u.name) for u in cfg.active_underlyings()}
         cap_path = "journal/live/capital_live.json" if mode == "live" else "journal/capital.json"
         try:
-            dstate.boot_capital = CapitalBook(0.0, path=cap_path,
-                                              ceiling=IntradayLimits.load().capital_ceiling).capital
+            L = IntradayLimits.load()
+            # Paper falls back to the configured starting capital until the
+            # first session writes capital.json; live has no figure until it
+            # reads funds from the broker, so it stays 0 until then.
+            start = 0.0 if mode == "live" else (args.capital or L.starting_capital)
+            dstate.boot_capital = CapitalBook(start, path=cap_path,
+                                              ceiling=L.capital_ceiling).capital
         except Exception:
             dstate.boot_capital = 0.0
         dash = Dashboard(dstate, port=args.port).start()
@@ -465,6 +470,13 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
             time.sleep(1.0)
             if time.time() - last >= 60:
                 last = time.time()
+                if dash_holder.get("dstate") is not None:
+                    # Refreshes the constraints table kept on disk for the page
+                    # to show after the close, whether or not anyone is viewing.
+                    try:
+                        dash_holder["dstate"].constraints()
+                    except Exception:
+                        pass
                 s = engine.summary()
                 # The pace gate refuses most of the day by design; printing the
                 # reading against its bar says so, instead of looking like a fault.

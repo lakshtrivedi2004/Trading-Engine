@@ -95,6 +95,11 @@
       <span>grey = not computed yet (hover for why)</span></span>
   </div>
 
+  <h2>Volatility per index</h2>
+  <p class="sub">Each index is held to its own pace (ATR ratio vs its own normal): one figure before
+    the half-day split, another after. "Needed now" is what the engine applies at this moment.</p>
+  <div class="scroll"><table id="vol"></table></div>
+
   <h2>Shared by every instrument</h2>
   <div class="scroll"><table id="common"></table></div>
 
@@ -114,6 +119,19 @@ function renderCommon(rows){
     rows.map(r => `<tr><td>${esc(r.param)}</td><td>${esc(r.threshold)}</td>
       <td class="${cls(r.ok)}">${esc(r.current)}</td>
       <td class="${cls(r.ok)}">${r.ok === true ? "✓ pass" : r.ok === false ? "✗ blocks" : "info"}</td></tr>`).join("");
+}
+
+function renderVol(rows){
+  const el = document.getElementById("vol");
+  if(!rows || !rows.length){ el.innerHTML = `<tr><td class="empty">No indices.</td></tr>`; return; }
+  el.innerHTML =
+    `<tr><th class="sticky">Index</th><th>First half</th><th>Second half</th><th>Rule</th>
+      <th>Needed now</th><th>ATR</th><th>ATR ratio</th><th>Candles</th>
+      <th>Last candle</th><th>Status</th></tr>` +
+    rows.map(r => `<tr><td class="sticky"><b>${esc(r.index)}</b></td><td>${esc(r.first)}</td>
+      <td>${esc(r.second)}</td><td>${esc(r.rule)}</td><td>${esc(r.need)}</td><td>${esc(r.atr)}</td>
+      <td class="${cls(r.ok)}">${esc(r.ratio)}</td><td>${esc(r.bars)}</td><td>${esc(r.last)}</td>
+      <td class="${cls(r.ok)}">${r.ok === true ? "✓ moving enough" : r.ok === false ? "✗ too quiet" : "info"}</td></tr>`).join("");
 }
 
 function renderPer(cols, rows){
@@ -140,21 +158,35 @@ async function refresh(){
   const sub = document.getElementById("sub");
   try{
     const d = await (await fetch("/api/constraints", {cache: "no-store"})).json();
-    if(d.error){ sub.innerHTML = `<b style="color:var(--down)">${esc(d.error)}</b> — retrying`; return; }
-    if(d.waiting){
-      sub.textContent = `${d.now} IST · no session running — constraints appear once trading starts (${d.session_start} IST)`;
-      document.getElementById("common").innerHTML = "";
-      document.getElementById("per").innerHTML = "";
-      return;
+    if(d.error && !d.common){ sub.innerHTML = `<b style="color:var(--down)">${esc(d.error)}</b> — retrying`; return; }
+    const open = d.phase === "open";
+    let txt = `${d.now} IST · ${(d.rows || []).length} instruments`;
+    if(!open){
+      txt = `${d.now} IST · market ${esc(d.phase || "closed")} — next session ${esc(d.session_start || "09:15")} IST · `
+        + (d.waiting
+            ? (d.saved_at ? `per-instrument table as of ${esc(d.saved_at)}` : "no saved per-instrument table yet")
+            : "last readings of today's session")
+        + " · pace from the last session candles · auto-refresh paused until the open";
     }
-    sub.textContent = `${d.now} IST · ${d.rows.length} instruments`;
-    renderCommon(d.common);
-    renderPer(d.columns, d.rows);
+    sub.textContent = txt;
+    renderVol(d.volatility);
+    renderCommon(d.common || []);
+    renderPer(d.columns || [], d.rows || []);
+    setMarketOpen(open);
   }catch(e){ sub.textContent = "disconnected"; }
+}
+// While the market is closed nothing on this page moves, so the 3 s poll is
+// dropped for a once-a-minute check that only notices the next open.
+let marketOpen = true;
+function setMarketOpen(open){
+  if(open === marketOpen) return;
+  marketOpen = open;
+  schedule();
 }
 function schedule(){
   if(timer) clearInterval(timer);
-  timer = document.getElementById("chkAuto").checked ? setInterval(refresh, 3000) : null;
+  const auto = document.getElementById("chkAuto").checked;
+  timer = auto ? setInterval(refresh, marketOpen ? 3000 : 60000) : null;
 }
 document.getElementById("btnRefresh").onclick = refresh;
 document.getElementById("chkAuto").onchange = schedule;

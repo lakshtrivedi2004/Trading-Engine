@@ -8,10 +8,12 @@ loop nothing it would notice. What IS computed here is the cheap per-strike
 arithmetic, done exactly the way ContractSelector.select and plan_trade do it,
 so a row that passes here is a row the engine would let through.
 """
+import json
+import os
 import time
 
 from arb.costs import leg_cost
-from arb.instruments import now_ist
+from arb.instruments import market_phase, now_ist
 from arb.intraday import atm_index, chain_delta, structural_invalidation
 from arb.regime import atr, atr_ratio, session_phase
 from arb.smc import BEAR, BULL
@@ -35,8 +37,13 @@ def _ago(ts, now):
     return f"{s:.0f}s ago" if s < 120 else f"{s / 60:.0f}m ago"
 
 
-def common(e, cfg):
-    """The gates every instrument shares: time, limits, cooldowns, halts."""
+def common(e, cfg, L=None):
+    """The gates every instrument shares: time, limits, cooldowns, halts.
+    With no engine (no session running) the thresholds are still shown, from
+    config, with nothing to measure them against."""
+    if e is None:
+        return [{"param": p, "threshold": t, "current": "— (no session)", "ok": None}
+                for p, t in _common_thresholds(L, cfg)]
     L, now = e.L, time.time()
     n = now_ist()
     since_open = (n - n.replace(hour=9, minute=15, second=0, microsecond=0)).total_seconds() / 60.0
@@ -76,19 +83,111 @@ def common(e, cfg):
     return [{"param": p, "threshold": t, "current": c, "ok": ok} for p, t, c, ok in rows]
 
 
-def _pace(L, rows):
-    """The regime gate's volatility test, as it would judge these bars now."""
-    need = L.min_atr_ratio
+def _common_thresholds(L, cfg):
+    """(param, threshold) for every shared gate - the config side of common()."""
+    loss_cd = float(getattr(L, "cooldown_after_loss_sec", 0.0))
+    return [
+        ("warmup_minutes", f"≥ {L.warmup_minutes:g} min after 09:15"),
+        ("no_new_trades_minutes", f"> {L.no_new_trades_minutes:g} min before {cfg.session_end}"),
+        ("max_open_positions", f"< {L.max_open_positions}"),
+        ("max_trades_per_day", f"< {L.max_trades_per_day}"),
+        ("trade_cooldown_sec", f"≥ {L.trade_cooldown_sec:g} s since last trade"),
+        ("cooldown_after_loss_sec", f"≥ {loss_cd:g} s since a loss"),
+        ("max_daily_loss_pct", f"day loss < {L.max_daily_loss_pct:g}%"),
+        ("loss_streak_pause_min", f"{getattr(L, 'loss_streak_pause_min', 30.0):g} min pause after "
+                                  f"{int(getattr(L, 'max_consecutive_losses', 0) or 0) or '∞'} losses in a row"),
+        ("max_risk_pct_per_trade", f"{L.max_risk_pct_per_trade:g}% of capital"),
+        ("symbol_cooldown_sec", f"{L.symbol_cooldown_sec:g} s per contract"),
+        ("min_structure_bars", f"≥ {L.min_structure_bars} candles"),
+        ("min_confirmations", f"≥ {L.min_confirmations}"),
+        ("require_order_block", "required" if L.require_order_block else "off"),
+        ("min_delta", f"≥ {L.min_delta:g}"),
+        ("max_spread_points", f"≤ {L.max_spread_points:g} pts"),
+        ("min_stop_atr", f"≥ {L.min_stop_atr:g} ATR"),
+        ("min_net_points", f"≥ {L.min_net_points:g} pts · stocks ≥ "
+                           f"₹{getattr(L, 'stocks_min_net_inr', 100.0):g}"),
+        ("max_cost_frac_of_risk", f"≤ {L.max_cost_frac_of_risk:g}"),
+        ("reward_risk", f"1:{L.reward_risk:g}"),
+    ]
+
+
+def _minutes(hhmm):
+    hh, mm = (int(x) for x in str(hhmm).split(":"))
+    return hh * 60 + mm
+
+
+def _need(L, name, n=None):
+    """The ATR ratio regime_gate demands of `name` right now, and the rule that
+    set it: a per-index [first half, second half] pace from atr_by_index, or
+    min_atr_ratio raised by the midday rule for an index not listed there."""
+    n = n or now_ist()
+    halves = (getattr(L, "atr_by_index", None) or {}).get(name) if name else None
+    if halves:
+        second = n.hour * 60 + n.minute >= _minutes(getattr(L, "atr_half_split", "12:15"))
+        return float(halves[1 if second else 0]), \
+            f"{'after' if second else 'before'} {getattr(L, 'atr_half_split', '12:15')}", False
+    need = float(L.min_atr_ratio)
     mode = str(getattr(L, "midday_mode", "strict"))
-    midday = session_phase() == "midday" and mode != "off"
-    if midday and mode == "strict":
-        need = max(need, float(getattr(L, "midday_min_atr_ratio", 1.0)))
+    if getattr(L, "skip_midday", False):
+        mode = "block"
+    midday = mode != "off" and session_phase(now=n) == "midday"
+    if midday and mode == "block":
+        return need, "midday blocked", True
+    if midday:
+        return float(getattr(L, "midday_min_atr_ratio", 1.0)), "midday", False
+    return need, "min_atr_ratio", False
+
+
+def _pace(L, rows, name=None):
+    """The regime gate's volatility test, as it would judge these bars now."""
+    need, why, blocked = _need(L, name)
     if len(rows) < L.atr_period + 1:
         return _cell("warming up", False)
     ar = atr_ratio(rows, period=L.atr_period, baseline_bars=L.atr_baseline_bars)
-    if midday and mode == "block":
-        return _cell(f"{ar:.2f}x", False, "midday blocked")
-    return _cell(f"{ar:.2f}x", ar >= need, f"need {need:g}x" + (" (midday)" if midday else ""))
+    if blocked:
+        return _cell(f"{ar:.2f}x", False, why)
+    return _cell(f"{ar:.2f}x", ar >= need, f"need {need:g}x ({why})")
+
+
+def _session_rows(rows, end):
+    """Bars inside the session only. The candle cache carries flat bars printed
+    after the close; judged on those, every index looks dead after hours."""
+    cut = _minutes(end)
+    return [r for r in rows if _minutes(str(r[0])[11:16]) <= cut] if rows else []
+
+
+def volatility(L, names, rows_for, end):
+    """One row per index (plus the stock desk's shared pace): the pace each is
+    held to - its own first-half / second-half ATR ratio - against its current
+    reading. Works without a session, from the last cached candles."""
+    n = now_ist()
+    table = (getattr(L, "atr_by_index", None) or {})
+    out = []
+    for name in list(names) + ["STOCKS"]:
+        halves = table.get(name)
+        need, why, blocked = _need(L, name, n)
+        row = {"index": name,
+               "first": f"{halves[0]:g}x" if halves else "—",
+               "second": f"{halves[1]:g}x" if halves else "—",
+               "rule": "atr_by_index" if halves else
+                       f"min_atr_ratio {L.min_atr_ratio:g}x · midday "
+                       f"{getattr(L, 'midday_min_atr_ratio', 1.0):g}x",
+               "need": f"{need:g}x ({why})"}
+        rows = _session_rows(rows_for(name), end) if name != "STOCKS" else []
+        if name == "STOCKS":
+            row.update(atr="—", ratio="per stock", bars="—", last="—", ok=None)
+        elif len(rows) < L.atr_period + 1:
+            row.update(atr="—", ratio="no candles" if not rows else "warming up",
+                       bars=len(rows), last=str(rows[-1][0])[:16].replace("T", " ") if rows else "—",
+                       ok=None)
+        else:
+            ar = atr_ratio(rows, period=L.atr_period, baseline_bars=L.atr_baseline_bars)
+            row.update(atr=f"{atr(rows, period=L.atr_period):.2f} pts",
+                       ratio=f"{ar:.2f}x", bars=len(rows),
+                       last=str(rows[-1][0])[:16].replace("T", " "),
+                       ok=(not blocked) and ar >= need)
+        out.append(row)
+    return out
 
 
 def _judgement(e, name, now):
@@ -112,8 +211,7 @@ def columns(L):
     return [
         ("instrument", "Instrument", ""),
         ("evaluated", "Last evaluated", ""),
-        ("pace", "Pace (ATR ratio)", f"≥ {L.min_atr_ratio:g}x · midday ≥ "
-                                    f"{getattr(L, 'midday_min_atr_ratio', 1.0):g}x"),
+        ("pace", "Pace (ATR ratio)", "per index - see the table above"),
         ("bars", "Candles", f"≥ {L.min_structure_bars}"),
         ("setup", "Setup", " / ".join(getattr(L, "playbooks", []) or ["any"])),
         ("conf", "Confirmations", f"≥ {L.min_confirmations}"),
@@ -156,7 +254,7 @@ def _index_rows(e, und, now):
     age = cv.ce_age if opt == "CE" else cv.pe_age
     syms = cv.ce_symbol if opt == "CE" else cv.pe_symbol
 
-    pace = _pace(L, rows)
+    pace = _pace(L, rows, und)
     bars = _cell(len(rows), len(rows) >= L.min_structure_bars)
     lead = v.setups[0] if v is not None and v.setups else None
     zone = _cell("—", None, "needs a direction")
@@ -239,7 +337,7 @@ def _stock_rows(e, now):
         row = {"instrument": _cell(f"{sym} (stock)", None,
                                    {BULL: "long", BEAR: "short"}.get(side, "no direction yet")),
                "group": "Stocks in play", "evaluated": _cell(when),
-               "pace": _pace(L, rows), "bars": _cell(len(rows), len(rows) >= L.min_structure_bars),
+               "pace": _pace(L, rows, "STOCKS"), "bars": _cell(len(rows), len(rows) >= L.min_structure_bars),
                "setup": setup, "conf": conf, "zone": na, "uses": na, "delta": na}
         bd, ak = float(store.bid[slot]), float(store.ask[slot])
         row["spread"] = _cell(f"₹{ak - bd:.2f}" if bd > 0 and ak > 0 else "no quote", None,
@@ -284,10 +382,42 @@ def _stock_rows(e, now):
 def snapshot(e, cfg):
     now = time.time()
     rows = []
-    for und in sorted({b.underlying for b in e.bindings}):
+    names = sorted({b.underlying for b in e.bindings})
+    for und in names:
         rows.extend(_index_rows(e, und, now))
     rows.extend(_stock_rows(e, now))
+    get = (lambda n: e.candles.get(n, limit=400)) if e.candles else (lambda n: [])
     return {"now": now_ist().strftime("%H:%M:%S"),
+            "phase": market_phase(start=cfg.session_start, end=cfg.session_end),
+            "volatility": volatility(e.L, names, get, cfg.session_end),
             "common": common(e, cfg),
             "columns": [{"key": k, "label": l, "threshold": t} for k, l, t in columns(e.L)],
             "rows": rows}
+
+
+def offline(cfg, L, saved=None, cache_dir=None):
+    """Everything the page can show with no session running: thresholds from
+    config, each index's pace from its cached candles, and the per-instrument
+    table as the last session left it (`saved`, with the time it was taken)."""
+    cache_dir = cache_dir or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "candles")
+    interval = getattr(L, "candle_interval", "1m")
+
+    def cached(name):
+        try:
+            with open(os.path.join(cache_dir, f"{name}_{interval}.json")) as fh:
+                return json.load(fh)[-400:]
+        except (OSError, ValueError):
+            return []
+
+    names = sorted(u.name for u in cfg.active_underlyings())
+    saved = saved or {}
+    return {"now": now_ist().strftime("%H:%M:%S"), "waiting": True,
+            "session_start": cfg.session_start,
+            "phase": market_phase(start=cfg.session_start, end=cfg.session_end),
+            "volatility": volatility(L, names, cached, cfg.session_end),
+            "common": common(None, cfg, L),
+            "columns": saved.get("columns") or
+                       [{"key": k, "label": l, "threshold": t} for k, l, t in columns(L)],
+            "rows": saved.get("rows") or [],
+            "saved_at": saved.get("saved_at", "")}

@@ -11,11 +11,12 @@ import os
 import subprocess
 import threading
 import time
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from arb import history as hist
-from arb.instruments import market_phase, now_ist, years_to_expiry
+from arb.instruments import IST, market_phase, now_ist, years_to_expiry
 from arb.mathview import chain_math, term_structure
 from arb.settlement import LegMarker, SettlementBook
 
@@ -112,18 +113,45 @@ class DashboardState:
         now = time.time()
         if self._cons is not None and now - self._cons_at < 2.0:
             return self._cons
+        from arb import constraints
         e = getattr(self, "intraday", None)
+        saved_path = os.path.join(REPO_ROOT, ".cache", "constraints_last.json")
         if e is None:
-            out = {"waiting": True, "now": now_ist().strftime("%H:%M:%S"),
-                   "session_start": self.cfg.session_start}
+            # No session: thresholds from config, pace from cached candles, and
+            # the per-instrument table as the last session left it on disk.
+            saved = None
+            try:
+                with open(saved_path) as fh:
+                    saved = json.load(fh)
+            except (OSError, ValueError):
+                pass
+            try:
+                from arb.config import IntradayLimits
+                out = constraints.offline(self.cfg, IntradayLimits.load(), saved)
+            except Exception as exc:
+                out = {"waiting": True, "now": now_ist().strftime("%H:%M:%S"),
+                       "session_start": self.cfg.session_start,
+                       "error": f"{type(exc).__name__}: {exc}"}
         else:
-            from arb import constraints
             try:
                 out = constraints.snapshot(e, self.cfg)
             except Exception as exc:
                 # The engine mutates these dicts on its own thread; a read that
                 # races it is retried on the next poll rather than trusted.
                 out = {"error": f"{type(exc).__name__}: {exc}"}
+            # Kept on disk (at most every 30 s, and only while the market is
+            # open) so a restart after the close still has the day's last table.
+            if "error" not in out and out.get("phase") == "open" \
+                    and now - getattr(self, "_cons_saved_at", 0.0) >= 30.0:
+                self._cons_saved_at = now
+                try:
+                    os.makedirs(os.path.dirname(saved_path), exist_ok=True)
+                    tmp = saved_path + ".tmp"
+                    with open(tmp, "w") as fh:
+                        json.dump(dict(out, saved_at=now_ist().strftime("%Y-%m-%d %H:%M:%S")), fh)
+                    os.replace(tmp, saved_path)
+                except OSError:
+                    pass
         self._cons, self._cons_at = out, now
         return out
 
@@ -301,6 +329,69 @@ class DashboardState:
                 "target_est": round(est, 2) if est else None,
                 "extensions": p.extensions}
 
+    def _last_day(self):
+        """The most recent trading day's closed trades, from the journal the
+        engine writes - so an idle process (after the close, or restarted
+        before the next session) shows that day's figures instead of zeros.
+        They stay up until the next day's session_start, then clear.
+
+        Returns (day, records) or (None, []). Re-read every few seconds, not
+        on every page poll."""
+        now = time.time()
+        if getattr(self, "_last_day_at", 0.0) and now - self._last_day_at < 3.0:
+            return self._last_day_cache
+        self._last_day_at = now
+        self._last_day_cache = (None, [])
+        jdir = os.path.join(REPO_ROOT, "journal", "live" if self.mode == "live" else "")
+        for path in sorted(glob.glob(os.path.join(jdir, "trades_*.jsonl")), reverse=True):
+            day = os.path.basename(path)[len("trades_"):-len(".jsonl")]
+            try:
+                with open(path) as fh:
+                    recs = [json.loads(l) for l in fh if l.strip()]
+            except (OSError, ValueError):
+                continue
+            recs = [r for r in recs if "exit_reason" in r]
+            if not recs:
+                continue
+            try:
+                hh, mm = (int(x) for x in self.cfg.session_start.split(":"))
+                reset = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)) \
+                    .replace(hour=hh, minute=mm, tzinfo=IST)
+            except ValueError:
+                break
+            if now_ist() < reset:
+                self._last_day_cache = (day, recs)
+            break
+        return self._last_day_cache
+
+    def _idle_day_stats(self):
+        """Dashboard figures for the last day, rebuilt from its journal."""
+        cap = round(getattr(self, "boot_capital", 0.0), 2)
+        day, recs = self._last_day()
+        try:
+            from arb.config import IntradayLimits
+            pct = IntradayLimits.load().daily_target_pct
+        except Exception:
+            pct = 0.0
+        if not recs:
+            tgt = round(cap * pct / 100.0, 2)
+            return {"capital": cap, "day_pnl": 0.0, "day_pct": 0.0,
+                    "target_inr": tgt, "target_pct": pct, "target_hit": False,
+                    "progress_pct": 0.0, "trades": 0, "wins": 0, "losses": 0,
+                    "recent_trades": []}
+        # The day's opening capital, as the engine showed it all day - not the
+        # post-close figure that already has the day's P&L folded in.
+        cap = round(float(recs[0].get("capital") or cap), 2)
+        pnl = round(sum(float(r.get("net_inr") or 0.0) for r in recs), 2)
+        wins = sum(1 for r in recs if float(r.get("net_inr") or 0.0) >= 0)
+        tgt = round(cap * pct / 100.0, 2)
+        return {"capital": cap, "day_pnl": pnl,
+                "day_pct": round(100.0 * pnl / cap, 3) if cap else 0.0,
+                "target_inr": tgt, "target_pct": pct, "target_hit": pnl >= tgt > 0,
+                "progress_pct": round(100.0 * pnl / tgt, 1) if tgt else 0.0,
+                "trades": len(recs), "wins": wins, "losses": len(recs) - wins,
+                "recent_trades": recs[-12:][::-1], "stats_day": day}
+
     def intraday_snapshot(self):
         """State for the intraday strategy. The arbitrage figures - implied
         rates, the return band, stake, capital utilisation - have no meaning
@@ -322,15 +413,11 @@ class DashboardState:
                     "indices": sorted((self.spots or {}).keys()),
                     "ticks": 0, "tick_rate": 0.0, "passes": 0,
                     "minutes_to_close": 0.0,
-                    "capital": round(getattr(self, "boot_capital", 0.0), 2),
-                    "day_pnl": 0.0, "day_pct": 0.0,
-                    "target_inr": 0.0, "target_pct": 0.0, "target_hit": False,
-                    "progress_pct": 0.0,
-                    "trades": 0, "wins": 0, "losses": 0,
+                    **self._idle_day_stats(),
                     "open_positions": [],
                     "halted": False, "halt_reason": "",
                     "rejects": {}, "structures": {}, "confluence": {},
-                    "limits": {}, "recent_trades": []}
+                    "limits": {}}
         e, f = self.intraday, self.feed
         up = time.time() - self.started
         s = e.summary()
