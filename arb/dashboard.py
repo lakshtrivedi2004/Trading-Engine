@@ -636,7 +636,17 @@ def make_handler(state):
             survive that restart.
             """
             target = "paper" if state.mode == "live" else "live"
-            script = os.path.join(os.path.dirname(HERE), "deployment", "switch_mode.sh")
+            # The script must restart the unit THIS process runs under: prod
+            # (trading-engine) and dev (trading-engine-dev) share this code, and
+            # switch_mode.sh on dev would rewrite dev's mode but restart prod.
+            name = "switch_mode.sh"
+            try:
+                with open("/proc/self/cgroup") as fh:
+                    if "trading-engine-dev.service" in fh.read():
+                        name = "switch_mode_dev.sh"
+            except OSError:
+                pass
+            script = os.path.join(os.path.dirname(HERE), "deployment", name)
             unit = f"trading-switch-{int(time.time() * 1000)}"
             try:
                 subprocess.Popen(
