@@ -127,8 +127,10 @@ class InPlay:
     move: float               # last / previous close - 1
     from_open: float          # last / open - 1
     range_atr: float          # today's range so far, in ATRs
-    rvol: float               # volume so far / what a normal day has done by now
+    rvol: float               # the scored relative volume: recent window, else since open
     rs: float = 0.0           # move beyond what beta x index move explains
+    rvol_day: float = 0.0     # since the open, whatever rvol is
+    cost_ratio: float = None  # round trip / what the entry gate allows; None = unknown
     reasons: list = field(default_factory=list)
 
     @property
@@ -145,23 +147,53 @@ def _pct_rank(vals):
     return out
 
 
-def same_time_volume(minute_rows, day, upto_min, sessions=14):
-    """Average volume traded from the open to `upto_min` over the last
-    `sessions` sessions before `day` - the denominator of Zarattini, Barbon &
-    Aziz's relative volume. `minute_rows` are 1-minute [iso, o, h, l, c, v]."""
+def same_time_volume(minute_rows, day, upto_min, sessions=14, from_min=0):
+    """Average volume traded from `from_min` (default: the open) to `upto_min`
+    over the last `sessions` sessions before `day` - the denominator of
+    Zarattini, Barbon & Aziz's relative volume. `minute_rows` are 1-minute
+    [iso, o, h, l, c, v]."""
     per = {}
     for r in minute_rows:
         d = r[0][:10]
         if d >= day:
             break
         m = int(r[0][11:13]) * 60 + int(r[0][14:16])
-        if m < upto_min:
+        if from_min <= m < upto_min:
             per[d] = per.get(d, 0.0) + float(r[5])
     vals = [per[d] for d in sorted(per)[-sessions:]]
     return sum(vals) / len(vals) if len(vals) >= max(3, sessions // 2) else 0.0
 
 
-def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None):
+def scan_cost_ratio(bid, ask, atr_1m, capital, L, cm):
+    """How close a stock's friction comes to the entry gate's cost limit.
+
+    The stock entry (IntradayEngine._hunt_stocks) refuses a trade whose round
+    trip - fees both ways, a tick of slippage each way, the spread - exceeds
+    `max_cost_frac_of_risk` of the rupees at risk. This is that same arithmetic
+    at a typical stop of `stocks_scan_stop_atr` one-minute ATRs, sized the same
+    way, so the scan stops handing the engine names it will only refuse. 1.0 is
+    the gate's limit: above it, costs alone would reject the trade. None when
+    it cannot be judged (no quote, no ATR yet, gate disabled).
+    """
+    from arb.costs import leg_cost
+    frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
+    if bid <= 0 or ask <= 0 or atr_1m <= 0 or capital <= 0 or frac <= 0:
+        return None
+    stop = max(float(getattr(L, "min_stop_atr", 1.0)),
+               float(getattr(L, "stocks_scan_stop_atr", 2.0))) * atr_1m
+    px = (bid + ask) / 2.0
+    cap_inr = capital * float(L.max_risk_pct_per_trade) / 100.0
+    lev = float(getattr(L, "stocks_leverage", 5.0))
+    qty = min(int(cap_inr // stop), int(capital * lev // px))
+    if qty <= 0:
+        return None
+    rt = (leg_cost(px, qty, "BUY", "EQ", cm) + leg_cost(px, qty, "SELL", "EQ", cm)
+          + 2 * cm.slippage_points() * qty + (ask - bid) * qty)
+    return rt / (frac * stop * qty)
+
+
+def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None,
+         same_time_recent=None, cost_ratio=None):
     """Rank the universe by how much each stock is in play right now.
 
     `stats` {symbol: DailyStat}; `live` {symbol: {"open","high","low","ltp",
@@ -169,10 +201,21 @@ def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None):
     {index: move since previous close} for relative strength. `same_time`
     {symbol: average volume by this minute on recent sessions} gives the
     paper's relative volume; without it the U-shaped profile x ADV stands in.
+
+    A `live` entry may carry "recent_volume": volume over the last
+    `stocks_rvol_window_min` minutes. When present, relative volume is scored
+    over that window (against `same_time_recent`, the same window on recent
+    sessions) instead of since the open, so a stock that spiked at 09:20 and
+    went quiet stops looking in play by the next rescan. `cost_ratio`
+    {symbol: scan_cost_ratio} drops names whose costs alone would fail the
+    entry gate and ranks the cheaper ones higher.
     Returns [InPlay] best first, already filtered for liquidity, price and ban.
     """
     rows = []
     banned = set(banned or ())
+    window = float(getattr(L, "stocks_rvol_window_min", 15.0))
+    max_cost = float(getattr(L, "stocks_max_cost_ratio", 1.0))
+    cost_ratio = cost_ratio or {}
     for sym, st in stats.items():
         q = live.get(sym)
         if not q or st is None or sym in banned:
@@ -186,23 +229,43 @@ def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None):
             continue
         if st.atr_pct * 100 < float(getattr(L, "stocks_min_atr_pct", 1.5)):
             continue
+        cr = cost_ratio.get(sym)
+        if cr is not None and max_cost > 0 and cr > max_cost:
+            continue
         atr = st.atr_pct * st.prev_close
         base = (same_time or {}).get(sym) or (st.adv * volume_done(minute) if st.adv > 0 else 0.0)
-        rvol = vol / base if base > 0 else 0.0
+        rvol_day = vol / base if base > 0 else 0.0
+        rvol = rvol_day
+        recent = q.get("recent_volume")
+        if recent is not None and window > 0:
+            base_r = (same_time_recent or {}).get(sym) or (
+                st.adv * (volume_done(minute) - volume_done(minute - window))
+                if st.adv > 0 else 0.0)
+            if base_r > 0:
+                rvol = float(recent) / base_r
         move = px / st.prev_close - 1
         rs = 0.0
         if index_moves and st.index in index_moves and st.beta:
             rs = move - st.beta * index_moves[st.index]
         rows.append(InPlay(sym, 0.0, px, st.atr_pct, o / st.prev_close - 1, move,
-                           px / o - 1, (h - lo) / atr, rvol, rs))
+                           px / o - 1, (h - lo) / atr, rvol, rs,
+                           rvol_day=rvol_day, cost_ratio=cr))
     if not rows:
         return []
-    w = (float(getattr(L, "stocks_w_atr", 1.0)), float(getattr(L, "stocks_w_rvol", 1.0)),
-         float(getattr(L, "stocks_w_move", 0.5)), float(getattr(L, "stocks_w_range", 0.5)))
-    feats = ([r.atr_pct for r in rows], [r.rvol for r in rows],
-             [abs(r.move) / r.atr_pct for r in rows], [r.range_atr for r in rows])
+    w = [float(getattr(L, "stocks_w_atr", 1.0)), float(getattr(L, "stocks_w_rvol", 1.0)),
+         float(getattr(L, "stocks_w_move", 0.5)), float(getattr(L, "stocks_w_range", 0.5))]
+    feats = [[r.atr_pct for r in rows], [r.rvol for r in rows],
+             [abs(r.move) / r.atr_pct for r in rows], [r.range_atr for r in rows]]
+    names = ["atr", "rvol", "move", "range"]
+    # Cheaper to trade ranks higher. A name whose cost is not known yet sits at
+    # the median rather than being rewarded or punished for missing data.
+    known = sorted(r.cost_ratio for r in rows if r.cost_ratio is not None)
+    if known:
+        mid = known[len(known) // 2]
+        feats.append([-(r.cost_ratio if r.cost_ratio is not None else mid) for r in rows])
+        w.append(float(getattr(L, "stocks_w_cost", 1.0)))
+        names.append("cheap")
     ranks = [_pct_rank(f) for f in feats]
-    names = ("atr", "rvol", "move", "range")
     for i, r in enumerate(rows):
         r.score = sum(wk * rk[i] for wk, rk in zip(w, ranks)) / max(sum(w), 1e-9)
         r.reasons = [f"{n} p{100 * rk[i]:.0f}" for n, rk, wk in zip(names, ranks, w) if wk and rk[i] >= 0.8]

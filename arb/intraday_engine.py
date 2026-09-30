@@ -30,6 +30,7 @@ from arb.positions import EXIT, Position, PositionBook
 from arb.confluence import evaluate, grade_at_least, regrade
 from arb.playbooks import unknown as unknown_playbooks
 from arb.regime import atr, atr_ratio, premium_gate, regime_gate, session_phase
+from arb.scanner import scan_cost_ratio
 from arb.smc import BEAR, BULL, RANGE, analyse
 from arb.costs import per_unit_cost_points
 from arb import optionflow, trailing
@@ -642,7 +643,8 @@ class IntradayEngine:
         desk = self.stocks
         if desk is not None and desk.due():
             try:
-                desk.pick(index_moves=self._index_moves())
+                desk.pick(index_moves=self._index_moves(),
+                          cost_ratio=self._stock_cost_ratio)
             except Exception as e:
                 self.log(f"[stocks] scan failed: {e!r}")
         gate = self._gates()
@@ -848,6 +850,24 @@ class IntradayEngine:
             if prev and px > 0:
                 out[und] = px / prev[-1][4] - 1
         return out
+
+    def _stock_cost_ratio(self, sym):
+        """The scan's tradability figure for one stock (arb/scanner.py:
+        scan_cost_ratio) from its live quote and one-minute bars. None until it
+        has a two-sided quote and enough bars for an ATR."""
+        slot = self.stocks.slots.get(sym) if self.stocks is not None else None
+        if slot is None or not self.candles:
+            return None
+        store = self.feed.store
+        bid, ask = float(store.bid[slot]), float(store.ask[slot])
+        rows = self.candles.get(sym, limit=self.L.atr_period + 2)
+        # Stocks only have live bars from the session's start, so at the 09:30
+        # first pick there are ~15: use what exists rather than wait for 20.
+        period = min(int(self.L.atr_period), len(rows) - 2)
+        if period < 10:
+            return None
+        a = atr(rows[:-1], period=period)
+        return scan_cost_ratio(bid, ask, a, self.capital.capital, self.L, self.cm)
 
     def _hunt_stocks(self, available):
         """The index decision layer, unchanged, on the stocks in play.

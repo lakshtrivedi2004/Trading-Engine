@@ -22,6 +22,7 @@ import json
 import os
 import threading
 import time
+from collections import deque
 
 from arb.instruments import IST, now_ist
 from arb.scanner import daily_stat, rank, same_time_volume
@@ -45,7 +46,14 @@ class StockDesk:
         self.nse = nse
         self.log = log
         self.stats = {}
-        self.same_time = {}
+        self._same_key = None
+        self._same = ({}, {})
+        # Once-a-minute snapshots of every stock's cumulative day volume, so
+        # relative volume can be measured over a recent window, not only since
+        # the open. Kept just long enough to reach one window back.
+        window = float(getattr(L, "stocks_rvol_window_min", 15.0))
+        self._vol_snaps = deque(maxlen=max(0, int(window)) + 5)
+        self._last_snap = 0.0
         self.banned = set()
         self.active = []            # [InPlay], best first
         self.last_pick = 0.0
@@ -136,7 +144,8 @@ class StockDesk:
                 o, h, lo = float(st.day_open[slot]), float(st.day_high[slot]), float(st.day_low[slot])
                 px, vol = float(st.ltp[slot]), float(st.volume[slot])
                 if min(o, h, lo, px) > 0 and vol > 0:
-                    out[sym] = {"open": o, "high": h, "low": lo, "ltp": px, "volume": vol}
+                    out[sym] = {"open": o, "high": h, "low": lo, "ltp": px, "volume": vol,
+                                "recent_volume": self._recent_volume(sym, vol)}
                     continue
             rows = [r for r in self.candles.get(sym, limit=400) if r[0][:10] == today]
             if not rows:
@@ -146,23 +155,74 @@ class StockDesk:
                         "volume": sum(r[5] for r in rows)}
         return out
 
+    def _snap(self, t=None):
+        """Record every stock's cumulative day volume, at most once a minute."""
+        t = time.time() if t is None else t
+        if t - self._last_snap < 60.0:
+            return
+        st = getattr(self.candles, "_store", None)
+        if st is None or not hasattr(st, "volume"):
+            return
+        self._last_snap = t
+        self._vol_snaps.append((t, {s: float(st.volume[slot]) for s, slot in self.slots.items()}))
+
+    def _recent_volume(self, sym, cumulative, t=None):
+        """Volume over the last `stocks_rvol_window_min` minutes, or None when
+        there is no snapshot that old yet (just started) or it was taken before
+        the stock's first tick - an unknown, never a zero."""
+        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
+        if window <= 0:
+            return None
+        t = time.time() if t is None else t
+        cutoff = t - 60.0 * window
+        past = None
+        for ts, vols in self._vol_snaps:
+            if ts > cutoff:
+                break
+            past = vols
+        v0 = (past or {}).get(sym, 0.0)
+        if v0 <= 0 or cumulative < v0:
+            return None
+        return cumulative - v0
+
     def due(self, now=None):
+        # The engine calls due() outside its stock-scan error handling, on the
+        # same pass that hunts the indices: nothing stock-side may raise here.
+        try:
+            self._snap()
+        except Exception:
+            pass
         n = now or now_ist()
         hh, mm = (int(x) for x in str(self.L.stocks_pick_at).split(":"))
         if n.hour * 60 + n.minute < hh * 60 + mm:
             return False
         return time.time() - self.last_pick >= 60.0 * float(self.L.stocks_rescan_min)
 
-    def pick(self, now=None, index_moves=None):
-        """Re-rank the universe and keep the top K. Returns the new picks."""
+    def pick(self, now=None, index_moves=None, cost_ratio=None):
+        """Re-rank the universe and keep the top K. Returns the new picks.
+
+        `cost_ratio` is a callable symbol -> scan_cost_ratio (or None), supplied
+        by the engine, which holds the capital and cost model it needs."""
         n = now or now_ist()
         if not self._ready.is_set():
             return self.active
         m = n.hour * 60 + n.minute
         with self._lock:
             stats = dict(self.stats)
-        ranked = rank(stats, self._live(), m, self.L, banned=self.banned,
-                      index_moves=index_moves, same_time=self.same_time_for(stats, m))
+        live = self._live()
+        costs = {}
+        if cost_ratio is not None:
+            for sym in live:
+                try:
+                    c = cost_ratio(sym)
+                except Exception:
+                    c = None
+                if c is not None:
+                    costs[sym] = c
+        same, same_recent = self.same_time_for(stats, m)
+        ranked = rank(stats, live, m, self.L, banned=self.banned,
+                      index_moves=index_moves, same_time=same,
+                      same_time_recent=same_recent, cost_ratio=costs)
         self.last_rank = ranked[:15]
         self.active = ranked[:int(self.L.stocks_top_k)]
         self.last_pick = time.time()
@@ -173,7 +233,9 @@ class StockDesk:
         if self.active:
             self.log("[stocks] in play: " + "; ".join(
                 f"{r.symbol} {r.bias} {100 * r.from_open:+.1f}% rvol {r.rvol:.1f} "
-                f"ATR {100 * r.atr_pct:.1f}%" for r in self.active))
+                f"ATR {100 * r.atr_pct:.1f}%"
+                + (f" cost {r.cost_ratio:.2f}" if r.cost_ratio is not None else "")
+                for r in self.active))
             want = [r.symbol for r in self.active if r.symbol not in self._seeded]
             if want:
                 threading.Thread(target=self._seed_all, args=(want,),
@@ -183,25 +245,31 @@ class StockDesk:
         return self.active
 
     def same_time_for(self, stats, minute):
-        """Average volume by this minute on recent sessions, where a stock has
-        1-minute history on disk (tools/fetch_stocks.py minute)."""
-        key = minute
-        if self.same_time.get("_minute") == key:
-            return self.same_time
+        """Average volume on recent sessions, where a stock has 1-minute history
+        on disk (tools/fetch_stocks.py minute): from the open to this minute,
+        and over the recent window ending at it. Returns (since_open, window)."""
+        if self._same_key == minute:
+            return self._same
+        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
         today = now_ist().strftime("%Y-%m-%d")
-        out = {"_minute": key}
+        cum, rec = {}, {}
         for sym in stats:
             p = os.path.join(HIST, f"{sym}_1m.json")
             if not os.path.exists(p):
                 continue
             try:
-                v = same_time_volume(json.load(open(p)), today, minute)
+                rows = json.load(open(p))
             except (OSError, ValueError):
                 continue
+            v = same_time_volume(rows, today, minute)
             if v > 0:
-                out[sym] = v
-        self.same_time = out
-        return out
+                cum[sym] = v
+            if window > 0:
+                w = same_time_volume(rows, today, minute, from_min=minute - window)
+                if w > 0:
+                    rec[sym] = w
+        self._same_key, self._same = minute, (cum, rec)
+        return self._same
 
     def _seed_all(self, syms, gap_sec=2.0, tries=4, backoff_sec=20.0):
         """Seed picks off the engine thread, spaced and retried: the broker's
@@ -273,8 +341,12 @@ class StockDesk:
         return {"active": [dict(symbol=r.symbol, bias=r.bias, score=round(r.score, 2),
                                 move_pct=round(100 * r.move, 2),
                                 from_open_pct=round(100 * r.from_open, 2),
-                                rvol=round(r.rvol, 2), atr_pct=round(100 * r.atr_pct, 2),
-                                range_atr=round(r.range_atr, 2), reasons=r.reasons)
+                                rvol=round(r.rvol, 2), rvol_day=round(r.rvol_day, 2),
+                                atr_pct=round(100 * r.atr_pct, 2),
+                                range_atr=round(r.range_atr, 2),
+                                cost_ratio=(round(r.cost_ratio, 2)
+                                            if r.cost_ratio is not None else None),
+                                reasons=r.reasons)
                            for r in self.active],
                 "ranked": [r.symbol for r in self.last_rank],
                 "universe": len(self.slots), "with_stats": len(self.stats),

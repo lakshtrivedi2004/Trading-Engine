@@ -107,6 +107,56 @@ check("with same-time history, relative volume is the paper's definition",
       abs(hot.rvol - 4.0) < 1e-9 and "DOWN" not in [x.symbol for x in r2],
       f"HOT rvol {hot.rvol:.2f}; DOWN at 0.4 of its normal is dropped")
 
+# Recent-window relative volume: a morning spike that has gone quiet.
+check("same-time volume over a window counts only the minutes inside it",
+      abs(same_time_volume(mrows, "2026-09-25", 9 * 60 + 25, sessions=3,
+                           from_min=9 * 60 + 20) - 500.0) < 1e-6)
+wst = {"SPIKE": S("SPIKE", 0.03), "FRESH": S("FRESH", 0.03)}
+wlive = {"SPIKE": dict(open=500, high=530, low=498, ltp=525, volume=2e6, recent_volume=1e4),
+         "FRESH": dict(open=500, high=520, low=498, ltp=510, volume=6e5, recent_volume=2e5)}
+day_base = {"SPIKE": 5e5, "FRESH": 5e5}
+win_base = {"SPIKE": 5e4, "FRESH": 5e4}
+by_day = rank(wst, {k: {kk: vv for kk, vv in v.items() if kk != "recent_volume"}
+                    for k, v in wlive.items()}, 11 * 60, L, same_time=day_base)
+by_win = rank(wst, wlive, 11 * 60, L, same_time=day_base, same_time_recent=win_base)
+check("since the open, the 09:20 spike still looks like the stock most in play",
+      by_day[0].symbol == "SPIKE", str([(x.symbol, round(x.rvol, 2)) for x in by_day]))
+check("over the last window it has gone quiet and drops out; the active one stays",
+      [x.symbol for x in by_win] == ["FRESH"] and abs(by_win[0].rvol - 4.0) < 1e-9
+      and abs(by_win[0].rvol_day - 1.2) < 1e-9,
+      str([(x.symbol, round(x.rvol, 2), round(x.rvol_day, 2)) for x in by_win]))
+nowin = rank(wst, {k: dict(v, recent_volume=None) for k, v in wlive.items()},
+             11 * 60, L, same_time=day_base)
+check("with no window yet (just restarted) it falls back to since-open, unchanged",
+      all(abs(x.rvol - x.rvol_day) < 1e-12 for x in nowin) and nowin[0].symbol == "SPIKE")
+
+# Tradability: the scan prices the entry gate's cost test before picking.
+from arb.scanner import scan_cost_ratio
+tight = scan_cost_ratio(999.9, 1000.1, 2.0, 10_000.0, L, CM)
+wide = scan_cost_ratio(999.9, 1000.1, 10.0, 10_000.0, L, CM)
+check("a stock whose one-minute range is small next to its costs fails the gate's test",
+      tight is not None and tight > 1.0, f"ratio {tight:.2f} at a Rs 2 ATR")
+check("the same price with a wider range clears it comfortably",
+      wide is not None and wide < 1.0 and wide < tight, f"ratio {wide:.2f} at a Rs 10 ATR")
+check("no quote or no ATR is an unknown, not a pass or a fail",
+      scan_cost_ratio(0, 1000.1, 10.0, 1e4, L, CM) is None
+      and scan_cost_ratio(999.9, 1000.1, 0.0, 1e4, L, CM) is None)
+
+cst = {"X": S("X", 0.04), "Y": S("Y", 0.03), "Z": S("Z", 0.02), "DEAR": S("DEAR", 0.05),
+       "UNK": S("UNK", 0.03)}
+clive = {k: dict(open=500, high=520, low=498, ltp=515, volume=6e5) for k in cst}
+plain = {x.symbol: x.score for x in rank(cst, clive, 9 * 60 + 30, L)}
+costed = rank(cst, clive, 9 * 60 + 30, L,
+              cost_ratio={"X": 0.2, "Y": 0.5, "Z": 0.9, "DEAR": 1.4})
+cs = {x.symbol: x for x in costed}
+check("a name whose costs alone would fail the entry gate is never picked",
+      "DEAR" not in cs and "DEAR" in plain, str(sorted(cs)))
+check("an unknown cost is neither rewarded nor dropped",
+      "UNK" in cs and cs["UNK"].cost_ratio is None)
+check("cheaper to trade scores higher: the cheapest rises, the dearest falls",
+      cs["X"].score > plain["X"] and cs["Z"].score < plain["Z"] and "cheap p100" in cs["X"].reasons,
+      f"X {plain['X']:.3f}->{cs['X'].score:.3f}, Z {plain['Z']:.3f}->{cs['Z'].score:.3f}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("3. Cash positions: long and short through the engine's exits")
 
@@ -248,8 +298,27 @@ c = _DeskCandles()
 desk = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, c, IntradayLimits(), api=_Api(fail=2))
 got = desk._live()
 check("a scan after a mid-day restart reads the exchange's day open/high/low and day volume",
-      got.get("AAA") == {"open": 500.0, "high": 520.0, "low": 495.0, "ltp": 518.0, "volume": 4e5},
+      got.get("AAA") == {"open": 500.0, "high": 520.0, "low": 495.0, "ltp": 518.0, "volume": 4e5,
+                         "recent_volume": None},
       str(got))
+check("...and admits it has no recent-window volume yet, rather than inventing one",
+      got["AAA"]["recent_volume"] is None)
+
+sd = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, _DeskCandles(), IntradayLimits())
+sd.candles._store.volume[0] = 1e5
+sd._snap(t=1000.0)
+sd.candles._store.volume[0] = 1.5e5
+sd._snap(t=1030.0)                          # inside the minute: not recorded
+check("volume is snapshotted at most once a minute", len(sd._vol_snaps) == 1)
+check("a window not yet 15 minutes old is unknown",
+      sd._recent_volume("AAA", 3e5, t=1000.0 + 10 * 60) is None)
+check("once it is, recent volume is today's counter minus the snapshot",
+      sd._recent_volume("AAA", 3e5, t=1000.0 + 15 * 60) == 2e5)
+z = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, _DeskCandles(), IntradayLimits())
+z.candles._store.volume[0] = 0.0
+z._snap(t=1000.0)
+check("a snapshot from before the stock's first tick is not a zero base",
+      z._recent_volume("AAA", 3e5, t=1000.0 + 20 * 60) is None)
 desk._seed_all(["AAA"], gap_sec=0.0, tries=4, backoff_sec=0.0)
 check("history refused for rate is retried, not given up on",
       "AAA" in c.seeded and desk.api.calls == 3,

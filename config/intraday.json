@@ -20,8 +20,8 @@
   "swing_strength": 2,
   "min_structure_bars": 25,
   "require_order_block": true,
-  "squareoff_minutes": 15.0,
-  "no_new_trades_minutes": 30.0,
+  "squareoff_minutes": 1.0,
+  "no_new_trades_minutes": 15.0,
   "warmup_minutes": 15.0,
   "playbooks": [
     "ob_fvg_retest"
@@ -29,5 +29,6 @@
   "min_atr_ratio": 1.3,
   "midday_min_atr_ratio": 1.5,
   "extend_giveback_r": 0.25,
-  "stocks_enabled": true
+  "stocks_enabled": true,
+  "stocks_top_k": 5
 }

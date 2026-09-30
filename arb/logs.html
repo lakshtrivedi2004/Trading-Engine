@@ -5,8 +5,20 @@
 <style>
   :root {
     --ink:#202122; --dim:#54595d; --rule:#a2a9b1; --hair:#c8ccd1;
-    --bg:#ffffff; --panel:#f8f9fa; --link:#3366cc;
+    --bg:#ffffff; --panel:#f8f9fa; --surface:#ffffff; --link:#3366cc;
     --up:#14866d; --down:#d33; --warn:#edab00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:#e8e6e3; --dim:#9aa0a6; --rule:#3a3f44; --hair:#33383d;
+      --bg:#14181c; --panel:#1b2025; --surface:#20262b; --link:#8ab4f8;
+      --up:#3ecf9c; --down:#ff6b6b; --warn:#f0c24a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:#e8e6e3; --dim:#9aa0a6; --rule:#3a3f44; --hair:#33383d;
+    --bg:#14181c; --panel:#1b2025; --surface:#20262b; --link:#8ab4f8;
+    --up:#3ecf9c; --down:#ff6b6b; --warn:#f0c24a;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -17,16 +29,47 @@
      margin:0 0 2px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
   .sub{color:var(--dim);font-size:13px;margin:0 0 12px}
   .ctlrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 14px}
-  .btn{border:1px solid var(--hair);background:#fff;padding:6px 12px;font-size:13px;
+  .btn{border:1px solid var(--hair);background:var(--surface);color:var(--ink);
+       padding:6px 12px;font-size:13px;
        cursor:pointer;border-radius:2px;font-family:inherit}
   .btn:hover{background:var(--panel)}
   .btn:disabled{opacity:.5;cursor:default}
+  .theme-toggle{position:fixed;top:14px;right:16px;border:1px solid var(--hair);
+       background:var(--surface);color:var(--ink);padding:5px 10px;font-size:13px;
+       cursor:pointer;border-radius:2px;font-family:inherit;z-index:10}
+  .theme-toggle:hover{background:var(--panel)}
   label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:5px}
-  pre{background:#1e1e1e;color:#d4d4d4;padding:12px 14px;overflow:auto;
+  pre{background:#1e1e1e;color:#d4d4d4;border:1px solid var(--hair);padding:12px 14px;overflow:auto;
       max-height:78vh;font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
       white-space:pre-wrap;word-break:break-all;border-radius:2px}
   .down{color:var(--down)}
 </style>
+<script>
+(function(){
+  var KEY = "theme";
+  function isDarkNow(){
+    var t = document.documentElement.getAttribute("data-theme");
+    if(t === "dark") return true;
+    if(t === "light") return false;
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function paint(){
+    var btn = document.getElementById("themeToggle");
+    if(btn) btn.textContent = isDarkNow() ? "☀️" : "🌙";
+  }
+  var saved = null;
+  try{ saved = localStorage.getItem(KEY); }catch(e){}
+  if(saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+  window.toggleTheme = function(){
+    var next = isDarkNow() ? "light" : "dark";
+    try{ localStorage.setItem(KEY, next); }catch(e){}
+    document.documentElement.setAttribute("data-theme", next);
+    paint();
+  };
+  window.addEventListener("DOMContentLoaded", paint);
+})();
+</script>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark / light">🌙</button>
 <div class="wrap">
   <h1>Engine Logs</h1>
   <p class="sub" id="sub">loading…</p>

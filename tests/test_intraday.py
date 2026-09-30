@@ -273,7 +273,7 @@ check("the index breaking structure exits even while premium is fine",
 
 p = fresh()
 check("square-off beats every other rule",
-      bk.review(p, 118.0, minutes_to_close=5.0) == (EXIT, "squareoff"),
+      bk.review(p, 118.0, minutes_to_close=0.5) == (EXIT, "squareoff"),
       "even sitting on profit")
 
 p = fresh()

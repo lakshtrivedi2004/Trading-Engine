@@ -24,6 +24,24 @@
       "spot_exchange_type": 3,
       "segment": "BFO",
       "option_exchange_type": 4
+    },
+    {
+      "name": "FINNIFTY",
+      "spot_token": "99926037",
+      "spot_exchange": "NSE",
+      "spot_exchange_type": 1,
+      "segment": "NFO",
+      "option_exchange_type": 2,
+      "num_expiries": 2
+    },
+    {
+      "name": "MIDCPNIFTY",
+      "spot_token": "99926074",
+      "spot_exchange": "NSE",
+      "spot_exchange_type": 1,
+      "segment": "NFO",
+      "option_exchange_type": 2,
+      "num_expiries": 2
     }
   ],
   "num_strikes_each_side": 10,

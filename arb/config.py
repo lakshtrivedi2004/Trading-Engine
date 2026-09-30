@@ -226,6 +226,14 @@ DEFAULT_UNDERLYINGS = [
     # SENSEX: BSE, weekly Thursday expiries, lot 20, 100-point strikes.
     dict(name="SENSEX", spot_token="99919000", spot_exchange="BSE",
          spot_exchange_type=3, segment="BFO", option_exchange_type=4),
+    # FINNIFTY: monthly only (weeklies withdrawn same as BANKNIFTY), lot 60.
+    dict(name="FINNIFTY", spot_token="99926037", spot_exchange="NSE",
+         spot_exchange_type=1, segment="NFO", option_exchange_type=2,
+         num_expiries=2),
+    # MIDCPNIFTY: monthly only, lot 120, the most volatile of the five.
+    dict(name="MIDCPNIFTY", spot_token="99926074", spot_exchange="NSE",
+         spot_exchange_type=1, segment="NFO", option_exchange_type=2,
+         num_expiries=2),
 ]
 
 
@@ -746,9 +754,9 @@ class IntradayLimits:
     # ── session ─────────────────────────────────────────────────────────────
     # Nothing is carried overnight: every position is closed this many minutes
     # before session_end, whatever it is worth.
-    squareoff_minutes: float = 15.0
+    squareoff_minutes: float = 1.0
     # No new position inside this window - not enough time left to reach target.
-    no_new_trades_minutes: float = 30.0
+    no_new_trades_minutes: float = 15.0
     # Let the open settle before reading structure off it.
     warmup_minutes: float = 15.0
     # How long an index may go without usable candles before the engine says so
@@ -770,7 +778,7 @@ class IntradayLimits:
     # is refused, not resized.
     stocks_leverage: float = 5.0
     # The scan: how many names to trade, when to pick them, how often to re-pick.
-    stocks_top_k: int = 3
+    stocks_top_k: int = 5
     stocks_pick_at: str = "09:30"
     stocks_rescan_min: float = 30.0
     # Universe filters. Liquidity is what makes a scalp possible at all: a
@@ -788,6 +796,21 @@ class IntradayLimits:
     stocks_w_rvol: float = 1.0
     stocks_w_move: float = 0.5
     stocks_w_range: float = 0.5
+    # Relative volume is scored over this many recent minutes, not since the
+    # open, so a morning spike that has gone quiet rotates out at the next
+    # rescan. Falls back to since-open until the desk has this much history.
+    # 0 = since the open only.
+    stocks_rvol_window_min: float = 15.0
+    # Tradability. The scan prices each stock's round trip at a stop of
+    # stocks_scan_stop_atr one-minute ATRs against the entry gate's
+    # max_cost_frac_of_risk (arb/scanner.py:scan_cost_ratio). Above
+    # stocks_max_cost_ratio the name is dropped - costs alone would refuse it -
+    # and below it cheaper names score higher (weight stocks_w_cost).
+    # 2.0 ATRs is a judgment call for a typical structural stop, not a fitted
+    # value; watch stock:cost_too_large_for_stop in the rejects to tune it.
+    stocks_scan_stop_atr: float = 2.0
+    stocks_max_cost_ratio: float = 1.0
+    stocks_w_cost: float = 1.0
     # A stock trade must clear its round trip by at least this many rupees at
     # the target (the equity analogue of min_net_points), and a spread
     # allowance (fraction of price) is charged in the replay.
