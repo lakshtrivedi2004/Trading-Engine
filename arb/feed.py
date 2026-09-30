@@ -3,6 +3,7 @@
 The websocket callback is the hottest code in the process. It does exactly three
 things: normalise the best-5 packet, store it into preallocated arrays by integer
 slot, and signal the scanner. No allocation, no logging, no I/O, no locks.
+ok
 """
 import logging
 import re
