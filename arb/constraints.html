@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Entry Constraints</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink:#202122; --dim:#54595d; --rule:#a2a9b1; --hair:#c8ccd1;
+    --bg:#ffffff; --panel:#f8f9fa; --surface:#ffffff; --link:#3366cc;
+    --up:#14866d; --down:#d33; --warn:#edab00;
+    --ok-bg:#e8f5ef; --bad-bg:#fdecec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:#e8e6e3; --dim:#9aa0a6; --rule:#3a3f44; --hair:#33383d;
+      --bg:#14181c; --panel:#1b2025; --surface:#20262b; --link:#8ab4f8;
+      --up:#3ecf9c; --down:#ff6b6b; --warn:#f0c24a;
+      --ok-bg:#15291f; --bad-bg:#2e1818;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:#e8e6e3; --dim:#9aa0a6; --rule:#3a3f44; --hair:#33383d;
+    --bg:#14181c; --panel:#1b2025; --surface:#20262b; --link:#8ab4f8;
+    --up:#3ecf9c; --down:#ff6b6b; --warn:#f0c24a;
+    --ok-bg:#15291f; --bad-bg:#2e1818;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+       font-variant-numeric:tabular-nums}
+  a{color:var(--link)}
+  .wrap{max-width:1680px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:28px;
+     margin:0 0 2px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+  h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:20px;
+     margin:26px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--rule)}
+  .sub{color:var(--dim);font-size:13px;margin:6px 0}
+  .ctlrow{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .btn{border:1px solid var(--hair);background:var(--surface);color:var(--ink);
+       padding:6px 12px;font-size:13px;cursor:pointer;border-radius:2px;font-family:inherit}
+  .btn:hover{background:var(--panel)}
+  label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:5px}
+  .theme-toggle{position:fixed;top:14px;right:16px;border:1px solid var(--hair);
+       background:var(--surface);color:var(--ink);padding:5px 10px;font-size:13px;
+       cursor:pointer;border-radius:2px;font-family:inherit;z-index:10}
+  .scroll{overflow-x:auto;border:1px solid var(--hair)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--hair);padding:4px 7px;text-align:left;white-space:nowrap}
+  th{background:var(--panel);font-weight:600;font-size:12px;vertical-align:bottom}
+  th .thr{display:block;font-weight:400;color:var(--dim);font-size:11px}
+  td.ok{background:var(--ok-bg);color:var(--up)}
+  td.bad{background:var(--bad-bg);color:var(--down);font-weight:600}
+  td.na{color:var(--dim)}
+  td .n{display:block;font-size:11px;color:var(--dim);font-weight:400}
+  tr.grp td{background:var(--panel);font-weight:700;color:var(--ink)}
+  .sticky{position:sticky;left:0;background:var(--bg);z-index:1}
+  th.sticky{background:var(--panel)}
+  .legend span{margin-right:14px}
+  .empty{color:var(--dim);font-style:italic}
+</style>
+<script>
+(function(){
+  var KEY = "theme";
+  function isDarkNow(){
+    var t = document.documentElement.getAttribute("data-theme");
+    if(t === "dark") return true;
+    if(t === "light") return false;
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function paint(){
+    var btn = document.getElementById("themeToggle");
+    if(btn) btn.textContent = isDarkNow() ? "☀️" : "🌙";
+  }
+  var saved = null;
+  try{ saved = localStorage.getItem(KEY); }catch(e){}
+  if(saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+  window.toggleTheme = function(){
+    var next = isDarkNow() ? "light" : "dark";
+    try{ localStorage.setItem(KEY, next); }catch(e){}
+    document.documentElement.setAttribute("data-theme", next);
+    paint();
+  };
+  window.addEventListener("DOMContentLoaded", paint);
+})();
+</script>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark / light">🌙</button>
+<div class="wrap">
+  <h1>Entry Constraints</h1>
+  <p class="sub" id="sub">loading…</p>
+  <div class="ctlrow">
+    <a class="btn" href="/">← Dashboard</a>
+    <button class="btn" id="btnRefresh">Refresh now</button>
+    <label><input type="checkbox" id="chkAuto" checked> auto-refresh (3s)</label>
+    <span class="sub legend"><span style="color:var(--up)">green = passes</span>
+      <span style="color:var(--down)">red = blocks a trade</span>
+      <span>grey = not computed yet (hover for why)</span></span>
+  </div>
+
+  <h2>Shared by every instrument</h2>
+  <div class="scroll"><table id="common"></table></div>
+
+  <h2>Per instrument</h2>
+  <p class="sub">Each index's nearest expiry, ATM ± strikes on the side the engine would buy, then the stocks in play.
+    Setup and confirmations are the engine's own last reading (see "Last evaluated"); strike figures are live.</p>
+  <div class="scroll"><table id="per"></table></div>
+</div>
+<script>
+const esc = s => String(s??"").replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const cls = ok => ok === true ? "ok" : ok === false ? "bad" : "na";
+let timer = null;
+
+function renderCommon(rows){
+  document.getElementById("common").innerHTML =
+    `<tr><th>Parameter</th><th>Threshold (config)</th><th>Current</th><th>Status</th></tr>` +
+    rows.map(r => `<tr><td>${esc(r.param)}</td><td>${esc(r.threshold)}</td>
+      <td class="${cls(r.ok)}">${esc(r.current)}</td>
+      <td class="${cls(r.ok)}">${r.ok === true ? "✓ pass" : r.ok === false ? "✗ blocks" : "info"}</td></tr>`).join("");
+}
+
+function renderPer(cols, rows){
+  const el = document.getElementById("per");
+  if(!rows.length){ el.innerHTML = `<tr><td class="empty">No instruments yet.</td></tr>`; return; }
+  const head = `<tr>` + cols.map((c, i) =>
+    `<th class="${i === 0 ? "sticky" : ""}">${esc(c.label)}${c.threshold ? `<span class="thr">${esc(c.threshold)}</span>` : ""}</th>`).join("") + `</tr>`;
+  let body = "", group = null;
+  for(const r of rows){
+    if(r.group !== group){
+      group = r.group;
+      body += `<tr class="grp"><td class="sticky">${esc(group)}</td><td colspan="${cols.length - 1}"></td></tr>`;
+    }
+    body += `<tr>` + cols.map((c, i) => {
+      const cell = r[c.key] || {v: "—", ok: null};
+      const note = cell.note ? `<span class="n">${esc(cell.note)}</span>` : "";
+      return `<td class="${cls(cell.ok)}${i === 0 ? " sticky" : ""}" title="${esc(cell.note || "")}">${esc(cell.v)}${i === 0 ? note : ""}</td>`;
+    }).join("") + `</tr>`;
+  }
+  el.innerHTML = head + body;
+}
+
+async function refresh(){
+  const sub = document.getElementById("sub");
+  try{
+    const d = await (await fetch("/api/constraints", {cache: "no-store"})).json();
+    if(d.error){ sub.innerHTML = `<b style="color:var(--down)">${esc(d.error)}</b> — retrying`; return; }
+    if(d.waiting){
+      sub.textContent = `${d.now} IST · no session running — constraints appear once trading starts (${d.session_start} IST)`;
+      document.getElementById("common").innerHTML = "";
+      document.getElementById("per").innerHTML = "";
+      return;
+    }
+    sub.textContent = `${d.now} IST · ${d.rows.length} instruments`;
+    renderCommon(d.common);
+    renderPer(d.columns, d.rows);
+  }catch(e){ sub.textContent = "disconnected"; }
+}
+function schedule(){
+  if(timer) clearInterval(timer);
+  timer = document.getElementById("chkAuto").checked ? setInterval(refresh, 3000) : null;
+}
+document.getElementById("btnRefresh").onclick = refresh;
+document.getElementById("chkAuto").onchange = schedule;
+refresh(); schedule();
+</script>

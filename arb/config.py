@@ -314,7 +314,7 @@ class IntradayLimits:
     # ── what may be bought ──────────────────────────────────────────────────
     # Only strikes this far either side of the money. Beyond it the option is a
     # lottery ticket: cheap because it will most likely expire worthless.
-    max_strike_offset: int = 4
+    max_strike_offset: int = 5
     # Delta floor, measured off the chain (dPremium/dStrike), not a model. Below
     # this the contract barely responds to the index and the structure read that
     # justified the trade cannot express itself in the premium.

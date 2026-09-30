@@ -146,8 +146,10 @@ function controls(d){
     <button class="btn" id="btnSwitch" ${CTL_BUSY?"disabled":""}>Switch to ${live?"PAPER":"LIVE"}</button>
     <button class="btn danger" id="btnStop" ${CTL_BUSY?"disabled":""}>Stop ${live?"real ":""}trading</button>
     <button class="btn danger" id="btnExit" ${CTL_BUSY?"disabled":""}>Exit all trades</button>
-    <button class="btn" id="btnLogs">View logs</button>`;
+    <button class="btn" id="btnLogs">View logs</button>
+    <button class="btn" id="btnCons">Entry constraints</button>`;
   document.getElementById("btnLogs").onclick = () => window.open("/logs", "_blank");
+  document.getElementById("btnCons").onclick = () => window.open("/constraints", "_blank");
   document.getElementById("btnSwitch").onclick = async () => {
     const verb = live ? "back to PAPER" : "to LIVE — real money";
     if(!confirm(`Switch ${verb}?\n\nThe running engine stops (squaring off first) and the other one starts.`)) return;

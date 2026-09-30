@@ -88,6 +88,12 @@ class IntradayEngine:
         self.last_trade_ts = 0.0
         self._symbol_cooldown = {}
         self.structures = {}            # underlying -> Structure, for the dashboard
+        # For the constraints page (arb/constraints.py): when each instrument
+        # was last looked at and last judged, and the stocks' own structure.
+        # The page reads these; it never recomputes the heavy parts itself.
+        self.evaluated_at = {}
+        self.verdict_at = {}
+        self.stock_structures = {}
         self.rejects = {}
         self.passes = 0
         self.records = []
@@ -673,6 +679,7 @@ class IntradayEngine:
             st = analyse(rows, strength=self.L.swing_strength,
                          min_bars=self.L.min_structure_bars)
             self.structures[und] = st
+            self.evaluated_at[und] = time.time()
 
             # Regime decides whether the tape is moving enough for any read to
             # survive its own round trip, and whether we are in a part of the
@@ -692,6 +699,7 @@ class IntradayEngine:
             # day's bias, graded by whatever else agrees. See arb/confluence.py.
             v = evaluate(rows, spot, self.L, strike_step=self._strike_step(b))
             self.verdicts[und] = v
+            self.verdict_at[und] = time.time()
             if not v.tradable:
                 self._note(v.veto or ("no_setup" if not v.setups else
                                       f"confluence:{v.count}/{self.L.min_confirmations}"))
@@ -893,6 +901,7 @@ class IntradayEngine:
             if slot is None:
                 continue
             rows = self.candles.get(sym, limit=400) if self.candles else []
+            self.evaluated_at[sym] = time.time()
             if len(rows) < L.min_structure_bars:
                 self._note("stock_warming_up")
                 continue
@@ -903,6 +912,7 @@ class IntradayEngine:
             px = float(store.ltp[slot]) or rows[-1][4]
             v = evaluate(rows, px, L, strike_step=0.0)
             self.verdicts[sym] = v
+            self.verdict_at[sym] = time.time()
             if not v.tradable:
                 self._note("stock:" + (v.veto or ("no_setup" if not v.setups else "confluence")))
                 continue
@@ -917,6 +927,7 @@ class IntradayEngine:
                 self._note("symbol_cooldown")
                 continue
             st = analyse(rows, strength=L.swing_strength, min_bars=L.min_structure_bars)
+            self.stock_structures[sym] = st
             lead = v.setups[0] if v.setups else None
             inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
             ref = st.closes[-1] if st.closes else px

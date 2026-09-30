@@ -87,6 +87,8 @@ class DashboardState:
         self._probe_at = 0.0
         self._math = None
         self._math_at = 0.0
+        self._cons = None
+        self._cons_at = 0.0
         self._lock = threading.Lock()
 
     def live_spot(self, name):
@@ -102,6 +104,28 @@ class DashboardState:
             except Exception:
                 pass
         return float(self.spots.get(name, 0.0))
+
+    def constraints(self):
+        """Every entry check against its current value (arb/constraints.py).
+        Computed only when the page asks, and at most every 2 s however often
+        it does, so an open tab cannot load the trading loop."""
+        now = time.time()
+        if self._cons is not None and now - self._cons_at < 2.0:
+            return self._cons
+        e = getattr(self, "intraday", None)
+        if e is None:
+            out = {"waiting": True, "now": now_ist().strftime("%H:%M:%S"),
+                   "session_start": self.cfg.session_start}
+        else:
+            from arb import constraints
+            try:
+                out = constraints.snapshot(e, self.cfg)
+            except Exception as exc:
+                # The engine mutates these dicts on its own thread; a read that
+                # races it is retried on the next poll rather than trusted.
+                out = {"error": f"{type(exc).__name__}: {exc}"}
+        self._cons, self._cons_at = out, now
+        return out
 
     def mathematics(self):
         if getattr(self, 'intraday', None) is not None:
@@ -460,6 +484,11 @@ def make_handler(state):
                     self._send(json.dumps(body).encode(), "application/json")
                 elif self.path in ("/logs", "/logs.html"):
                     with open(os.path.join(HERE, "logs.html"), "rb") as fh:
+                        self._send(fh.read(), "text/html; charset=utf-8")
+                elif self.path.startswith("/api/constraints"):
+                    self._send(json.dumps(state.constraints()).encode(), "application/json")
+                elif self.path in ("/constraints", "/constraints.html"):
+                    with open(os.path.join(HERE, "constraints.html"), "rb") as fh:
                         self._send(fh.read(), "text/html; charset=utf-8")
                 elif self.path.startswith("/static/"):
                     # Fonts are served locally rather than from a CDN so the

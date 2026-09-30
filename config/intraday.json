@@ -1,7 +1,7 @@
 {
   "starting_capital": 10000.0,
   "daily_target_pct": 10.0,
-  "max_strike_offset": 4,
+  "max_strike_offset": 5,
   "min_delta": 0.15,
   "max_spread_points": 3.0,
   "allow_selling": false,

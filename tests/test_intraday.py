@@ -185,7 +185,7 @@ check("a tiny purse buys nothing rather than something silly",
       sel.select(cv, 24000.0, BULL, 500.0, 400.0, 1.0) is None, sel.last_reject)
 
 far = sel.select(cv, 24000.0, BULL, capital=10_000.0, max_age_ms=400.0, min_depth_mult=1.0)
-check("never strays beyond ATM +/- 4 strikes",
+check("never strays beyond ATM +/- 5 strikes",
       far is not None and abs(far.offset) <= L.max_strike_offset,
       f"offset {far.offset:+d}" if far else "-")
 
@@ -623,7 +623,7 @@ check("reward:risk is at least 1:2", IntradayLimits().reward_risk >= 2.0)
 check("the daily target is a goal, never a halt - only loss halts",
       hasattr(IntradayLimits(), "max_daily_loss_pct")
       and IntradayLimits().daily_target_pct == 10.0)
-check("strike range is ATM +/- 4", IntradayLimits().max_strike_offset == 4)
+check("strike range is ATM +/- 5", IntradayLimits().max_strike_offset == 5)
 
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
