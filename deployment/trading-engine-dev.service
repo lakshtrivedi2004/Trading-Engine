@@ -32,8 +32,8 @@ Restart=on-failure
 RestartSec=10
 KillSignal=SIGUSR1
 TimeoutStopSec=30
-StandardOutput=append:/root/Trading-Engine/engine.log
-StandardError=append:/root/Trading-Engine/engine.log
+StandardOutput=append:/root/dev/Trading-Engine/engine.log
+StandardError=append:/root/dev/Trading-Engine/engine.log
 
 [Install]
 WantedBy=multi-user.target
