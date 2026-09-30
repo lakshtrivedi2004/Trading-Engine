@@ -9,6 +9,7 @@
 #   systemctl daemon-reload
 #   systemctl enable --now trading-engine-dev
 #   systemctl status trading-engine-dev
+#   systemctl restart trading-engine-dev
 #   systemctl stop trading-engine-dev
 #   tail -f /root/Trading-Engine-dev/engine.log
 #   journalctl -u trading-engine-dev -n 50
@@ -24,15 +25,15 @@ StartLimitBurst=5
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/Trading-Engine-dev
+WorkingDirectory=/root/dev/Trading-Engine
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/root/Trading-Engine-dev/deployment/run_engine_dev.sh
+ExecStart=/root/dev/Trading-Engine/deployment/run_engine_dev.sh
 Restart=on-failure
 RestartSec=10
 KillSignal=SIGUSR1
 TimeoutStopSec=30
-StandardOutput=append:/root/Trading-Engine-dev/engine.log
-StandardError=append:/root/Trading-Engine-dev/engine.log
+StandardOutput=append:/root/Trading-Engine/engine.log
+StandardError=append:/root/Trading-Engine/engine.log
 
 [Install]
 WantedBy=multi-user.target
