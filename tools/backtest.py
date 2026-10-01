@@ -96,7 +96,7 @@ def work(args):
                 if not trailing.try_extend(pos, win, pos.index_target, L, STEP[name]):
                     ex, why = pos.index_target, "target"; break
             r_now = (c - spot) * sd / risk
-            if j - i >= L.time_stop_min and r_now < L.time_stop_min_r:
+            if L.time_stop_min and j - i >= L.time_stop_min and r_now < L.time_stop_min_r:
                 ex, why = c, "time_stop"; break
             trailing.update(pos, rows[j - 199:j + 1] + [rows[j]], L, index_px=c)
         if ex is None:
@@ -129,8 +129,10 @@ def is_expiry(t):
     if t["u"] == "BANKNIFTY": return d == last_wd(d, 1)
     return d.weekday() == EXP[t["u"]]
 def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=False,
-        stop_after_loss=False, theta=None, halt_pct=30.0):
-    """theta(t) -> Rs decay to subtract (default none)."""
+        stop_after_loss=False, theta=None, halt_pct=30.0, side_cooldown=0):
+    """theta(t) -> Rs decay to subtract (default none). side_cooldown: minutes
+    after a losing trade during which no trade on the SAME side is taken on any
+    index (owner's F4, 1 Oct 2026: one idea, one trade)."""
     out = []
     by = {}
     for t in cands: by.setdefault((t["u"], t["day"]), []).append(t)
@@ -140,8 +142,10 @@ def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=Fals
     for d in sorted(days):
         ts = sorted(days[d], key=lambda t: (t["m"], t["u"]))
         busy_until, n, pnl, streak, pause, last_loss, plays = -1, 0, 0.0, 0, -1, -10**9, {}
+        loss_side = 0
         for t in ts:
             if t["m"] <= busy_until or t["m"] < pause or t["m"] - last_loss < 3: continue
+            if side_cooldown and t["side"] == loss_side and t["m"] - last_loss < side_cooldown: continue
             if n >= max_trades or pnl <= -halt_pct * 100: continue
             key = (t["u"], t["plays"][0] if t["plays"] else "", t["side"])
             if per_play and plays.get(key, 0) >= per_play: continue
@@ -151,7 +155,7 @@ def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=Fals
             plays[key] = plays.get(key, 0) + 1
             busy_until = t["m"] + t["held"]
             if net < 0:
-                streak += 1; last_loss = busy_until
+                streak += 1; last_loss = busy_until; loss_side = t["side"]
                 if streak >= 3: pause, streak = busy_until + 30, 0
                 if stop_after_loss: break
             else:

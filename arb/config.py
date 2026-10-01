@@ -394,6 +394,12 @@ class IntradayLimits:
     # trade's direction (move to the next level, lock the stop within
     # extend_giveback_r of the old target), otherwise take it. "exit" always takes it.
     on_target: str = "extend"
+    # Owner's trailing rule (1 Oct 2026): trail to each new higher low (lower
+    # high on a short) from the first one after entry, not only after +1R.
+    trail_from_first_swing: bool = False
+    # Never set a target closer than this many R; 0 leaves the momentum target
+    # as it is. Distinct from min_target_r, which SKIPS a trade instead.
+    target_floor_r: float = 0.0
     max_target_extensions: int = 2
     extend_min_r: float = 1.0
     extend_giveback_r: float = 0.75

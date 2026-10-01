@@ -257,6 +257,11 @@ def initial_target(candles, side, entry, risk, L, strike_step=0.0):
         hi = float(getattr(L, "max_target_r", 4.0)) * risk
         if abs(t - entry) > hi:
             t = entry + side * hi
+        # target_floor_r (owner: "minimum 1:2"): never aim for less than this
+        # multiple of the stop; the momentum read can only push it further.
+        floor = float(getattr(L, "target_floor_r", 0.0) or 0.0) * risk
+        if floor and abs(t - entry) < floor:
+            t = entry + side * floor
         return t
     if mode != "structure":
         return fixed
@@ -334,8 +339,13 @@ def update(pos, candles, L, index_px=0.0):
     px = index_px or done[-1][4]
     side = pos.side
     r_index = (px - pos.index_entry) * side / pos.index_risk
-    armed = pos.index_trailed or pos.trailed or \
-        r_index >= float(getattr(L, "trail_trigger_r", 1.0))
+    past_trigger = r_index >= float(getattr(L, "trail_trigger_r", 1.0))
+    # trail_from_first_swing (owner's rule, 1 Oct 2026): follow the FIRST
+    # higher low after entry, then the second, the third..., from the moment
+    # one confirms - not only after +1R. The breakeven floor still waits for
+    # trail_trigger_r: before that the stop is wherever the last swing says.
+    early = bool(getattr(L, "trail_from_first_swing", False))
+    armed = early or pos.index_trailed or pos.trailed or past_trigger
     if not armed:
         return ""
 
@@ -343,7 +353,7 @@ def update(pos, candles, L, index_px=0.0):
     cost_idx = (pos.cost_points / pos.delta) if pos.delta > 0 else 0.0
     breakeven = pos.index_entry + side * (
         cost_idx if getattr(L, "breakeven_covers_costs", True) else 0.0)
-    cands = [breakeven]
+    cands = [breakeven] if (not early or past_trigger or pos.trailed) else []
     warn = ""
     if getattr(L, "tighten_on_reversal", True):
         warn = reversal_warning(candles, side, since, L)

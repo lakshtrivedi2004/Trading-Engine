@@ -686,6 +686,29 @@ check("below 1:1 nothing moves",
       tr.update(ps2, mk(pre + after[:3]), LT, index_px=23989.0) == ""
       and ps2.index_invalidation == 24020.0)
 
+# Owner's rule (1 Oct 2026): follow the first lower high (higher low on a long)
+# as soon as it confirms, not only after 1:1.
+LE = IntradayLimits(tighten_on_reversal=False, trail_from_first_swing=True)
+pe0 = short_pos()
+check("default: at +0.5R the lower high is ignored",
+      tr.update(pe0, rows_s, LT, index_px=23990.0) == "" and pe0.index_invalidation == 24020.0)
+pe1 = short_pos()
+note_e = tr.update(pe1, rows_s, LE, index_px=23990.0)
+check("first-swing trail: at +0.5R the stop already moves to that lower high",
+      23994.0 <= pe1.index_invalidation < 23996.0, note_e or f"{pe1.index_invalidation:.2f}")
+pe2 = short_pos()
+tr.update(pe2, mk(pre + [(24000.0 - 2 * i, 24001.0 - 2 * i, 23997.0 - 2 * i, 23998.0 - 2 * i)
+                         for i in range(8)]), LE, index_px=23986.0)
+check("first-swing trail: no swing and below 1:1 -> no breakeven jump",
+      pe2.index_invalidation == 24020.0, f"{pe2.index_invalidation:.2f}")
+from arb.trailing import initial_target
+flat_t = mk([(24000.0 + (i % 2) * 2, 24003.0 + (i % 2) * 2, 23999.0 + (i % 2) * 2,
+              24001.0 + (i % 2) * 2) for i in range(120)])
+t_floor = initial_target(flat_t, BULL, 24001.0, 20.0,
+                         IntradayLimits(target_mode="momentum", target_floor_r=2.0))
+check("target floor 2R: a quiet market's target is still at least 1:2",
+      t_floor - 24001.0 >= 40.0 - 1e-6, f"{t_floor - 24001.0:.1f} pts")
+
 frozen = ps.index_invalidation
 tr.update(ps, rows_s, LT, index_px=23990.0)
 check("the trail never loosens", ps.index_invalidation <= frozen)

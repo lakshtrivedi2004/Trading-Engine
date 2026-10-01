@@ -10,7 +10,7 @@ Pipeline, per playbook:
   1. tools/backtest.py:work with only that playbook enabled and the pace gate
      OFF, so every candidate carries its own atr_ratio and the gate is applied
      afterwards exactly as regime_gate would (research_out/2026-09-30/gen.py).
-  2. research_out/2026-09-30/realistic.py:reprice: the contract
+  2. research/lab/realistic.py:reprice: the contract
      arb/intraday.py would pick, Black-Scholes premium with measured decay and
      spreads, the premium stop and +1R breakeven on every bar.
   3. The live gates as configured today: per-index half-day pace
@@ -27,7 +27,7 @@ import sys
 from multiprocessing import Pool
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LAB = os.path.join(ROOT, "research_out", "2026-09-30")
+LAB = os.path.join(ROOT, "research", "lab")
 sys.path[:0] = [LAB, ROOT, os.path.join(ROOT, "tools")]
 import backtest as bt          # noqa: E402
 import realistic as rz         # noqa: E402

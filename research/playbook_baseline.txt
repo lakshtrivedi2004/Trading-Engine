@@ -1,0 +1,17 @@
+capital Rs 13,467, risk 6%, indices NIFTY, BANKNIFTY, SENSEX, overrides none
+
+choch_bos                n=160 win= 39% year Rs -21,701 (IN -11,418 / OUT -10,283) avg  -136 avg loss  -720 maxDD 21,762 months+ 23% | raw 9323 priced 6861
+    NIFTY                n= 13 win=  8% year Rs  -6,222 (IN  -2,800 / OUT  -3,422) avg  -479 avg loss  -588 maxDD  6,222 months+ 0%
+    BANKNIFTY            n=  9 win= 44% year Rs    -815 (IN    -330 / OUT    -485) avg   -91 avg loss  -683 maxDD  2,071 months+ 50%
+    SENSEX               n=138 win= 41% year Rs -14,664 (IN  -8,288 / OUT  -6,375) avg  -106 avg loss  -742 maxDD 14,724 months+ 31%
+sweep_bos                n= 99 win= 47% year Rs  -3,414 (IN  -3,348 / OUT     -66) avg   -34 avg loss  -743 maxDD  7,199 months+ 42% | raw 6190 priced 4575
+    NIFTY                n= 13 win= 23% year Rs  -3,722 (IN  -1,938 / OUT  -1,784) avg  -286 avg loss  -765 maxDD  4,074 months+ 29%
+    BANKNIFTY            n=  7 win= 57% year Rs     -68 (IN    -723 / OUT    +655) avg   -10 avg loss  -719 maxDD  1,382 months+ 50%
+    SENSEX               n= 79 win= 51% year Rs    +376 (IN    -688 / OUT  +1,064) avg    +5 avg loss  -739 maxDD  6,543 months+ 58%
+fib_pullback             n= 17 win= 29% year Rs  -3,351 (IN  -2,357 / OUT    -994) avg  -197 avg loss  -696 maxDD  4,857 months+ 29% | raw 268 priced 168
+    NIFTY                n=  1 win=  0% year Rs    -527 (IN    -527 / OUT      +0) avg  -527 avg loss  -527 maxDD    527 months+ 0%
+    BANKNIFTY            n=  2 win= 50% year Rs     -55 (IN     -55 / OUT      +0) avg   -27 avg loss  -760 maxDD    760 months+ 0%
+    SENSEX               n= 14 win= 29% year Rs  -2,770 (IN  -1,776 / OUT    -994) avg  -198 avg loss  -706 maxDD  4,331 months+ 29%
+psych_reaction           n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 avg loss     0 maxDD      0 months+ 0% | raw 0 priced 0
+ib_breakout              n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 avg loss     0 maxDD      0 months+ 0% | raw 0 priced 0
+vwap_pullback            n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 avg loss     0 maxDD      0 months+ 0% | raw 0 priced 0

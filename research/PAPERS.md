@@ -792,6 +792,68 @@ In the backtest, the next expiry (D4) and skipping the day (D3) came out the sam
 - Per-index samples are small: NIFTY 17-37 trades, BANKNIFTY 9-18.
 - Earlier caveat, unchanged: at 100-200 trades a year, per-trade noise is about ±₹8-9k on the year.
 
+### 0l. The first live losses, and the owner's concept list (1 Oct 2026)
+
+**The live day.** Commit 15673f6, real funds. Three PE trades between 13:03 and 13:33 lost Rs 1,401 (−12% of Rs 11,647):
+- NIFTY −711 (`structure_broken` after 97 s);
+- NIFTY +40 (breakeven trail);
+- SENSEX −730 (`stop_loss`).
+
+`research/replay_2026_10_01.py` replays the day through the decision code on Yahoo 1-minute bars, with Angel history to 30 Sep. The data showed:
+- **Live decided on the forming bar.** `hunt()` passed `CandleStore.get()` (live bar included) to the playbooks, whose triggers read `candles[-1]`. Trade 1 entered 23 s into a minute on a "rejection wick" that was gone by the close. On completed bars, the engine takes none of the three trades: it is not tradable at 13:03 or 13:17, and the pace gate refuses at 13:26-13:28. `tools/backtest.py` only ever sees completed bars, so live was trading an untested rule.
+- **The puts were bought after the move was spent.** NIFTY had fallen about 12 ATR in 30 minutes and swept 22,301 at 12:58 (reclaimed at 12:59). Trade 1 bought into the bounce.
+- **One idea, three times.** NIFTY, NIFTY, SENSEX, all PE, within 25 minutes of the first idea's invalidation.
+- **The cap was exceeded.** Losses of 711 and 730 against a 699 cap, because about Rs 97 of round trip sat outside it.
+
+**Fixes, tested on a year** (`research/fixes_test.py`, `research/fixes_result.txt`; ob_fvg_retest, option-priced, live gates, split 25 May):
+
+| | Trades | Win | In-sample | Held-out | Worst | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline (completed bars) | 94 | 53% | +9,620 | +9,088 | −916 | 5,050 |
+| F2 move-already-run < 6 ATR | 75 | 55% | +11,161 | +6,623 | −890 | 5,758 |
+| F3 no trade after an opposite sweep | 67 | 48% | +3,843 | +4,934 | −890 | 5,780 |
+| **F4 same side, all indices, 30 min after a loss** | 89 | 55% | +9,891 | +9,889 | −916 | 4,312 |
+| F5 costs inside the cap | 91 | 53% | +6,597 | +8,451 | **−738** | 4,678 |
+
+- F1 (closed bars, entry within 15 s of the close, no chasing beyond 0.5 ATR) is what every backtest already assumes, so it is turned on.
+- F4 is better in both halves, so it is turned on.
+- F5 is a risk rule, not an edge rule. It costs about 20% of profit and caps the worst loss at the cap. It is turned on because the owner's stated priority is risk.
+- F2 and F3 are worse held out. They stay in the code with the flags off.
+
+F3's failure is evidence against the AMD reading "a reclaimed sweep marks the manipulation leg" on these indices.
+
+**The owner's concept list: research (agents' reports in `research_out/strategies/`).**
+- **AMD / Power of 3 / Wyckoff.** The owner's video is LuxAlgo's "AMD POC Trade Setup", an indicator without a backtest.
+  - No peer-reviewed test exists.
+  - Independent mechanical tests are flat or negative: StatOasis ICT (1 of 32 t-stats > 2); WhaleClues SPY sweeps, same as controls; papan-saham Wyckoff springs, −0.13R, significant.
+  - On our year: −0.30R / −0.17R net.
+- **Market Profile (POC, value area, 80% rule).** No peer-reviewed test exists. On our year, a TPO built from time at price:
+  - prior-day POC touch is 51% against 51% for a mirror level;
+  - VAH/VAL/POC bounce rates are 50-56% against 53-56% for random levels;
+  - the 80% rule fills 37-50% and loses;
+  - one variant (open outside value, initial balance stays outside) is +0.27R / +0.08R in index points, untested on options.
+- **Fibonacci.** Ratios have no predictive power: Batchelor & Ramyar 2006; Tsinaslanidis et al. 2022; Bulkowski n=21,626. Depth of pullback may matter as a stop-length effect.
+- **Rejection / engulfing candles.** No intraday value: Fock, Klein & Zwergel 2005 (5-minute DAX); Marshall et al. 2006. On our data the lift at levels equals the lift at random levels.
+- **Shortlist to build and test next, one playbook each, kept separate:**
+  1. last-half-hour momentum (Gao et al. 2018 JFE, high-volatility days only);
+  2. a noise-area gate on ob_fvg_retest (Zarattini, Aziz & Barbon 2024);
+  3. pullback-depth buckets on ob_fvg_retest;
+  4. AMD-POC as a falsification test against its no-sweep control;
+  5. value acceptance outside the prior value area.
+
+**Every playbook alone** (`research/playbook_lab.py`, option-priced, live gates):
+
+| Playbook | Trades | In-sample | Held-out |
+|---|---:|---:|---:|
+| ob_fvg_retest | 94 | +9,620 | +9,088 |
+| sweep_bos | 99 | −3,348 | −66 |
+| fib_pullback | 17 | −2,357 | −994 |
+| choch_bos | 160 | −11,418 | −10,283 |
+
+psych_reaction, ib_breakout and vwap_pullback produce no candidates in the replay.
+
+**Caveat.** About 80% of ob_fvg_retest's trades are SENSEX. NIFTY alone is negative.
+
 ### Also added from the literature
 
 - `vwap_pullback`: from **Zarattini & Aziz**, VWAP trend on QQQ, SSRN 4631351.
