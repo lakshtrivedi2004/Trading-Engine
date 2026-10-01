@@ -813,11 +813,12 @@ In the backtest, the next expiry (D4) and skipping the day (D3) came out the sam
 | F2 move-already-run < 6 ATR | 75 | 55% | +11,161 | +6,623 | −890 | 5,758 |
 | F3 no trade after an opposite sweep | 67 | 48% | +3,843 | +4,934 | −890 | 5,780 |
 | **F4 same side, all indices, 30 min after a loss** | 89 | 55% | +9,891 | +9,889 | −916 | 4,312 |
-| F5 costs inside the cap | 91 | 53% | +6,597 | +8,451 | **−738** | 4,678 |
+| F5 costs inside the cap | 91 | 53% | +6,795 | +8,999 | **−740** | 4,778 |
+| **F4 + F5 (now live)** | 86 | 55% | +7,136 | +9,684 | −740 | 4,105 |
 
 - F1 (closed bars, entry within 15 s of the close, no chasing beyond 0.5 ATR) is what every backtest already assumes, so it is turned on.
 - F4 is better in both halves, so it is turned on.
-- F5 is a risk rule, not an edge rule. It costs about 20% of profit and caps the worst loss at the cap. It is turned on because the owner's stated priority is risk.
+- F5 is a risk rule, not an edge rule. It costs about 16% of profit (10% together with F4, `research/fixes_final_result.txt`) and keeps the worst loss inside the Rs 808 cap. It is turned on because the owner's stated priority is risk.
 - F2 and F3 are worse held out. They stay in the code with the flags off.
 
 F3's failure is evidence against the AMD reading "a reclaimed sweep marks the manipulation leg" on these indices.
