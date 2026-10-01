@@ -257,6 +257,18 @@ with tempfile.TemporaryDirectory() as d:
     check("a restart mid-day keeps the day's opening capital (the halt cannot move)",
           cb.sync_to_funds(24_500.0) == 25_000.0)
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("4. ./run.sh_real blocks sleep only when the config asks")
+
+check("live_block_sleep is off by default (no inhibitor lock, as before)",
+      IntradayLimits().live_block_sleep is False)
+with tempfile.TemporaryDirectory() as d:
+    p = os.path.join(d, "intraday.json")
+    with open(p, "w") as fh:
+        fh.write('{"live_block_sleep": true}')
+    check("live_block_sleep: true in the json turns the lock on",
+          IntradayLimits.load(p).live_block_sleep is True)
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

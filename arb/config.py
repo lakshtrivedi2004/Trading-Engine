@@ -837,6 +837,9 @@ class IntradayLimits:
     # (NSE/FAOP/69296) and by Angel on BFO, so this is the fill-now order.
     market_orders: bool = False
     market_protection_pct: float = 2.5
+    # ./run.sh_real holds a systemd-inhibit sleep/lid lock for as long as the
+    # LIVE engine runs (./run.sh always does for paper). Off = no lock.
+    live_block_sleep: bool = False
 
     @classmethod
     def load(cls, path=None):

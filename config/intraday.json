@@ -43,5 +43,6 @@
   "trend_4h_bars": 5,
   "expiry_trade_next": true,
   "market_orders": true,
-  "market_protection_pct": 2.5
+  "market_protection_pct": 2.5,
+  "live_block_sleep": true
 }

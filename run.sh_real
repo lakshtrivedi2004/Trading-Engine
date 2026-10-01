@@ -126,6 +126,20 @@ log="$LOGDIR/live_session_$(date +%Y%m%d_%H%M%S).log"
 nohup "$PY" run_bot.py --mode live --yes --port "$PORT" "$@" >"$log" 2>&1 &
 echo $! > "$PIDFILE"
 
+# Keep the laptop awake while real money is at risk (same lock as ./run.sh:110-120).
+# On 29 Sep a closed lid suspended the paper engine 10:20-10:38: no ticks, no exits.
+inhibit_ok=0
+block=$("$PY" -c 'import sys; sys.path.insert(0, "."); from arb.config import IntradayLimits as L; print(int(bool(getattr(L.load(), "live_block_sleep", False))))' 2>/dev/null || echo 0)
+if [ "$block" = 1 ] && command -v systemd-inhibit >/dev/null 2>&1; then
+  epid=$(cat "$PIDFILE")
+  nohup systemd-inhibit --what=sleep:idle:handle-lid-switch --mode=block \
+    --who="Trading-Engine" --why="LIVE engine running (pid $epid)" \
+    tail --pid="$epid" -f /dev/null >/dev/null 2>&1 &
+  ipid=$!
+  sleep 1
+  kill -0 "$ipid" 2>/dev/null && inhibit_ok=1
+fi
+
 for _ in $(seq 1 90); do
   if grep -q "scanning (live)" "$log" 2>/dev/null; then break; fi
   if ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
@@ -138,4 +152,9 @@ green "LIVE engine running (pid $(cat "$PIDFILE"))"
 dim  "dashboard  http://0.0.0.0:$PORT"
 dim  "log        $log"
 dim  "stop       ./run.sh_real stop   ·  follow  ./run.sh_real logs"
+if [ "$inhibit_ok" = 1 ]; then
+  dim "sleep      blocked while the LIVE engine runs (closing the lid will not suspend)"
+else
+  red "sleep NOT blocked - keep the lid open and on charge; a suspended laptop cannot exit a position"
+fi
 grep -E "LIVE funds|stocks  " "$log" | sed 's/^/  /' || true
