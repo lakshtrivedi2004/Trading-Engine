@@ -233,6 +233,31 @@ tiny = IntradayLimits(min_net_points=500.0)
 check("a move too small to be worth it is refused",
       plan_trade(pick, st_bull, BULL, tiny, cost_rt) is None)
 
+# F5 (1 Oct 2026 review): costs inside the cap. A stop-out may then lose at
+# most the cap, the round trip and the exit slippage included.
+if plan:
+    lot = pick.lot_size
+    extra = 3.0
+    exact = (plan["risk_points"] + extra) * lot
+    p_in = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=exact, extra_risk_points=extra)
+    check("F5: a plan whose stop plus costs fits the cap exactly is taken, and says what it costs",
+          p_in is not None and abs(p_in["planned_risk_inr"] - exact) < 1e-6,
+          f"{p_in['planned_risk_inr'] if p_in else None} vs {exact:.2f}")
+    p_out = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=exact - 1.0,
+                       extra_risk_points=extra)
+    check("F5: one rupee over the cap with costs counted is refused (no 5% allowance)",
+          p_out is None)
+    p_old = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=plan["risk_inr"] * 1.02)
+    check("F5 off: today's 5% rounding allowance is unchanged",
+          p_old is not None and p_old["planned_risk_inr"] == p_old["risk_inr"])
+fn_hits = []
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: fn_hits.append((px, spr)) or 0.0)
+check("F5: the per-candidate delta ceiling is asked for each contract and applied",
+      len(fn_hits) > 0 and sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+                                      max_delta_fn=lambda px, spr: 0.0) is None,
+      f"{len(fn_hits)} contracts asked")
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("5. Managing the position: stop, target, trail, square-off")
 

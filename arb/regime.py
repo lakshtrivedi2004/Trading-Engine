@@ -223,3 +223,52 @@ def trend_4h(candles, bars=5, split="13:15"):
         return 0
     d = closes[-1] - closes[-1 - bars]
     return (d > 0) - (d < 0)
+
+
+def run_in_direction(candles, side, bars=30, period=20):
+    """How far price has already travelled in `side`'s direction, in ATRs.
+
+    For a long: the last close minus the lowest low of the last `bars` bars.
+    For a short: the highest high of those bars minus the last close. The ATR is
+    the one before the window's last bar, as the entry code uses. 0.0 without
+    enough history. `candles` must be completed bars (owner's 1 Oct review: a
+    put bought after a 12-ATR fall, at the bottom, is the move already spent).
+    """
+    if len(candles) < max(bars, period + 2):
+        return 0.0
+    a = atr(candles[:-1], period=period)
+    if a <= 0:
+        return 0.0
+    win = candles[-bars:]
+    c = candles[-1][4]
+    if side > 0:
+        return (c - min(r[3] for r in win)) / a
+    return (max(r[2] for r in win) - c) / a
+
+
+def swept_against(candles, side, lookback=10, pool_bars=30, reclaim_bars=3):
+    """Did the market recently run the stops on the OTHER side and reclaim?
+
+    A sell-side sweep (a low below the prior `pool_bars` lows, closed back above
+    that pool within `reclaim_bars`) is the manipulation leg of a move UP, so a
+    put bought after it buys the trap. Mirror for calls. Looks at sweeps whose
+    extreme bar is within the last `lookback` completed bars, and only while
+    price is still on the reclaimed side. Returns "" or a short reason.
+    """
+    n = len(candles)
+    if n < pool_bars + lookback + 1:
+        return ""
+    last = candles[-1][4]
+    for k in range(n - lookback, n):
+        pool = candles[k - pool_bars:k]
+        if side < 0:                      # a put fears a sell-side sweep
+            lvl = min(r[3] for r in pool)
+            if candles[k][3] < lvl and last > lvl and any(
+                    r[4] > lvl for r in candles[k:min(n, k + 1 + reclaim_bars)]):
+                return "sellside_swept"
+        else:                             # a call fears a buy-side sweep
+            lvl = max(r[2] for r in pool)
+            if candles[k][2] > lvl and last < lvl and any(
+                    r[4] < lvl for r in candles[k:min(n, k + 1 + reclaim_bars)]):
+                return "buyside_swept"
+    return ""

@@ -564,6 +564,84 @@ finally:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+section("8b. 1 Oct 2026 review: closed bars only, no chasing, no trap, one idea")
+
+from arb.regime import run_in_direction, swept_against
+
+
+def _eng_closed(**kw):
+    c = _Candles(day)
+    c.live = {"NIFTY": list(day[-1])}            # the fixture's last bar is the forming one
+    c.interval = "1m"
+    e = IntradayEngine(_Feed(day[-1][4]), [_Binding()], _Cfg(), CostModel(),
+                       IntradayLimits(max_risk_pct_per_trade=25.0, target_mode="structure",
+                                      sideways_bars=0, premium_rise_bars=0, min_atr_ratio=0.7,
+                                      **kw),
+                       PaperBroker(CostModel()), _Journal(), _Cap(), c)
+    e.book.time_to_close = lambda *_: 200.0
+    return e
+
+
+_real_time = time.time
+ie.now_ist = rg.now_ist = lambda: fixed
+brk_close = datetime.fromisoformat(day[-2][0]).timestamp() + 60
+try:
+    e0 = _eng_closed()
+    e0.hunt()
+    check("flags off: today's behaviour, the entry still happens", e0.book.count() == 1,
+          f"rejects {e0.rejects}")
+    time.time = lambda: brk_close + 120
+    e1 = _eng_closed(decide_on_closed_bars=True)
+    e1.hunt()
+    check("closed bars: two minutes after the bar closed, no entry - not chased",
+          e1.book.count() == 0 and e1.rejects.get("waiting_for_bar_close", 0) > 0,
+          f"rejects {e1.rejects}")
+    time.time = lambda: brk_close + 2
+    e2 = _eng_closed(decide_on_closed_bars=True)
+    e2.hunt()
+    check("closed bars: 2 s after the break bar closed, the entry is taken",
+          e2.book.count() == 1, f"rejects {e2.rejects}")
+    e3 = _eng_closed(decide_on_closed_bars=True, max_chase_atr=0.01)
+    e3.feed.store.ltp = [day[-2][4] + 40.0]
+    e3.hunt()
+    check("closed bars: price already moved away from the close -> refused",
+          e3.book.count() == 0 and e3.rejects.get("price_moved_since_close", 0) > 0,
+          f"rejects {e3.rejects}")
+    e4 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    e4._loss_side, e4.last_loss_ts = BULL, time.time() - 600
+    e4.hunt()
+    check("F4: ten minutes after a losing CE trade, another CE is refused",
+          e4.book.count() == 0 and e4.rejects.get("same_side_after_loss", 0) > 0,
+          f"rejects {e4.rejects}")
+    e5 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    e5._loss_side, e5.last_loss_ts = BEAR, time.time() - 600
+    e5.hunt()
+    check("F4: a losing PE does not block a CE", e5.book.count() == 1, f"rejects {e5.rejects}")
+    e6 = _eng_closed(decide_on_closed_bars=True, max_run_atr=0.5)
+    e6.hunt()
+    check("F2: a move already run past the limit is refused",
+          e6.book.count() == 0 and e6.rejects.get("move_already_run", 0) > 0,
+          f"rejects {e6.rejects}")
+finally:
+    time.time = _real_time
+    ie.now_ist, rg.now_ist = _real_ie, _real_rg
+
+fall = mk([(24100.0 - 10 * i, 24102.0 - 10 * i, 24088.0 - 10 * i, 24090.0 - 10 * i)
+           for i in range(40)])
+check("run_in_direction: a steady fall is a long run for a put",
+      run_in_direction(fall, BEAR) > 5.0 and run_in_direction(fall, BULL) < 1.0,
+      f"{run_in_direction(fall, BEAR):.1f} / {run_in_direction(fall, BULL):.1f}")
+check("run_in_direction: too little history says 0", run_in_direction(fall[:10], BEAR) == 0.0)
+flat = [(24000.0, 24004.0, 23996.0, 24001.0)] * 40
+swp = mk(flat + [(24000.0, 24001.0, 23985.0, 23999.0), (23999.0, 24003.0, 23998.0, 24002.0)])
+check("swept_against: a reclaimed sell-side sweep warns a put",
+      swept_against(swp, BEAR) == "sellside_swept")
+check("...and does not warn a call", swept_against(swp, BULL) == "")
+lost = mk(flat + [(24000.0, 24001.0, 23985.0, 23999.0), (23999.0, 24000.0, 23980.0, 23982.0)])
+check("...nor a put once price is back below the swept pool", swept_against(lost, BEAR) == "")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 section("9. Trailing on the index: the owner's 1:1 -> last opposite swing rule")
 
 from arb import trailing as tr

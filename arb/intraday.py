@@ -105,7 +105,7 @@ class ContractSelector:
         self.last_reject = ""
 
     def select(self, cv, spot, side, capital, max_age_ms, min_depth_mult,
-               max_delta=None):
+               max_delta=None, max_delta_fn=None):
         """Best affordable contract for `side`, or None.
 
         `cv` is a ChainView (arb/strategies.py); `capital` is rupees available
@@ -164,7 +164,10 @@ class ContractSelector:
             # Delta sizing: the most delta whose rupee risk at the chart's own
             # stop still fits the per-trade cap. The stop is not moved; the
             # contract is chosen to fit it.
-            if max_delta is not None and d > max_delta:
+            # With costs inside the cap the ceiling depends on the contract's
+            # own premium and spread, so it is asked per candidate.
+            ceiling = max_delta_fn(px, spread) if max_delta_fn is not None else max_delta
+            if ceiling is not None and d > ceiling:
                 continue
             out.append(Candidate(
                 symbol=syms[i], token=toks[i], strike=float(strikes[i]), opt=opt,
@@ -209,7 +212,7 @@ def structural_invalidation(structure, side, invalidation=None):
 
 
 def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
-               max_risk_inr=None, atr=0.0):
+               max_risk_inr=None, atr=0.0, extra_risk_points=0.0):
     """Turn a chosen contract into an entry with a stop and a target.
 
     Risk is defined on the INDEX, where structure lives: the trade is wrong if
@@ -256,13 +259,17 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     #           on 7 real sessions it lost Rs 12,720 over 102 trades, because a
     #           stop pulled inside the structure is hit by ordinary noise.
     capped = False
+    # extra_risk_points (risk_includes_costs): the round trip and the expected
+    # exit slippage count inside the cap, with no rounding allowance - the cap
+    # is then the most a stopped-out trade can lose, costs included.
+    extra = float(extra_risk_points or 0.0)
     if max_risk_inr and cand.lot_size > 0:
         cap_pts = max_risk_inr / cand.lot_size
         # A few percent over is chain-delta rounding, not a wide stop.
-        if prem_risk > cap_pts * 1.05:
+        if prem_risk + extra > (cap_pts if extra else cap_pts * 1.05):
             if str(getattr(limits, "stop_policy", "delta")) != "cap":
                 return None
-            prem_risk = cap_pts
+            prem_risk = cap_pts - extra
             capped = True
             d = cand.delta if cand.delta > 0 else 0.5
             index_risk = prem_risk / d
@@ -300,6 +307,9 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
         "index_invalidation": invalid,
         "index_risk": index_risk,
         "risk_inr": prem_risk * cand.lot_size,
+        # What a stop-out is planned to cost in all: the premium stop plus the
+        # round trip and exit slippage when they count inside the cap.
+        "planned_risk_inr": (prem_risk + extra) * cand.lot_size,
         "reward_inr": limits.reward_risk * prem_risk * cand.lot_size,
         "cost_points_round_trip": cost_points,
         "delta": cand.delta,

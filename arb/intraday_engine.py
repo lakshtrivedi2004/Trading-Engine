@@ -22,6 +22,7 @@ import os
 import threading
 import time
 from dataclasses import asdict, fields
+from datetime import datetime
 
 from arb.instruments import now_ist, parse_expiry
 from arb.intraday import (ContractSelector, chain_delta, plan_trade,
@@ -29,7 +30,8 @@ from arb.intraday import (ContractSelector, chain_delta, plan_trade,
 from arb.positions import EXIT, Position, PositionBook
 from arb.confluence import evaluate, grade_at_least, regrade
 from arb.playbooks import unknown as unknown_playbooks
-from arb.regime import atr, atr_ratio, premium_gate, regime_gate, session_phase, trend_4h
+from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direction,
+                        session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
 from arb.smc import BEAR, BULL, RANGE, analyse
 from arb.costs import per_unit_cost_points
@@ -102,6 +104,7 @@ class IntradayEngine:
         # Discipline state (IntradayLimits "discipline" block).
         self.loss_streak = 0
         self.last_loss_ts = 0.0
+        self._loss_side = 0             # side of the last losing index trade (F4)
         self.paused_until = 0.0
         self.careful = False            # after a streak: only good grades until a win
         self.playbook_count = {}        # (underlying, playbook, side) -> entries today
@@ -700,6 +703,8 @@ class IntradayEngine:
         else:
             self.losses += 1
             self._on_loss()
+            if pos.opt != "EQ":
+                self._loss_side = pos.side
         if reason in ("stop_loss", "structure_broken", "broker_stop") and net < 0:
             self._symbol_cooldown[pos.symbol] = time.time()
 
@@ -801,8 +806,22 @@ class IntradayEngine:
         free = self.capital.capital - self.book.deployed()
         by_cash = int(free // max(cand.lot_cost, 1e-9))
         risk_cap = self.capital.capital * L.max_risk_pct_per_trade / 100.0
-        by_risk = int(risk_cap // max(plan["risk_inr"], 1e-9))
+        by_risk = int(risk_cap // max(plan.get("planned_risk_inr", plan["risk_inr"]), 1e-9))
         return max(0, min(want, by_cash, by_risk))
+
+    def _costs_inside(self):
+        return bool(getattr(self.L, "risk_includes_costs", False))
+
+    def _extra_risk_points(self, px, spread, lot):
+        """F5 (owner's 1 Oct 2026 review; rulebook section 5): what a stop-out
+        costs on top of the premium stop, per unit - the round trip, and an exit
+        that fills exit_slip_spreads spreads plus exit_slip_frac of the premium
+        under the stop. On 1 Oct two stop-outs lost Rs 711 and Rs 730 against a
+        Rs 699 cap because the Rs 97 round trip sat outside it."""
+        L = self.L
+        return (self._round_trip_points(px, lot)
+                + float(getattr(L, "exit_slip_spreads", 1.0)) * float(spread or 0.0)
+                + float(getattr(L, "exit_slip_frac", 0.01)) * float(px))
 
     # ── entries ─────────────────────────────────────────────────────────────
     def _gates(self):
@@ -827,6 +846,61 @@ class IntradayEngine:
         if (now_ist() - open_at).total_seconds() / 60.0 < L.warmup_minutes:
             return "warmup"
         return ""
+
+    def _closed_rows(self, name, rows):
+        """Decide on COMPLETED bars only, and only just after one closes.
+
+        Owner's 1 Oct 2026 review: live passed the still-forming bar to the
+        playbooks, so a rejection wick 23 seconds into a minute was traded as a
+        rejection candle, and tools/backtest.py - which only ever sees closed
+        bars - had tested a different rule. With decide_on_closed_bars the
+        forming bar is dropped, and the decision is taken only within
+        entry_window_sec of the bar's close: the confirmation is the close, the
+        entry is the next tick, and a setup not taken then is not chased later.
+        Returns (rows, reason); reason is "" when this is the moment to act.
+        """
+        L = self.L
+        if not getattr(L, "decide_on_closed_bars", False) or not rows:
+            return rows, ""
+        live = (getattr(self.candles, "live", None) or {}).get(name) if self.candles else None
+        if live and rows[-1][0] == live[0]:
+            rows = rows[:-1]
+        if not rows:
+            return rows, "no_closed_bar"
+        from arb.candles import SECONDS
+        secs = SECONDS.get(getattr(self.candles, "interval", "1m"), 60)
+        try:
+            closed_at = datetime.fromisoformat(rows[-1][0]).timestamp() + secs
+        except ValueError:
+            return rows, ""
+        if time.time() - closed_at > float(getattr(L, "entry_window_sec", 15.0)):
+            return rows, "waiting_for_bar_close"
+        return rows, ""
+
+    def _late_or_trapped(self, rows, side, spot):
+        """F1's chase guard and the F2/F3 filters, on completed bars. "" = go."""
+        L = self.L
+        a = atr(rows[:-1], period=L.atr_period) if len(rows) > L.atr_period + 1 else 0.0
+        chase = float(getattr(L, "max_chase_atr", 0.0) or 0.0)
+        if getattr(L, "decide_on_closed_bars", False) and chase > 0 and a > 0 \
+                and rows and abs(spot - rows[-1][4]) > chase * a:
+            return "price_moved_since_close"
+        n = float(getattr(L, "max_run_atr", 0.0) or 0.0)
+        if n > 0 and run_in_direction(rows, side, bars=int(getattr(L, "run_bars", 30)),
+                                      period=L.atr_period) >= n:
+            return "move_already_run"
+        if getattr(L, "sweep_against_veto", False):
+            why = swept_against(rows, side)
+            if why:
+                return f"against_{why}"
+        return ""
+
+    def _same_idea_blocked(self, side):
+        """F4: after a losing exit, no new trade on the same side on any index
+        for same_side_cooldown_min - NIFTY, BANKNIFTY and SENSEX are one market."""
+        m = float(getattr(self.L, "same_side_cooldown_min", 0.0) or 0.0)
+        return bool(m) and side == self._loss_side and \
+            time.time() - self.last_loss_ts < 60.0 * m
 
     def hunt(self):
         # The stock scan runs on its own clock, whatever the gates say: the
@@ -856,6 +930,10 @@ class IntradayEngine:
             # that sound like ordinary market conditions. Say it out loud, once
             # per index per outage, or a dead data feed reads as a quiet day.
             self._check_starved(und, rows)
+            rows, wait = self._closed_rows(und, rows)
+            if wait:
+                self._note(wait)
+                continue
             st = analyse(rows, strength=self.L.swing_strength,
                          min_bars=self.L.min_structure_bars)
             self.structures[und] = st
@@ -900,6 +978,14 @@ class IntradayEngine:
                     self._note("4h_trend_unknown" if tr == 0 else "against_4h_trend")
                     continue
 
+            late = self._late_or_trapped(rows, v.side, spot)
+            if late:
+                self._note(late)
+                continue
+            if self._same_idea_blocked(v.side):
+                self._note("same_side_after_loss")
+                continue
+
             # Only buy the retracement into the order block, never the breakout
             # candle itself: entering on the impulse puts the stop a full leg
             # away, which is the same trade with a quarter of the reward-to-risk.
@@ -931,9 +1017,14 @@ class IntradayEngine:
                     self._note("no_viable_stop_or_target")
                     continue
                 max_delta = cap_inr / (idx_risk * max(cv.lot_size, 1))
+            max_delta_fn = None
+            if max_delta is not None and self._costs_inside():
+                lot = max(cv.lot_size, 1)
+                max_delta_fn = lambda px, spr, r=idx_risk, lot=lot: (
+                    cap_inr / lot - self._extra_risk_points(px, spr, lot)) / r
             cand = self.selector.select(cv, spot, v.side, available,
                                         max_age_ms=400.0, min_depth_mult=1.0,
-                                        max_delta=max_delta)
+                                        max_delta=max_delta, max_delta_fn=max_delta_fn)
             if cand is None:
                 self._note(self.selector.last_reject or "no_contract")
                 continue
@@ -972,11 +1063,14 @@ class IntradayEngine:
             plan = plan_trade(cand, st, v.side, self.L, cost_pts,
                               invalidation=(lead.invalidation if lead else None),
                               max_risk_inr=cap_inr,
+                              extra_risk_points=(self._extra_risk_points(
+                                  cand.ask, cand.detail.get("spread", 0.0), cand.lot_size)
+                                  if self._costs_inside() else 0.0),
                               atr=atr(rows[:-1], period=self.L.atr_period))
             if plan is None:
                 self._note("no_viable_stop_or_target")
                 continue
-            if plan["risk_inr"] > cap_inr + 1e-6:
+            if plan.get("planned_risk_inr", plan["risk_inr"]) > cap_inr + 1e-6:
                 self._note("risk_too_large")
                 continue
             lots = self._lots_for(v.grade, cand, plan)
@@ -1144,6 +1238,10 @@ class IntradayEngine:
                 continue
             rows = self.candles.get(sym, limit=400) if self.candles else []
             self.evaluated_at[sym] = time.time()
+            rows, wait = self._closed_rows(sym, rows)
+            if wait:
+                self._note(f"stock:{wait}")
+                continue
             if len(rows) < L.min_structure_bars:
                 self._note("stock_warming_up")
                 continue
@@ -1184,13 +1282,27 @@ class IntradayEngine:
                 continue
             fill_px = ask if v.side > 0 else bid
             qty = min(int(cap_inr // risk), int(max(0.0, available) * lev // fill_px))
+            from arb.costs import leg_cost
+
+            def round_trip(q):
+                return (leg_cost(fill_px, q, "BUY", "EQ", self.cm)
+                        + leg_cost(fill_px, q, "SELL", "EQ", self.cm)
+                        + 2 * self.cm.slippage_points() * q + (ask - bid) * q)
+            if self._costs_inside() and qty > 0:
+                # The largest size whose stop-out, costs included, fits the cap.
+                # Cost rises with size, so a bisection finds it exactly.
+                lo_q, hi_q = 0, qty
+                while lo_q < hi_q:
+                    mid = (lo_q + hi_q + 1) // 2
+                    if risk * mid + round_trip(mid) <= cap_inr:
+                        lo_q = mid
+                    else:
+                        hi_q = mid - 1
+                qty = lo_q
             if qty <= 0:
                 self._note("stock:risk_too_large")
                 continue
-            from arb.costs import leg_cost
-            rt = (leg_cost(fill_px, qty, "BUY", "EQ", self.cm)
-                  + leg_cost(fill_px, qty, "SELL", "EQ", self.cm)
-                  + 2 * self.cm.slippage_points() * qty + (ask - bid) * qty)
+            rt = round_trip(qty)
             if rt > L.max_cost_frac_of_risk * risk * qty:
                 self._note("stock:cost_too_large_for_stop")
                 continue

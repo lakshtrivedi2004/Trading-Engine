@@ -840,6 +840,31 @@ class IntradayLimits:
     # ./run.sh_real holds a systemd-inhibit sleep/lid lock for as long as the
     # LIVE engine runs (./run.sh always does for paper). Off = no lock.
     live_block_sleep: bool = False
+
+    # ── the 1 Oct 2026 live-loss review (owner-approved fixes) ─────────────
+    # F1. Decide on COMPLETED bars only, within entry_window_sec of the close,
+    # and skip when price has already moved max_chase_atr from that close. Live
+    # used to read the still-forming bar, so it traded a rule tools/backtest.py
+    # never tested (a 23-second-old "rejection wick" on 1 Oct).
+    decide_on_closed_bars: bool = False
+    entry_window_sec: float = 15.0
+    max_chase_atr: float = 0.5
+    # F2. No entry once the index has already run max_run_atr ATRs in the
+    # trade's direction over the last run_bars completed bars. 0 disables.
+    max_run_atr: float = 0.0
+    run_bars: int = 30
+    # F3. No put right after a reclaimed sell-side sweep, no call after a
+    # buy-side one (arb/regime.py:swept_against).
+    sweep_against_veto: bool = False
+    # F4. After a losing index trade, no new trade on the same side on any index
+    # for this many minutes. 0 disables.
+    same_side_cooldown_min: float = 0.0
+    # F5. Count the round trip and the expected exit slippage (exit_slip_spreads
+    # spreads + exit_slip_frac of the premium) INSIDE max_risk_pct_per_trade,
+    # so a stop-out loses at most the cap. Stocks: fees, slippage and spread.
+    risk_includes_costs: bool = False
+    exit_slip_spreads: float = 1.0
+    exit_slip_frac: float = 0.01
     # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is
     # not known final at Angel (still working, or the place call raised) is
     # remembered on the position, and no second exit is sent until it is
