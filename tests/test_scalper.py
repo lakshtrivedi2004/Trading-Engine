@@ -593,9 +593,10 @@ try:
     time.time = lambda: brk_close + 120
     e1 = _eng_closed(decide_on_closed_bars=True)
     e1.hunt()
-    check("closed bars: two minutes after the bar closed, no entry - not chased",
-          e1.book.count() == 0 and e1.rejects.get("waiting_for_bar_close", 0) > 0,
-          f"rejects {e1.rejects}")
+    check("closed bars: two minutes after the bar closed, no entry - not chased, "
+          "and the wait is not counted as a refusal",
+          e1.book.count() == 0 and "waiting_for_bar_close" not in e1.rejects
+          and not e1.verdicts, f"rejects {e1.rejects}")
     time.time = lambda: brk_close + 2
     e2 = _eng_closed(decide_on_closed_bars=True)
     e2.hunt()
@@ -608,13 +609,21 @@ try:
           e3.book.count() == 0 and e3.rejects.get("price_moved_since_close", 0) > 0,
           f"rejects {e3.rejects}")
     e4 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
-    e4._loss_side, e4.last_loss_ts = BULL, time.time() - 600
+    e4._loss_side, e4._loss_side_ts = BULL, time.time() - 600
     e4.hunt()
     check("F4: ten minutes after a losing CE trade, another CE is refused",
           e4.book.count() == 0 and e4.rejects.get("same_side_after_loss", 0) > 0,
           f"rejects {e4.rejects}")
+    e4b = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    # A CE index loss 40 minutes ago, and a stock loss 10 minutes ago: the
+    # stock loss must not stretch the index block past its 30 minutes.
+    e4b._loss_side, e4b._loss_side_ts = BULL, time.time() - 2400
+    e4b.last_loss_ts = time.time() - 600
+    e4b.hunt()
+    check("F4: a later stock loss does not extend the index side's block",
+          e4b.book.count() == 1, f"rejects {e4b.rejects}")
     e5 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
-    e5._loss_side, e5.last_loss_ts = BEAR, time.time() - 600
+    e5._loss_side, e5._loss_side_ts = BEAR, time.time() - 600
     e5.hunt()
     check("F4: a losing PE does not block a CE", e5.book.count() == 1, f"rejects {e5.rejects}")
     e6 = _eng_closed(decide_on_closed_bars=True, max_run_atr=0.5)

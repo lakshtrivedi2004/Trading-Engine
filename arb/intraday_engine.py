@@ -105,6 +105,7 @@ class IntradayEngine:
         self.loss_streak = 0
         self.last_loss_ts = 0.0
         self._loss_side = 0             # side of the last losing index trade (F4)
+        self._loss_side_ts = 0.0        # ...and when; stock losses never move it
         self.paused_until = 0.0
         self.careful = False            # after a streak: only good grades until a win
         self.playbook_count = {}        # (underlying, playbook, side) -> entries today
@@ -704,7 +705,7 @@ class IntradayEngine:
             self.losses += 1
             self._on_loss()
             if pos.opt != "EQ":
-                self._loss_side = pos.side
+                self._loss_side, self._loss_side_ts = pos.side, time.time()
         if reason in ("stop_loss", "structure_broken", "broker_stop") and net < 0:
             self._symbol_cooldown[pos.symbol] = time.time()
 
@@ -900,7 +901,7 @@ class IntradayEngine:
         for same_side_cooldown_min - NIFTY, BANKNIFTY and SENSEX are one market."""
         m = float(getattr(self.L, "same_side_cooldown_min", 0.0) or 0.0)
         return bool(m) and side == self._loss_side and \
-            time.time() - self.last_loss_ts < 60.0 * m
+            time.time() - self._loss_side_ts < 60.0 * m
 
     def hunt(self):
         # The stock scan runs on its own clock, whatever the gates say: the
@@ -932,7 +933,11 @@ class IntradayEngine:
             self._check_starved(und, rows)
             rows, wait = self._closed_rows(und, rows)
             if wait:
-                self._note(wait)
+                # Waiting for the next close is the normal state between bars,
+                # not a refusal: counting it buried the real reasons on the
+                # dashboard (about 3,000 a day against a few hundred real ones).
+                if wait != "waiting_for_bar_close":
+                    self._note(wait)
                 continue
             st = analyse(rows, strength=self.L.swing_strength,
                          min_bars=self.L.min_structure_bars)
@@ -1240,7 +1245,8 @@ class IntradayEngine:
             self.evaluated_at[sym] = time.time()
             rows, wait = self._closed_rows(sym, rows)
             if wait:
-                self._note(f"stock:{wait}")
+                if wait != "waiting_for_bar_close":
+                    self._note(f"stock:{wait}")
                 continue
             if len(rows) < L.min_structure_bars:
                 self._note("stock_warming_up")
