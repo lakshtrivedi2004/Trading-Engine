@@ -184,5 +184,61 @@ mf.stop()
 time.sleep(0.8)
 check("stop() ends the feed without reconnecting", len(FakeWS.made) == 1)
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("3. Confirming an order never polls orderBook faster than Angel's 1/s")
+
+from arb.config import CostModel                   # noqa: E402
+from arb.execution import LiveBroker               # noqa: E402
+from arb.intraday_engine import _Ticket            # noqa: E402
+
+
+class SlowBook:
+    """Order status unreadable (as under a rate limit), so every poll falls
+    back to orderBook; the order shows complete there on the 3rd read."""
+    def __init__(self):
+        self.calls = {"individual_order_details": [], "orderBook": [], "position": []}
+
+    def placeOrderFullResponse(self, params):
+        return {"status": True, "data": {"orderid": "7", "uniqueorderid": "u7"}}
+
+    def individual_order_details(self, uid):
+        self.calls["individual_order_details"].append(time.time())
+        return None
+
+    def orderBook(self):
+        self.calls["orderBook"].append(time.time())
+        st = "complete" if len(self.calls["orderBook"]) >= 3 else "open"
+        return {"data": [{"orderid": "7", "status": st, "filledshares": "65" if st == "complete" else "0",
+                          "averageprice": "101.0"}]}
+
+    def position(self):
+        self.calls["position"].append(time.time())
+        return {"status": True, "data": []}
+
+    def cancelOrder(self, oid, variety):
+        pass
+
+
+def gaps(ts):
+    return [b - a for a, b in zip(ts, ts[1:])]
+
+
+api = SlowBook()
+b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True, confirm_timeout=6.0)
+leg = {"symbol": "NIFTY29SEP2622800CE", "token": "1", "side": "BUY", "price": 100.0,
+       "qty": 65, "instrument": "OPT", "exchange": "NFO"}
+legs, errs = b.place_structure(_Ticket([leg], 65, "T", "t", ""), 1)
+g = gaps(api.calls["orderBook"])
+check("the order is still confirmed through the orderBook fallback",
+      legs[0]["filled"] and legs[0]["fill_price"] == 101.0, str(errs))
+check("orderBook calls are >= 1.1 s apart", g and min(g) >= 1.09, f"gaps {[round(x, 2) for x in g]}")
+g = gaps(api.calls["individual_order_details"])
+check("order-status calls are >= 0.5 s apart", g and min(g) >= 0.49,
+      f"min gap {min(g):.2f}s over {len(g) + 1} calls" if g else "")
+b.net_position("X")
+b.net_position("X")
+g = gaps(api.calls["position"])
+check("back-to-back position reads are paced to 1/s", g and min(g) >= 1.09, f"gaps {g}")
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

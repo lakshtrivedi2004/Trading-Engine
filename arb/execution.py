@@ -90,6 +90,24 @@ class LiveBroker:
         self.confirm_timeout = float(confirm_timeout)
         self.log = log
         self._lock = threading.Lock()
+        self._pace_lock = threading.Lock()
+        self._last_call = {}
+
+    # Polling pace per endpoint, in seconds between calls. Angel publishes 1/s
+    # for orderBook and the position book; the old status loop asked every
+    # 0.3 s and fell back to orderBook on each miss - 3/s against a 1/s cap,
+    # on the engine thread, exactly when an order is in flight. Order status
+    # has no figure we could confirm, so it is held to 2/s.
+    POLL_GAP = {"orderBook": 1.1, "position": 1.1, "individual_order_details": 0.5}
+
+    def _paced(self, name, *a):
+        """Call api.<name>, waiting first if the last call was too recent."""
+        with self._pace_lock:
+            wait = self.POLL_GAP.get(name, 0.0) - (time.time() - self._last_call.get(name, 0.0))
+            if wait > 0:
+                time.sleep(wait)
+            self._last_call[name] = time.time()
+        return getattr(self.api, name)(*a)
 
     # A plain MARKET order is refused for API orders on NSE F&O (NSE/FAOP/69296,
     # NSE retail-algo FAQ Q11) and Angel takes only limits on BFO. "At market"
@@ -147,13 +165,13 @@ class LiveBroker:
         row = None
         if uid:
             try:
-                r = self.api.individual_order_details(uid) or {}
+                r = self._paced("individual_order_details", uid) or {}
                 row = r.get("data") if isinstance(r, dict) else None
             except Exception:
                 row = None
         if not row:
             try:
-                book = self.api.orderBook() or {}
+                book = self._paced("orderBook") or {}
                 row = next((x for x in (book.get("data") or [])
                             if str(x.get("orderid")) == str(oid)), None)
             except Exception:
@@ -214,7 +232,7 @@ class LiveBroker:
         """Net quantity the broker shows in `symbol` today, or None if unknown.
         The last word when an order's own status cannot be read."""
         try:
-            r = self.api.position() or {}
+            r = self._paced("position") or {}
         except Exception:
             return None
         if not isinstance(r, dict) or r.get("status") is False:
@@ -278,7 +296,7 @@ class LiveBroker:
     def reconcile(self, legs):
         """Correct assumed fills against the broker's order book."""
         try:
-            book = self.api.orderBook() or {}
+            book = self._paced("orderBook") or {}
             rows = {str(r.get("orderid")): r for r in (book.get("data") or [])}
         except Exception as e:
             return [f"orderBook: {e}"]
