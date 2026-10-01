@@ -113,7 +113,8 @@ def work(args):
                         dayrng=(max(r[2] for r in sofar) - min(r[3] for r in sofar)) / adr,
                         mfeR=0.0,u=name, iso=iso, day=iso[:10], wd=d.weekday(), m=m, i=i, j=j, side=v.side,
                         grade=v.grade, plays=[s.name for s in v.setups], risk=risk, delta=delta,
-                        R=(move - cost_pts / delta) / risk, net=net, why=why, held=j - i,
+                        R=(move - cost_pts / delta) / risk, net=net, why=why, held=j - i, atr=a,
+                        prem_risk_inr=prem_risk * lot,
                         er=efficiency([r[4] for r in seg[-17:-1]]) * 15 ** 0.5,
                         ar=atr_ratio(seg, period=L.atr_period, baseline_bars=L.atr_baseline_bars),
                         rev=v.reversal))

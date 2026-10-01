@@ -1,0 +1,26 @@
+A. Take only trades whose structural stop is at most N ATR away
+
+all (today's rule)             IN n= 147 win= 47% net=Rs   6,433 R=+0.08 | OUT n=  68 win= 47% net=Rs  3,241 R=+0.08 | avg loss Rs  -553  worst Rs  -681
+stop <= 1.5 ATR                IN n= 109 win= 43% net=Rs     728 R=+0.02 | OUT n=  52 win= 48% net=Rs  2,626 R=+0.06 | avg loss Rs  -548  worst Rs  -681
+stop <= 2 ATR                  IN n= 135 win= 45% net=Rs   2,057 R=+0.04 | OUT n=  64 win= 48% net=Rs  4,290 R=+0.11 | avg loss Rs  -546  worst Rs  -681
+stop <= 2.5 ATR                IN n= 146 win= 47% net=Rs   5,395 R=+0.07 | OUT n=  68 win= 47% net=Rs  3,241 R=+0.08 | avg loss Rs  -553  worst Rs  -681
+stop <= 3 ATR                  IN n= 147 win= 47% net=Rs   6,433 R=+0.08 | OUT n=  68 win= 47% net=Rs  3,241 R=+0.08 | avg loss Rs  -553  worst Rs  -681
+stop <= 4 ATR                  IN n= 147 win= 47% net=Rs   6,433 R=+0.08 | OUT n=  68 win= 47% net=Rs  3,241 R=+0.08 | avg loss Rs  -553  worst Rs  -681
+
+  bucket 1-1.5 ATR             IN n= 109 win= 43% net=Rs     728 R=+0.02 | OUT n=  52 win= 48% net=Rs  2,626 R=+0.06 | avg loss Rs  -548  worst Rs  -681
+  bucket 1.5-2 ATR             IN n=  38 win= 55% net=Rs   5,436 R=+0.28 | OUT n=  20 win= 45% net=Rs    565 R=+0.10 | avg loss Rs  -540  worst Rs  -675
+  bucket 2-2.5 ATR             IN n=  17 win= 47% net=Rs     408 R=+0.04 | OUT n=   5 win= 40% net=Rs   -493 R=-0.14 | avg loss Rs  -672  worst Rs  -675
+  bucket 2.5-3 ATR             IN n=   2 win=100% net=Rs   1,437 R=+1.20 | OUT n=   1 win=  0% net=Rs   -740 R=-1.23 | avg loss Rs  -740  worst Rs  -740
+  bucket 3-4 ATR               IN n=   0 win=  0% net=Rs       0 R=+0.00 | OUT n=   0 win=  0% net=Rs      0 R=+0.00 | avg loss Rs     0  worst Rs     0
+  bucket 4-99 ATR              IN n=   0 win=  0% net=Rs       0 R=+0.00 | OUT n=   0 win=  0% net=Rs      0 R=+0.00 | avg loss Rs     0  worst Rs     0
+
+B. Risk fewer rupees per trade (stop unchanged; lower-delta option)
+
+risk 6% (Rs 600 on 10k)        IN n= 147 win= 47% net=Rs   6,433 R=+0.08 | OUT n=  68 win= 47% net=Rs  3,241 R=+0.08 | avg loss Rs  -553  worst Rs  -681
+risk 4% (Rs 400 on 10k)        IN n= 133 win= 49% net=Rs   5,518 R=+0.10 | OUT n=  64 win= 50% net=Rs  2,904 R=+0.11 | avg loss Rs  -408  worst Rs  -508
+risk 3% (Rs 300 on 10k)        IN n=   0 win=  0% net=Rs       0 R=+0.00 | OUT n=   0 win=  0% net=Rs      0 R=+0.00 | avg loss Rs     0  worst Rs     0
+risk 2% (Rs 200 on 10k)        IN n=   0 win=  0% net=Rs       0 R=+0.00 | OUT n=   0 win=  0% net=Rs      0 R=+0.00 | avg loss Rs     0  worst Rs     0
+
+real	4m50.706s
+user	17m28.308s
+sys	0m4.038s
