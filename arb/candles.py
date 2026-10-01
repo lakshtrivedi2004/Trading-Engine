@@ -5,12 +5,18 @@ waits on this - a chart that fails to load must not delay an order.
 """
 import json
 import os
+import tempfile
 import threading
 import time
 from collections import deque
 from datetime import timedelta
 
 import numpy as np
+
+try:
+    import fcntl                   # POSIX: the budget is shared across processes
+except ImportError:                # pragma: no cover - Windows: per process only
+    fcntl = None
 
 from arb.instruments import IST, now_ist, parse_expiry
 from arb.volume import VolumeTracker
@@ -19,10 +25,94 @@ INTERVALS = {"1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
              "1h": "ONE_HOUR", "1d": "ONE_DAY"}
 SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
 
+# Angel's historical endpoint: 3 requests/s, 150/min, 5000/hour per API key
+# (Angel's published limits), and in practice it refuses bursts well before
+# that ("Access denied because of exceeding access rate"). Every caller - the
+# index candles and the stock desk in this process, AND any other engine on the
+# same host using the same key (prod and dev) - draws from one shared budget,
+# kept in a lock-protected file, with headroom under each published limit.
+HIST_GAP_SEC = 1.0                # <= 1/s       (limit 3/s)
+HIST_PER_MIN = 100                # <= 100/min   (limit 150/min)
+HIST_PER_HOUR = 4000              # <= 4000/hour (limit 5000/hour)
+HIST_RETRY_SEC = (5.0, 15.0, 30.0)
+_hist_lock = threading.Lock()
+
+
+def _rate_limited(text):
+    # Seen live: "Access denied because of exceeding access rate"; Angel's docs
+    # word it "403 Access denied because of exceeding rate limit". Match both.
+    t = str(text).lower()
+    return "access rate" in t or "rate limit" in t or "access denied" in t
+
+
+def _budget_path(api):
+    key = "".join(c for c in str(getattr(api, "api_key", "") or "default") if c.isalnum())[:16]
+    return os.path.join(tempfile.gettempdir(), f"angel_hist_{key or 'default'}.json")
+
+
+def _take_slot(api):
+    """Block until one getCandleData call fits the shared budget, and book it.
+
+    The file holds the last hour's request times. It is only read and written
+    under an exclusive lock (fcntl, so it holds across processes); the waiting
+    happens outside the lock so another engine is never stuck behind a sleeper.
+    """
+    path = _budget_path(api)
+    while True:
+        with _hist_lock, open(path + ".lock", "a+") as lf:
+            if fcntl is not None:
+                fcntl.flock(lf, fcntl.LOCK_EX)
+            try:
+                with open(path) as fh:
+                    stamps = [float(t) for t in json.load(fh)]
+            except (OSError, ValueError, TypeError):
+                stamps = []
+            now = time.time()
+            stamps = [t for t in stamps if now - t < 3600.0]
+            wait = (stamps[-1] + HIST_GAP_SEC - now) if stamps else 0.0
+            for window, cap in ((60.0, HIST_PER_MIN), (3600.0, HIST_PER_HOUR)):
+                inside = [t for t in stamps if now - t < window]
+                if len(inside) >= cap:
+                    wait = max(wait, inside[0] + window - now)
+            if wait <= 0:
+                stamps.append(now)
+                try:
+                    tmp = f"{path}.{os.getpid()}.tmp"
+                    with open(tmp, "w") as fh:
+                        json.dump(stamps, fh)
+                    os.replace(tmp, path)
+                except OSError:
+                    pass
+                return
+        time.sleep(min(wait, 5.0))
+
+
+def candle_data(api, params):
+    """api.getCandleData within the shared budget, retried on a rate refusal.
+
+    A refusal is retried after 5 s, 15 s and 30 s rather than left to the next
+    refresh: losing the morning's history means the engine reads structure off
+    stale bars until then. Any other error is raised at once."""
+    for k in range(len(HIST_RETRY_SEC) + 1):
+        _take_slot(api)
+        err, r = None, None
+        try:
+            r = api.getCandleData(params)
+        except Exception as e:
+            err = e
+        refused = (_rate_limited(err) if err is not None else
+                   isinstance(r, dict) and r.get("status") is False
+                   and _rate_limited(r.get("message", "")))
+        if not refused or k == len(HIST_RETRY_SEC):
+            if err is not None:
+                raise err
+            return r
+        time.sleep(HIST_RETRY_SEC[k])
+
 
 class CandleStore:
     def __init__(self, api, underlyings, interval="5m", lookback_days=5,
-                 refresh_sec=300.0, cache_dir=None, log=lambda *_: None):
+                 refresh_sec=900.0, cache_dir=None, log=lambda *_: None):
         self.api = api
         self.underlyings = {u.name: u for u in underlyings}
         self.interval = interval
@@ -217,7 +307,7 @@ class CandleStore:
             "fromdate": start.strftime("%Y-%m-%d 09:15"),
             "todate": end.strftime("%Y-%m-%d %H:%M"),
         }
-        r = self.api.getCandleData(params)
+        r = candle_data(self.api, params)
         # SmartApi reports API errors as a dict with status False rather than
         # raising, so without this check a refused request is an empty success.
         if isinstance(r, dict) and r.get("status") is False:
@@ -254,8 +344,7 @@ class CandleStore:
                                        f"token {u.spot_token} on {u.spot_exchange}")
             except Exception as e:
                 self._report_fetch_error(name, e)
-            # The historical endpoint is rate limited; space the calls generously.
-            time.sleep(2.5)
+            # Spacing between calls is candle_data's shared budget, not a sleep here.
 
     def _report_fetch_error(self, name, err):
         """Say it once per outage, and say what it means.
@@ -279,7 +368,11 @@ class CandleStore:
     def _run(self):
         while not self._stop.is_set():
             self.refresh_once()
-            self._stop.wait(self.refresh_sec)
+            # An index whose history was refused is tried again in a minute,
+            # not at the next 5-minute refresh; the ones already current are
+            # skipped by refresh_once, so this costs only the failed calls.
+            self._stop.wait(min(60.0, self.refresh_sec) if self._fetch_errors
+                            else self.refresh_sec)
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="candles", daemon=True)

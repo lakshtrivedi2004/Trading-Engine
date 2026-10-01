@@ -36,6 +36,7 @@ def main():
         from datetime import datetime, timedelta
         from arb.config import Credentials
         from arb.feed import AngelSession
+        from arb.candles import candle_data  # shared rate budget with the engines
         api = AngelSession(Credentials.load()).login().api
         gap = float(os.environ.get("GAP", "1.5"))
         for k, s in enumerate(names):
@@ -49,7 +50,7 @@ def main():
                 for tries in range(4):
                     time.sleep(gap * (1 + 10 * tries))
                     try:
-                        r = api.getCandleData({"exchange": "NSE", "symboltoken": uni[s]["eq_token"],
+                        r = candle_data(api, {"exchange": "NSE", "symboltoken": uni[s]["eq_token"],
                                                "interval": "ONE_MINUTE",
                                                "fromdate": t.strftime("%Y-%m-%d 09:15"),
                                                "todate": e.strftime("%Y-%m-%d 15:30")})

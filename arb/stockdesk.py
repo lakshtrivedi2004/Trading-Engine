@@ -293,7 +293,8 @@ class StockDesk:
         try:
             end = now_ist()
             from datetime import timedelta
-            r = self.api.getCandleData({
+            from arb.candles import candle_data
+            r = candle_data(self.api, {
                 "exchange": "NSE", "symboltoken": info.get("eq_token"),
                 "interval": "ONE_MINUTE",
                 "fromdate": (end - timedelta(days=4)).strftime("%Y-%m-%d 09:15"),
