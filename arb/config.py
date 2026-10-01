@@ -840,6 +840,28 @@ class IntradayLimits:
     # ./run.sh_real holds a systemd-inhibit sleep/lid lock for as long as the
     # LIVE engine runs (./run.sh always does for paper). Off = no lock.
     live_block_sleep: bool = False
+    # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is
+    # not known final at Angel (still working, or the place call raised) is
+    # remembered on the position, and no second exit is sent until it is
+    # resolved; the unknown-status reconcile reads the sign of what is held;
+    # cancels use the order's own variety; a partial fill can trip the daily
+    # loss halt. Off = today's behaviour.
+    exit_safety_fixes: bool = False
+    # Send an "ordertag" (TE...) with every order, so the start guard can tell
+    # the engine's leftovers from orders placed by hand. Off until a probe
+    # shows Angel accepts it.
+    order_tags: bool = False
+    # Duration of the limit orders the live broker sends: "IOC" (as before)
+    # or "DAY". Angel bars IOC for algo orders; a DAY order still working
+    # after confirm_timeout is cancelled by the broker. Paper ignores it.
+    order_duration: str = "IOC"
+    # An entry whose status could not be read but which the broker shows
+    # held is adopted as a position under the software stop (entries stay
+    # halted). Off = halt only, with nothing protecting it. Options only.
+    adopt_unknown_entry: bool = False
+    # Place, modify and cancel calls held to this many a second, together
+    # (Angel: 9/s combined per client). 0 = no gate.
+    order_rate_per_sec: float = 0.0
 
     @classmethod
     def load(cls, path=None):

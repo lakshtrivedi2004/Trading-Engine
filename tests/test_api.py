@@ -240,5 +240,50 @@ b.net_position("X")
 g = gaps(api.calls["position"])
 check("back-to-back position reads are paced to 1/s", g and min(g) >= 1.09, f"gaps {g}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("4. Place, modify and cancel are held by the order bucket only (Angel: 9/s together)")
+
+
+class Orders:
+    """Every order call stamps the clock; orders complete at once."""
+    def __init__(self):
+        self.calls = []
+
+    def placeOrderFullResponse(self, params):
+        self.calls.append(("place", time.time()))
+        return {"status": True, "data": {"orderid": "9", "uniqueorderid": "u9"}}
+
+    def individual_order_details(self, uid):
+        return {"data": {"status": "complete", "filledshares": "65", "averageprice": "100.0"}}
+
+    def cancelOrder(self, oid, variety):
+        self.calls.append(("cancel", time.time()))
+        return {"status": True, "data": {"orderid": oid}}
+
+
+try:
+    api = Orders()
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True, confirm_timeout=2.0)
+    b.order_rate_per_sec = 8.0
+    for _ in range(3):
+        b.cancel_order("9", "NORMAL")
+    b.place_structure(_Ticket([dict(leg)], 65, "T", "t", ""), 1)
+    b.cancel_order("9", "NORMAL")
+    g = gaps([t for _, t in api.calls])
+    check("cancel and place share the bucket: >= 1/8 s apart at 8/s",
+          len(g) == 4 and min(g) >= 0.124, f"gaps {[round(x, 3) for x in g]}")
+    check("modifyOrder and cancelOrder have no poll gap of their own (bucket only)",
+          "modifyOrder" not in LiveBroker.POLL_GAP and "cancelOrder" not in LiveBroker.POLL_GAP
+          and "placeOrderFullResponse" not in LiveBroker.POLL_GAP and hasattr(b, "_order_gate"))
+    api = Orders()
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    t0 = time.time()
+    for _ in range(5):
+        b.cancel_order("9", "NORMAL")
+    check("with the rate at 0 (the code default) order calls are not held", time.time() - t0 < 0.1,
+          f"{time.time() - t0:.3f}s")
+except Exception as ex:                                # the parent commit has no bucket
+    check("order bucket (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

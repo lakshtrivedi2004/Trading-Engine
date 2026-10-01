@@ -73,6 +73,19 @@ class Position:
     done_gross: float = 0.0
     done_cost: float = 0.0
     done_value: float = 0.0
+    # An exit order not known to be over at Angel (exit_safety_fixes): no
+    # second exit goes out until it is. A tag of "?" means the place call
+    # raised before an id came back - look for it by symbol.
+    pending_exit_oid: str = ""
+    pending_exit_uid: str = ""
+    pending_exit_tag: str = ""
+    pending_exit_booked: int = 0     # of its fills, already booked
+    pending_exit_booked_px: float = 0.0   # ...and the price they were booked at
+    pending_exit_at: float = 0.0     # last placed, cancel sent, or empty search
+    pending_none_seen: int = 0       # reads that could not find or read it
+    # Set when the broker shows the position past flat (a naked short or
+    # long): no exit is sent for it again; a human closes it in the app.
+    exit_blocked: str = ""
 
     def __post_init__(self):
         if not self.initial_stop:

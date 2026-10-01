@@ -44,5 +44,10 @@
   "expiry_trade_next": true,
   "market_orders": true,
   "market_protection_pct": 2.5,
-  "live_block_sleep": true
+  "live_block_sleep": true,
+  "exit_safety_fixes": true,
+  "order_tags": false,
+  "order_duration": "DAY",
+  "adopt_unknown_entry": true,
+  "order_rate_per_sec": 8.0
 }

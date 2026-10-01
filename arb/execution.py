@@ -92,6 +92,9 @@ class LiveBroker:
         self._lock = threading.Lock()
         self._pace_lock = threading.Lock()
         self._last_call = {}
+        self._order_lock = threading.Lock()   # the order gate's own: a paced
+        self._next_order_at = 0.0             # poll sleeping must not hold up an exit
+        self._tag_n = 0
 
     # Polling pace per endpoint, in seconds between calls. Angel publishes 1/s
     # for orderBook and the position book; the old status loop asked every
@@ -108,6 +111,36 @@ class LiveBroker:
                 time.sleep(wait)
             self._last_call[name] = time.time()
         return getattr(self.api, name)(*a)
+
+    # Place, modify and cancel share one budget at Angel: 9 requests a second
+    # across the three, per client code. 0 = no gate (as before). The gate
+    # spaces calls 1/rate apart rather than letting a full bucket burst: a
+    # bucket of `rate` tokens refilling at `rate`/s can spend 2x rate inside
+    # one second.
+    order_rate_per_sec = 0.0
+    # Set from IntradayLimits by run_bot (exit_safety_fixes, order_tags).
+    exit_safety_fixes = False
+    order_tags = False
+
+    def _order_gate(self):
+        rate = float(self.order_rate_per_sec or 0.0)
+        if rate <= 0:
+            return
+        with self._order_lock:
+            now = time.monotonic()
+            wait = self._next_order_at - now
+            if wait > 0:
+                time.sleep(wait)
+                now += wait
+            self._next_order_at = now + 1.0 / rate
+
+    def new_tag(self, kind):
+        """An ordertag that marks the order as the engine's: TE, L(ive) or
+        P(aper), the kind (E entry, X exit, S broker stop), then a stamp.
+        15 characters; Angel allows under 20."""
+        self._tag_n += 1
+        return (f"TE{'L' if self.mode == 'live' else 'P'}{kind}"
+                f"{now_ist():%d%H%M%S}{self._tag_n % 1000:03d}")
 
     # A plain MARKET order is refused for API orders on NSE F&O (NSE/FAOP/69296,
     # NSE retail-algo FAQ Q11) and Angel takes only limits on BFO. "At market"
@@ -148,10 +181,12 @@ class LiveBroker:
             "squareoff": "0",
             "stoploss": "0",
             "quantity": str(int(leg["qty"])),
+            **({"ordertag": leg["tag"]} if self.order_tags and leg.get("tag") else {}),
         }
 
     def _place_one(self, leg):
         try:
+            self._order_gate()
             oid = self.api.placeOrder(self._order_params(leg, leg["quote_price"]))
             return leg, oid, None
         except Exception as e:
@@ -185,18 +220,35 @@ class LiveBroker:
 
     def _place_confirmed(self, leg):
         """Place one order and wait for its real outcome. The leg comes back with
-        filled / qty / fill_price set from the broker, never from hope."""
+        filled / qty / fill_price set from the broker, never from hope.
+
+        With exit_safety_fixes the leg also says whether the order is known to
+        be over at Angel (leg["final"]): an order still working after the
+        cancel, or one whose place call raised, may yet fill, and nothing may
+        be sent over it."""
+        fixes = self.exit_safety_fixes
+        if self.order_tags:
+            kind = leg.get("kind") or ("E" if leg["side"] == "BUY" else "X")
+            leg["tag"] = self.new_tag(kind)
         params = self._order_params(leg, leg.get("quote_price"), market=bool(leg.get("market")))
         leg["filled"], leg["fill_price"], leg["order_id"] = False, 0.0, None
         try:
+            self._order_gate()
             r = self.api.placeOrderFullResponse(params)
         except Exception as e:
+            if fixes:
+                # A timeout here does not mean Angel never took the order.
+                leg["broker_status"], leg["place_exception"], leg["final"] = "unknown", True, False
             return f"{leg['symbol']}: place failed: {e}"
         data = (r or {}).get("data") if isinstance(r, dict) else None
         if not data or not data.get("orderid"):
+            if fixes:
+                leg["final"] = True               # refused: nothing is working
             return f"{leg['symbol']}: order refused: {(r or {}).get('message') if isinstance(r, dict) else r}"
         oid, uid = data.get("orderid"), data.get("uniqueorderid")
         leg["order_id"] = oid
+        if fixes:
+            leg["uid"] = uid or ""
         st = None
         deadline = time.time() + self.confirm_timeout
         while time.time() < deadline:
@@ -207,7 +259,8 @@ class LiveBroker:
         if not st or st[0] not in self._FINAL:
             # Still working after the timeout: pull it, then read what filled.
             try:
-                self.api.cancelOrder(oid, "NORMAL")
+                self._order_gate()
+                self.api.cancelOrder(oid, params["variety"] if fixes else "NORMAL")
             except Exception:
                 pass
             end = time.time() + 3.0
@@ -216,6 +269,8 @@ class LiveBroker:
                 if st and st[0] in self._FINAL:
                     break
                 time.sleep(0.3)
+        if fixes:
+            leg["final"] = bool(st and st[0] in self._FINAL)
         if not st:
             leg["broker_status"] = "unknown"
             return (f"{leg['symbol']}: order {oid} status UNKNOWN - check the Angel app; "
@@ -227,6 +282,85 @@ class LiveBroker:
             leg["fill_price"] = avg if avg > 0 else float(leg.get("quote_price") or 0.0)
             return None
         return f"{leg['symbol']}: {status or 'not filled'}{(' - ' + why) if why else ''}"
+
+    def _row_state(self, row):
+        """One order-book row as a dict. orderstatus is read first: after a
+        modify, status can say "modified" while orderstatus says what it is."""
+        def num(k):
+            try:
+                return float(row.get(k) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        status = str(row.get("orderstatus") or row.get("status") or "").lower()
+        return {"status": status, "final": status in self._FINAL,
+                "filled": int(num("filledshares")), "avg": num("averageprice"),
+                "unfilled": int(num("unfilledshares")), "qty": int(num("quantity")),
+                "trigger": num("triggerprice"), "price": num("price"),
+                "ordertype": str(row.get("ordertype") or ""),
+                "variety": str(row.get("variety") or ""),
+                "tag": str(row.get("ordertag") or ""),
+                "oid": str(row.get("orderid") or ""),
+                "uid": str(row.get("uniqueorderid") or ""),
+                "symbol": str(row.get("tradingsymbol") or ""),
+                "side": str(row.get("transactiontype") or "").upper(),
+                "text": str(row.get("text") or "")}
+
+    def order_state(self, uid, oid):
+        """The order as Angel has it now (see _row_state), or None if it cannot
+        be read. Anything but complete / cancelled / rejected is still live."""
+        row = None
+        if uid:
+            try:
+                r = self._paced("individual_order_details", uid) or {}
+                row = r.get("data") if isinstance(r, dict) else None
+            except Exception:
+                row = None
+        if not row and oid:
+            try:
+                book = self._paced("orderBook") or {}
+                row = next((x for x in (book.get("data") or [])
+                            if str(x.get("orderid")) == str(oid)), None)
+            except Exception:
+                row = None
+        return self._row_state(row) if isinstance(row, dict) and row else None
+
+    def open_orders(self, symbol=None):
+        """Every order still working at Angel (one paced orderBook read), for
+        one tradingsymbol if given. None if the book cannot be read."""
+        try:
+            r = self._paced("orderBook")
+        except Exception:
+            return None
+        if not isinstance(r, dict) or r.get("status") is False:
+            return None
+        rows = [self._row_state(x) for x in (r.get("data") or []) if isinstance(x, dict)]
+        return [x for x in rows if not x["final"]
+                and (symbol is None or x["symbol"] == str(symbol))]
+
+    def cancel_order(self, oid, variety):
+        """Cancel one order with its own variety. {ok, error, code}; ok only
+        means Angel took the request - the order's status says if it worked."""
+        try:
+            self._order_gate()
+            r = self.api.cancelOrder(oid, variety)
+        except Exception as e:
+            return {"ok": False, "error": str(e), "code": ""}
+        if isinstance(r, dict) and r.get("status") is False:
+            return {"ok": False, "error": str(r.get("message") or ""),
+                    "code": str(r.get("errorcode") or "")}
+        return {"ok": True, "error": "", "code": ""}
+
+    def cancel_working(self, symbols):
+        """Cancel every working order in these symbols. The rows acted on, or
+        None if the order book could not be read."""
+        rows = self.open_orders()
+        if rows is None:
+            return None
+        want = {str(s) for s in symbols}
+        done = [x for x in rows if x["symbol"] in want]
+        for x in done:
+            x["cancel"] = self.cancel_order(x["oid"], x["variety"] or "NORMAL")
+        return done
 
     def net_position(self, symbol):
         """Net quantity the broker shows in `symbol` today, or None if unknown.
@@ -283,6 +417,7 @@ class LiveBroker:
             flip = dict(leg)
             flip["side"] = "SELL" if leg["side"] == "BUY" else "BUY"
             try:
+                self._order_gate()
                 oid = self.api.placeOrder(self._order_params(flip, market=True))
                 return None if oid else f"unwind {leg['symbol']}: no order id"
             except Exception as e:

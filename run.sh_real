@@ -100,6 +100,18 @@ if held:
     print("\033[31mthe account already holds positions the engine did not open:\033[0m")
     for h in held: print("   ", h)
     print("close them in the Angel app first"); sys.exit(1)
+if L.exit_safety_fixes:
+    from arb.execution import LiveBroker
+    working = LiveBroker(api, None).open_orders()
+    if working is None:
+        print("\033[31mcould not read the Angel order book\033[0m"); sys.exit(1)
+    theirs = [w for w in working if not w["tag"].startswith("TE")]
+    for w in working:
+        print(f"  working order         {w['oid']} {w['symbol']} {w['side']} {w['status']}"
+              + ("  (the engine's own; cancelled at start)" if w["tag"].startswith("TE") else ""))
+    if theirs:
+        print("\033[31mthe account has working orders the engine did not place - cancel them in the Angel app first\033[0m")
+        sys.exit(1)
 risk = funds * L.max_risk_pct_per_trade / 100
 halt = funds * L.max_daily_loss_pct / 100
 print(f"  available funds       Rs {funds:,.2f}  ({src})")

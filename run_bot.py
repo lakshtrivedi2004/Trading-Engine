@@ -103,6 +103,33 @@ def open_broker_positions(api):
     return out
 
 
+def refuse_working_orders(broker, log=print, wait=5.0):
+    """Live start guard for orders, as open_broker_positions is for positions.
+    A working order the engine did not place - or cannot see the end of - is
+    refused: it could fill into a position nobody manages. One the engine left
+    behind (tag TE...) on a symbol now flat is cancelled, and must read final
+    within `wait` seconds."""
+    rows = broker.open_orders()
+    if rows is None:
+        raise SystemExit("LIVE START REFUSED: the Angel order book could not be read")
+    for r in rows:
+        if r["tag"].startswith("TE") and broker.net_position(r["symbol"]) == 0:
+            broker.cancel_order(r["oid"], r["variety"] or "NORMAL")
+            end, st = time.time() + wait, None
+            while time.time() < end:
+                st = broker.order_state(r["uid"], r["oid"])
+                if st and st["final"]:
+                    break
+                time.sleep(0.5)
+            if not (st and st["final"]):
+                raise SystemExit(f"LIVE START REFUSED: stale engine order {r['oid']} {r['symbol']} "
+                                 f"would not cancel - cancel it in the Angel app")
+            log(f"stale engine order cancelled: {r['oid']} {r['symbol']} {r['side']} ({r['status']})")
+            continue
+        raise SystemExit(f"LIVE START REFUSED: working order {r['oid']} {r['symbol']} "
+                         f"{r['status']} at Angel - cancel it in the app")
+
+
 def stock_candidates(sm, L):
     """F&O stocks worth subscribing: those whose cached NSE daily history says
     they are liquid enough to ever pass the scan. Without a cache (first run)
@@ -396,9 +423,18 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
     interval = args.candle_interval or L.candle_interval
 
     journal = Journal(directory="journal/live") if mode == "live" else Journal()
-    broker = (LiveBroker(session.api, cm, product="INTRADAY", confirm_fills=True, log=log)
+    duration = str(L.order_duration or "IOC").strip().upper()
+    if mode == "live" and duration not in ("IOC", "DAY"):
+        raise SystemExit(f"LIVE START REFUSED: order_duration {L.order_duration!r} is not IOC or DAY")
+    broker = (LiveBroker(session.api, cm, product="INTRADAY", duration=duration,
+                         confirm_fills=True, log=log)
               if mode == "live" else PaperBroker(cm))
     broker.protection_pct = L.market_protection_pct
+    broker.order_rate_per_sec = L.order_rate_per_sec
+    broker.exit_safety_fixes = L.exit_safety_fixes
+    broker.order_tags = L.order_tags
+    if mode == "live" and L.exit_safety_fixes:
+        refuse_working_orders(broker, log)
 
     # Structure is read off index candles, so this is on the critical path now -
     # not a dashboard ornament. It starts whether or not the dashboard runs.
