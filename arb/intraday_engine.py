@@ -478,12 +478,19 @@ class IntradayEngine:
                      + (" at MARKET" if pos.exit_attempts >= int(getattr(self.L, "exit_market_after", 3)) else ""))
             return None
 
-        from arb.costs import leg_cost
-        inst = "EQ" if eq else "OPT"
         # What actually filled. A partial exit is booked now - it is realised
         # money and counts toward the daily loss halt - and the rest of the
         # position stays open and managed.
         q = max(1, min(int(legs[0].get("qty") or pos.qty), pos.qty))
+        return self._book_fill(pos, q, fill, reason, leg)
+
+    def _book_fill(self, pos, q, fill, reason, leg, extra=None):
+        """Book q units of pos closed at fill. Returns the trade record once the
+        whole position is gone, None after a partial fill."""
+        from arb.costs import leg_cost
+        eq = pos.opt == "EQ"
+        short = eq and pos.side < 0
+        inst = "EQ" if eq else "OPT"
         part_cost = (leg_cost(pos.entry, q, "SELL" if short else "BUY", inst, self.cm)
                      + leg_cost(fill, q, "BUY" if short else "SELL", inst, self.cm))
         part_points = (pos.entry - fill) if short else (fill - pos.entry)
@@ -525,7 +532,7 @@ class IntradayEngine:
         else:
             self.losses += 1
             self._on_loss()
-        if reason in ("stop_loss", "structure_broken") and net < 0:
+        if reason in ("stop_loss", "structure_broken", "broker_stop") and net < 0:
             self._symbol_cooldown[pos.symbol] = time.time()
 
         rec = {
@@ -560,6 +567,7 @@ class IntradayEngine:
                             "strategy": self._strategy_name(pos)},
             "legs": [dict(leg, fill_price=fill, filled=True)],
             **pos.detail,
+            **(extra or {}),
         }
         self.records.append(rec)
         try:
