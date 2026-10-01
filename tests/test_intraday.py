@@ -250,6 +250,34 @@ if plan:
     p_old = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=plan["risk_inr"] * 1.02)
     check("F5 off: today's 5% rounding allowance is unchanged",
           p_old is not None and p_old["planned_risk_inr"] == p_old["risk_inr"])
+    # With costs inside the cap, friction is measured against the whole bet
+    # (stop + costs + slippage), not the stop alone - otherwise the cost is
+    # counted twice and almost nothing can trade (2 Oct 2026 replay).
+    fr = IntradayLimits(max_cost_frac_of_risk=0.20)
+    pr = plan["risk_points"]
+    cost_mid = 0.2 * pr * 1.2                      # over 20% of the stop alone...
+    xtra = cost_mid + 1.0                          # ...under 20% of stop + extra
+    big = (pr + xtra) * lot + 1.0
+    if 2 * pr - cost_mid >= fr.min_net_points and cost_mid <= 0.2 * (pr + xtra):
+        check("friction with costs inside: judged on stop + costs, so this plan stands",
+              plan_trade(pick, st_bull, BULL, fr, cost_mid, max_risk_inr=big,
+                         extra_risk_points=xtra) is not None)
+    check("friction without costs inside: unchanged, the same cost is refused",
+          plan_trade(pick, st_bull, BULL, fr, cost_mid, max_risk_inr=big) is None)
+
+from arb.intraday_engine import IntradayEngine as _IE
+from arb.costs import leg_cost as _leg_cost
+_e = _IE.__new__(_IE)
+_e.cm = CostModel()
+_e.L = IntradayLimits(exact_trade_costs=True)
+_exact = (_leg_cost(190.0, 65, "BUY", "OPT", _e.cm) + _leg_cost(190.0, 65, "SELL", "OPT", _e.cm)) / 65
+check("exact_trade_costs: the planned round trip is the exact BUY + SELL charge the journal books",
+      abs(_e._round_trip_points(190.0, 65) - _exact) < 1e-9, f"{_exact * 65:.2f} rupees a lot")
+_e.L = IntradayLimits()
+check("exact_trade_costs off: the scanner's upper bound, as before (and never below exact)",
+      _e._round_trip_points(190.0, 65) == 2.0 * per_unit_cost_points(190.0, 1, 0, 65, _e.cm)
+      and _e._round_trip_points(190.0, 65) >= _exact)
+
 fn_hits = []
 sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
            max_delta_fn=lambda px, spr: fn_hits.append((px, spr)) or 0.0)

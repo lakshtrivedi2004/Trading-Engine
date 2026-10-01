@@ -71,5 +71,6 @@
   "same_side_cooldown_min": 30.0,
   "risk_includes_costs": true,
   "exit_slip_spreads": 1.0,
-  "exit_slip_frac": 0.01
+  "exit_slip_frac": 0.01,
+  "exact_trade_costs": true
 }

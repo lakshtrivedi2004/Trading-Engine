@@ -869,6 +869,10 @@ class IntradayLimits:
     # spreads + exit_slip_frac of the premium) INSIDE max_risk_pct_per_trade,
     # so a stop-out loses at most the cap. Stocks: fees, slippage and spread.
     risk_includes_costs: bool = False
+    # Price a trade's round trip with the exact BUY + SELL charges (the cost
+    # the journal books), not the arbitrage scanner's worst-case bound. See
+    # IntradayEngine._round_trip_points.
+    exact_trade_costs: bool = False
     exit_slip_spreads: float = 1.0
     exit_slip_frac: float = 0.01
     # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is

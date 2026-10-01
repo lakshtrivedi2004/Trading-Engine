@@ -34,7 +34,7 @@ from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direct
                         session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
 from arb.smc import BEAR, BULL, RANGE, analyse
-from arb.costs import per_unit_cost_points
+from arb.costs import leg_cost, per_unit_cost_points
 from arb import optionflow, trailing
 
 
@@ -266,7 +266,19 @@ class IntradayEngine:
         The arbitrage engine charged one side because it held to settlement.
         An intraday scalp pays brokerage, exchange fees, GST and slippage twice,
         and a target set on the one-sided figure is a target that does not exist.
+
+        With exact_trade_costs the figure is the exact BUY + SELL charge at this
+        premium - the arithmetic _book_fill books when the trade closes. The
+        older figure is the arbitrage scanner's upper bound (STT on both legs
+        plus a slippage tick per leg), about Rs 121-124 a lot against the Rs
+        94-99 actually booked on 1 Oct 2026. Fed into max_cost_frac_of_risk and
+        the costs-inside-the-cap sizing, that overstatement refused nearly every
+        trade the backtest takes (1 trade in 21 replayed sessions against ~8).
         """
+        if getattr(self.L, "exact_trade_costs", False):
+            q = max(1, int(qty))
+            return (leg_cost(price, q, "BUY", "OPT", self.cm)
+                    + leg_cost(price, q, "SELL", "OPT", self.cm)) / q
         return 2.0 * per_unit_cost_points(price, 1, 0, qty, self.cm)
 
     @staticmethod

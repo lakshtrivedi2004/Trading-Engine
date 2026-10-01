@@ -292,8 +292,13 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     # trip is a big slice of it is a trade the spread and fees mostly decide.
     # On 7 real sessions (15-24 Sep 2026, research/PAPERS.md section 0) the
     # tight-stop trades were where the whole after-cost loss came from.
+    # With costs inside the cap (extra > 0) the bet is the stop PLUS the costs
+    # and slippage it already carries, so friction is measured against that
+    # whole: measured against the stop alone, the same cost is counted twice
+    # and the window left between the friction floor and the cap is a few
+    # points wide on every index.
     frac = float(getattr(limits, "max_cost_frac_of_risk", 0.0) or 0.0)
-    if frac > 0 and cost_points > frac * prem_risk:
+    if frac > 0 and cost_points > frac * (prem_risk + extra):
         return None
     if stop <= 0.05:
         return None

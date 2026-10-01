@@ -19,7 +19,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE); sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, "tools"))
 import backtest as bt
 from bsmodel import bs, delta as bs_delta, T_years, expiry_calendar
-from arb.config import IntradayLimits
+from arb.config import CostModel, IntradayLimits
+from arb.costs import leg_cost
+CM = CostModel.load()
 
 bt.LOT.update(FINNIFTY=60, MIDCPNIFTY=120); bt.STEP.update(FINNIFTY=100.0, MIDCPNIFTY=25.0)
 L = IntradayLimits.load()
@@ -60,11 +62,25 @@ class Index:
 def when(iso, plus=1):
     return datetime.fromisoformat(iso) + timedelta(minutes=plus)
 
+def _exact_rt(px, lot):
+    """Exact BUY + SELL charges at one premium, per unit (arb/costs.py:leg_cost
+    with config/costs.json) - what the engine books, and with
+    exact_trade_costs what it plans with."""
+    return (leg_cost(px, lot, "BUY", "OPT", CM) + leg_cost(px, lot, "SELL", "OPT", CM)) / lot
+
+
 def reprice(t, ix, capital, next_expiry_on_expiry_day=False, costs_inside=False,
-            slip_spreads=1.0, slip_frac=0.01):
+            slip_spreads=1.0, slip_frac=0.01, exact_costs=None):
     """costs_inside (owner's F5, 1 Oct 2026): the round trip and an exit slip of
     slip_spreads x spread + slip_frac x premium count INSIDE the per-trade cap,
-    so a stopped-out trade loses at most the cap, costs included."""
+    so a stopped-out trade loses at most the cap, costs included.
+
+    exact_costs (default: the config's exact_trade_costs): charge the exact
+    BUY + SELL fees instead of a flat Rs 75 a lot, and apply the engine's own
+    plan_trade friction test (max_cost_frac_of_risk) - without it the model
+    took trades the live engine refuses."""
+    if exact_costs is None:
+        exact_costs = bool(getattr(L, "exact_trade_costs", False))
     rows, lot, step = ix.rows, ix.lot, ix.step
     i, j, side = t["i"], t["j"], t["side"]
     S0 = rows[i][4]; opt = "CE" if side > 0 else "PE"
@@ -90,7 +106,8 @@ def reprice(t, ix, capital, next_expiry_on_expiry_day=False, costs_inside=False,
         dlt = abs(bs_delta(S0, K, T0, sig, opt))
         md = max_delta
         if costs_inside:
-            extra = FEE / lot + slip_spreads * sp + slip_frac * ask
+            fee = _exact_rt(ask, lot) if exact_costs else FEE / lot
+            extra = fee + slip_spreads * sp + slip_frac * ask
             md = (cap_inr / lot - extra) / idx_risk
         if ask * lot > capital or dlt < L.min_delta or dlt > md or sp > L.max_spread_points:
             continue
@@ -99,12 +116,17 @@ def reprice(t, ix, capital, next_expiry_on_expiry_day=False, costs_inside=False,
     if best is None: return None
     K, mid0, ask0, dlt, sp = best
     prem_risk = min(max(idx_risk * dlt, 2 * sp), ask0 * L.max_risk_frac_of_premium)
+    fee_pts = _exact_rt(ask0, lot) if exact_costs else FEE / lot
+    extra = (fee_pts + slip_spreads * sp + slip_frac * ask0) if costs_inside else 0.0
     if costs_inside:
-        if (prem_risk + FEE / lot + slip_spreads * sp + slip_frac * ask0) * lot > cap_inr + 1e-6:
+        if (prem_risk + extra) * lot > cap_inr + 1e-6:
             return None
     elif prem_risk * lot > cap_inr * 1.05: return None
-    cost_pts = FEE / lot + sp
+    cost_pts = fee_pts if exact_costs else FEE / lot + sp
     if 2 * prem_risk - cost_pts < L.min_net_points: return None
+    frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
+    if exact_costs and frac > 0 and cost_pts > frac * (prem_risk + extra):
+        return None
     stop = ask0 - prem_risk
     if stop <= 0.05: return None
     trailed, exit_k, exit_px, why = False, None, None, t["why"]
@@ -120,7 +142,9 @@ def reprice(t, ix, capital, next_expiry_on_expiry_day=False, costs_inside=False,
     if exit_k is None:
         Tj = T0 - THETA_F * (T0 - T_years(when(rows[j][0]), exp, ix.days))
         exit_k, exit_px = j, bs(S_exit, K, max(Tj, 0.0), sig, opt) - sp / 2
-    return dict(net=(exit_px - ask0) * lot - FEE, held=exit_k - i, why=why, expiry_day=expiry_today,
+    fees = (leg_cost(ask0, lot, "BUY", "OPT", CM) + leg_cost(max(exit_px, 0.05), lot, "SELL", "OPT", CM)
+            if exact_costs else FEE)
+    return dict(net=(exit_px - ask0) * lot - fees, held=exit_k - i, why=why, expiry_day=expiry_today,
                 dte=(exp - d0).days, prem=ask0, lot_cost=ask0 * lot, strike=K, delta=dlt)
 
 _C = None
