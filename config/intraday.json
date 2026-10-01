@@ -47,7 +47,7 @@
   "live_block_sleep": true,
   "exit_safety_fixes": true,
   "order_tags": false,
-  "order_duration": "DAY",
+  "order_duration": "IOC",
   "adopt_unknown_entry": true,
   "order_rate_per_sec": 8.0
 }
