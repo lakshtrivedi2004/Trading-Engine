@@ -14,6 +14,7 @@ import pyotp
 from SmartApi import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 
+from arb.apilog import instrument
 from arb.book import QuoteStore, normalise_best5, PAISE
 
 NSE_CM, NSE_FO, BSE_CM, BSE_FO = 1, 2, 3, 4
@@ -98,7 +99,8 @@ class AngelSession:
         # Re-login reuses the same SmartConnect so every holder of ``session.api``
         # (margin service, candle store, live broker) sees the renewed tokens.
         if self.api is None:
-            self.api = SmartConnect(api_key=self.creds.api_key)
+            # Every REST call is timed into logs/api_calls.csv (arb/apilog.py).
+            self.api = instrument(SmartConnect(api_key=self.creds.api_key))
         totp = pyotp.TOTP(self.creds.totp_secret).now()
         data = self.api.generateSession(self.creds.client_id, self.creds.pin, totp)
         if not (data and data.get("status")):
