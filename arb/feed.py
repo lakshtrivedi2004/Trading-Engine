@@ -156,6 +156,18 @@ class MarketFeed:
         self._stopping = threading.Event()
         self._watchdog = None
         self._consecutive_failures = 0
+        # Each connection is one generation. A socket the watchdog gives up on
+        # can stay blocked inside the library for minutes (29 Sep 2026, 12:49:
+        # close_connection() did not return it, and with no tick ever arriving
+        # the old watchdog never looked again - two minutes with a position open
+        # and no stop being checked). So a dead socket is abandoned, not waited
+        # for: its thread is left to die, its callbacks are ignored, and _run
+        # opens the next generation as soon as _dead is set.
+        self._gen = 0
+        self._gen_started = 0.0
+        self._opened_ns = 0
+        self._dead = threading.Event()
+        self.connect_timeout = 30.0
         self._slot_cache = self.store.slot_of_token
         # Which chain (expiry) each slot belongs to, and a monotonic per-chain
         # tick counter. A tick touches exactly one expiry, so the scanner can skip
@@ -208,6 +220,7 @@ class MarketFeed:
                       for et, toks in self.subscriptions.items() if toks]
         if token_list:
             self.sws.subscribe(self.correlation_id, SmartWebSocketV2.SNAP_QUOTE, token_list)
+        self._opened_ns = time.perf_counter_ns()
         self.connected.set()
 
     def _on_error(self, wsapp, error):
@@ -215,35 +228,56 @@ class MarketFeed:
 
     def _on_close(self, wsapp, *a):
         self.connected.clear()
+        self._dead.set()
         self.log("[feed] websocket closed")
 
-    def _new_socket(self):
+    def _new_socket(self, gen):
         # max_retry_attempt=0: the library must not reconnect from inside its own
         # error callback (a nested run_forever); _run below does it instead.
         sws = SmartWebSocketV2(
             self.session.jwt, self.session.creds.api_key,
             self.session.creds.client_id, self.session.feed_token,
             max_retry_attempt=0)
-        sws.on_data = self._on_data
-        sws.on_open = self._on_open
-        sws.on_error = self._on_error
-        sws.on_close = self._on_close
+
+        def live(fn):
+            # An abandoned socket that wakes up later must not touch the store
+            # or flip the connection state of the one that replaced it.
+            return lambda *a: fn(*a) if gen == self._gen else None
+        sws.on_data = live(self._on_data)
+        sws.on_open = live(self._on_open)
+        sws.on_error = live(self._on_error)
+        sws.on_close = live(self._on_close)
         return sws
 
-    def _run(self):
-        """Connect, block until the socket dies, reconnect. Forever."""
-        while not self._stopping.is_set():
-            self.sws = self._new_socket()
-            opened_at = time.time()
-            try:
-                self.sws.connect()             # returns only when the socket closes
-            except Exception as e:
+    def _connect(self, sws, gen):
+        try:
+            sws.connect()                      # returns only when the socket closes
+        except Exception as e:
+            if gen == self._gen:
                 self.log(f"[feed] connect failed: {e}")
+        if gen == self._gen:
+            self._dead.set()
+
+    def _run(self):
+        """Connect, wait until the socket dies or is declared dead, reconnect. Forever."""
+        while not self._stopping.is_set():
+            self._gen += 1
+            gen = self._gen
+            self._dead.clear()
+            self.connected.clear()
+            self._opened_ns = 0
+            self._gen_started = time.time()
+            self.sws = sws = self._new_socket(gen)
+            threading.Thread(target=self._connect, args=(sws, gen),
+                             name=f"ws-{gen}", daemon=True).start()
+            while not self._dead.wait(0.5):
+                if self._stopping.is_set():
+                    break
             self.connected.clear()
             if self._stopping.is_set():
                 break
             # A socket that lived less than a few seconds did not really connect.
-            if time.time() - opened_at < 5.0:
+            if time.time() - self._gen_started < 5.0 or not self._opened_ns:
                 self._consecutive_failures += 1
             else:
                 self._consecutive_failures = 0
@@ -261,20 +295,36 @@ class MarketFeed:
             self.log(f"[feed] reconnecting in {delay:.0f}s (reconnect #{self.reconnects})")
             self._stopping.wait(delay)
 
+    def _declare_dead(self, why):
+        self.stalls += 1
+        self.log(f"[feed] {why}; forcing reconnect (stall #{self.stalls})")
+        try:
+            self.sws.close_connection()        # best effort; it may never return the socket
+        except Exception as e:
+            self.log(f"[feed] close on stall failed: {e}")
+        self._dead.set()                       # _run moves on either way
+
     def _watch(self):
+        alarmed = 0                            # one alarm per generation
         while not self._stopping.wait(1.0):
-            if not self.connected.is_set() or not self.last_tick_ns:
+            gen = self._gen
+            if gen == alarmed or self._dead.is_set() or not self.market_open():
                 continue
-            quiet = (time.perf_counter_ns() - self.last_tick_ns) / 1e9
-            if quiet > self.stale_sec and self.market_open():
-                self.stalls += 1
-                self.log(f"[feed] no ticks for {quiet:.0f}s while market open; "
-                         f"forcing reconnect (stall #{self.stalls})")
-                self.last_tick_ns = 0            # one alarm per stall
-                try:
-                    self.sws.close_connection()  # run_forever returns; _run reconnects
-                except Exception as e:
-                    self.log(f"[feed] close on stall failed: {e}")
+            if not self.connected.is_set():
+                # A connect that never opens is as dead as one that went quiet.
+                waited = time.time() - self._gen_started
+                if self._gen_started and waited > self.connect_timeout:
+                    alarmed = gen
+                    self._declare_dead(f"socket not open after {waited:.0f}s")
+                continue
+            # Quiet is measured from the last tick, or from the open if this
+            # socket has not ticked yet: a socket that opens and never ticks is
+            # caught too, which the old "no tick yet" skip missed.
+            heard = max(self.last_tick_ns, self._opened_ns)
+            quiet = (time.perf_counter_ns() - heard) / 1e9
+            if quiet > self.stale_sec:
+                alarmed = gen
+                self._declare_dead(f"no ticks for {quiet:.0f}s while market open")
 
     def start(self, block=False):
         self._stopping.clear()
