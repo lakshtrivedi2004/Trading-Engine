@@ -181,8 +181,10 @@ function tiles(d){
     ["Target", "₹"+f0(d.target_inr), d.target_pct+"% — a goal, not a cap"],
     ["Trades", d.trades, "won "+d.wins+" · lost "+d.losses],
     ["Open", d.open_positions.length, d.open_positions.length ? "managed each tick" : "flat"],
-    ["To square-off", f0(d.minutes_to_close)+" min", "all flat before the bell",
-      d.minutes_to_close<30 ? "warn" : ""],
+    d.minutes_to_close > 0
+      ? ["To square-off", f0(d.minutes_to_close)+" min", "all flat before the bell",
+         d.minutes_to_close<30 ? "warn" : ""]
+      : ["To square-off", "closed", "session over - flat until tomorrow", ""],
   ];
   document.getElementById("tiles").innerHTML = t.map(([k,v,n,c]) =>
     `<div class="box"><div class="k">${k}</div><div class="v ${c||''}">${v}</div><div class="n">${esc(n||"")}</div></div>`).join("");
