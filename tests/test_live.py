@@ -315,11 +315,26 @@ class ExitAngel(FakeAngel):
     ignored (sticky), the place call can raise after Angel took the order,
     and the order and position books can be read (or not)."""
 
-    def __init__(self, script=(), netqty=0):
+    def __init__(self, script=(), netqty=None):
         super().__init__(script)
         self.sticky, self.raise_place, self.book_ok = False, False, True
+        # None: the position book is current (what the order book has filled);
+        # a number: the position book shows that, however stale.
         self.netqty = netqty
         self.cancels, self.events = [], []
+        self.opening = []                # the day's rows that opened the position
+
+    def hold(self, qty, side="BUY"):
+        """Today's completed order that opened the position (ids E1, E2...)."""
+        n = "E%d" % (len(self.opening) + 1)
+        self.opening.append({"id": n, "status": "complete", "filled": int(qty), "avg": 100.0,
+                             "params": {"variety": "NORMAL", "tradingsymbol": SYM,
+                                        "transactiontype": side, "quantity": str(qty),
+                                        "price": "100.00", "ordertype": "LIMIT"}})
+
+    def true_net(self):
+        return sum(o["filled"] * (1 if o["params"].get("transactiontype") == "BUY" else -1)
+                   for o in self.opening + list(self.orders.values()))
 
     def _add(self, params, status, filled, avg):
         n = str(len(self.orders) + 1)
@@ -366,7 +381,8 @@ class ExitAngel(FakeAngel):
             raise ConnectionError("orderBook timed out")
         for o in self.orders.values():
             self.events.append(("read", o["id"], o["status"]))
-        return {"status": True, "data": [self._row(o) for o in self.orders.values()]}
+        return {"status": True, "data": [self._row(o) for o in self.opening]
+                + [self._row(o) for o in self.orders.values()]}
 
     def cancelOrder(self, oid, variety):
         self.cancels.append((oid, variety))
@@ -377,7 +393,8 @@ class ExitAngel(FakeAngel):
         return {"status": True, "data": {"orderid": oid}}
 
     def position(self):
-        return {"status": True, "data": [{"tradingsymbol": SYM, "netqty": str(self.netqty)}]}
+        net = self.true_net() if self.netqty is None else self.netqty
+        return {"status": True, "data": [{"tradingsymbol": SYM, "netqty": str(net)}]}
 
     def set(self, oid, status, filled=None, avg=None):
         o = self.orders["u" + str(oid)]
@@ -403,6 +420,8 @@ def live_engine(api, duration="IOC", fixes=True, market=False):
     """The section-2 engine (one 130-qty long, entry 100) on a real LiveBroker
     over a fake Angel."""
     e, pos = engine([])
+    if hasattr(api, "hold") and not api.opening:
+        api.hold(pos.qty)                 # the BUY that opened it is in today's order book
     e.L.exit_safety_fixes = fixes
     e.L.market_orders = market
     b = LiveBroker(api, CostModel(), product="INTRADAY", duration=duration,
@@ -762,6 +781,361 @@ def t13_flags_default():
            L.order_rate_per_sec) == (False, False, "IOC", False, 0.0))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Review group O (2 Oct 2026): live order paths. Each test below fails on
+# 30692f6 and passes with the fixes.
+
+class ModeAngel(ExitAngel):
+    """Each place call plays the next mode: "ok"; "null" (Angel executed it
+    but answered with no data, SmartAPI forum 1189); "uid" (executed, only a
+    uniqueorderid came back); "raise" (executed, then the call timed out);
+    "lost" (never reached Angel, the call raised); "refuse" (not executed,
+    no data)."""
+
+    def __init__(self, script=(), netqty=None, modes=()):
+        super().__init__(script, netqty)
+        self.modes = list(modes)
+
+    def placeOrderFullResponse(self, params):
+        mode = self.modes.pop(0) if self.modes else "ok"
+        if mode in ("lost", "refuse"):
+            self.params.append(dict(params))
+            if mode == "lost":
+                raise TimeoutError("read timed out")
+            return {"status": False, "errorcode": "AB4036", "message": "RMS: price outside band",
+                    "data": None}
+        r = super().placeOrderFullResponse(params)
+        n = r["data"]["orderid"]
+        if mode == "null":
+            return {"status": False, "errorcode": "AB2001", "message": "", "data": None}
+        if mode == "uid":
+            return {"status": True, "message": "", "data": {"orderid": "", "uniqueorderid": "u" + n}}
+        if mode == "raise":
+            raise TimeoutError("read timed out")
+        return r
+
+
+def _sells(api):
+    return sum(1 for p in api.params if p.get("transactiontype") == "SELL")
+
+
+def tO1_null_answer():
+    api = ModeAngel([("complete", 130, 107.0)] * 3, netqty=130, modes=["null"])
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    for _ in range(12):
+        _clk.t += 1.0
+        e.close(pos, "stop_loss")
+    sent, net = _sells(api), api.true_net()
+    api.netqty = None                                  # the position book catches up
+    _clk.t += 3.0
+    e.close(pos, "stop_loss")
+    check("O1. a stop SELL Angel executed but answered with no data: never a second SELL, "
+          "the account is never short, booked once the books agree",
+          sent == 1 and net == 0 and api.true_net() == 0 and e.book.count() == 0
+          and len(e.journal.rows) == 1, f"sells {sent}, net {net} -> {api.true_net()}, "
+          f"book {e.book.count()}")
+    api = ModeAngel([("complete", 130, 107.0)], modes=["uid"])
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    check("O1. ...only a uniqueorderid came back: read by it, the fill is booked at once",
+          api.placed() == 1 and e.book.count() == 0 and e.journal.rows
+          and e.journal.rows[-1].get("exit") == 107.0, f"placed {api.placed()}")
+    api = ModeAngel([("complete", 65, 110.5)], modes=["null"])
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.notifier = Notes()
+    e.enter(_cand(), _plan(), _struct, None)
+    check("O1. an executed BUY answered with no data: adopted under the stop, entries halt, alert",
+          e.book.count() == 1 and e.halted and e.notifier.msgs and api.true_net() == 65,
+          f"book {e.book.count()}, halted {e.halted}")
+
+
+def tO2_raise_lagging_book():
+    api = ModeAngel([("complete", 130, 107.0)] * 3, netqty=130, modes=["raise"])
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    for _ in range(40):
+        _clk.t += 1.0
+        e.close(pos, "stop_loss")
+    sent, net = _sells(api), api.true_net()
+    check("O2. the place call raised, the IOC is COMPLETE and the position book lags: nothing "
+          "re-sent; entries halt with an alert while the books disagree",
+          sent == 1 and net == 0 and e.book.count() == 1 and e.halted and e.notifier.msgs,
+          f"sells {sent}, net {net}, halted {e.halted}")
+    api.netqty = None
+    _clk.t += 3.0
+    e.close(pos, "stop_loss")
+    check("O2. ...booked closed once both books show it gone, still one SELL",
+          _sells(api) == 1 and e.book.count() == 0 and len(e.journal.rows) == 1
+          and e.journal.rows[-1].get("exit_order") == "reconciled", f"sells {_sells(api)}")
+
+
+def tO3_unknown_entry_lag():
+    api = ModeAngel([("complete", 65, 110.5)], netqty=0, modes=["raise"])
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.notifier = Notes()
+    e.enter(_cand(), _plan(), _struct, None)
+    check("O3. an entry whose place call raised, COMPLETE at Angel, position book still 0: "
+          "adopted from the order book, entries halt, alert",
+          e.book.count() == 1 and e.book.snapshot()[0].qty == 65 and e.halted
+          and e.notifier.msgs, f"book {e.book.count()}, halted {e.halted}")
+
+
+def tO4_entry_late_fill():
+    api = ExitAngel([("open", 0, 0.0)], netqty=0)
+    api.sticky = True
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.L.market_orders = True
+    e.enter(_cand(), _plan(), _struct, None)
+    api.set("1", "complete", 65, 111.0)
+    api.netqty = 65
+    for _ in range(20):
+        _clk.t += 1.0
+        e.manage()
+    p = e.book.snapshot()[0] if e.book.count() else None
+    check("O4. an entry still working after its cancel fills later: manage() follows it and "
+          "adopts the 65 under the software stop",
+          p is not None and p.qty == 65 and e.halted and not e._pending_entries,
+          f"book {e.book.count()}")
+
+
+def tO5_backoff_budget():
+    api = ModeAngel(netqty=None, modes=["refuse"] * 2000)
+    e, pos = live_engine(api, market=True)
+    t_end = _clk.t + 60.0
+    while _clk.t < t_end:
+        e.close(pos, "stop_loss")
+        _clk.t += 0.125
+    alerts = [m for m in e.notifier.msgs if "EXIT NOT GOING THROUGH" in m]
+    check("O5. a refused exit backs off (0.5 s doubling to 5 s): a minute of passes sends at most "
+          "20, and one alert", api.placed() <= 20 and len(alerts) == 1 and api.true_net() == 130,
+          f"placed {api.placed()}, alerts {len(alerts)}")
+    b = LiveBroker(FakeAngel([]), CostModel())
+    b.exit_safety_fixes = True
+    entries = sum(1 for _ in range(600) if b._order_gate("E"))
+    exits = sum(1 for _ in range(600) if b._order_gate("X"))
+    cap_min = LiveBroker.ORDER_BUDGET[0][1]
+    check("O5. order budget: entries stop at their share of the minute; exits keep the rest, "
+          "under Angel's 500 a minute", 0 < entries < cap_min and entries + exits == cap_min
+          and cap_min < 500, f"entries {entries}, exits {exits}")
+    _clk.t += 61.0
+    check("O5. ...the minute clears, entries may go again", b._order_gate("E"))
+
+
+def tO6_silent_stall():
+    class NoPos(ExitAngel):
+        pos_ok = True
+
+        def position(self):
+            if not self.pos_ok:
+                raise ConnectionError("position timed out")
+            return super().position()
+    api = NoPos([("cancelled", 0, 0.0)], netqty=130)
+    api.raise_place = True
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    api.pos_ok = False
+    for _ in range(120):
+        _clk.t += 1.0
+        e.close(pos, "stop_loss")
+    check("O6. exit pending and the position book unreadable: one alert, nothing sent",
+          len(e.notifier.msgs) == 1 and api.placed() == 1, f"{len(e.notifier.msgs)} alerts")
+    api = ExitAngel([("open", 0, 0.0)], netqty=130)
+    api.sticky = True
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    for _ in range(300):
+        _clk.t += 1.0
+        e.close(pos, "stop_loss")
+    n = len(e.notifier.msgs)
+    check("O6. an exit order that will not cancel: one alert after ~30 s, not one per cancel",
+          n == 1 and api.placed() == 1, f"{n} alerts")
+    logs = []
+    e.log = logs.append
+    e._running.set()
+    e.feed.tick_event.set()
+    e.run(stop_predicate=lambda: True)
+    check("O6. run()'s square-off that cannot close says so: log line and alert",
+          e.book.count() == 1 and any("SQUARE-OFF INCOMPLETE" in x for x in logs)
+          and any("SQUARE-OFF INCOMPLETE" in m for m in e.notifier.msgs), str(logs[-1:]))
+
+
+def tO7_ab07():
+    import run_bot
+    real = run_bot.time
+    run_bot.time = _clk
+    try:
+        def go(status):
+            api = ExitAngel()
+            api.seed(status, tag="", side="BUY")
+            b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+            try:
+                run_bot.refuse_working_orders(b, log=lambda *_: None)
+                return "allowed"
+            except SystemExit:
+                return "refused"
+        check("O7. a cancelled AMO ('cancelled after market order') does not refuse the start; "
+              "'cancel pending' still does",
+              go("cancelled after market order") == "allowed" and go("cancel pending") == "refused"
+              and go("cancel after market order req received") == "refused")
+    finally:
+        run_bot.time = real
+
+
+def tO8_late_reason():
+    api = ExitAngel([("open", 0, 0.0)], netqty=130)
+    api.sticky = True
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    api.set("1", "complete", 130, 80.0)
+    _clk.t += 5.0
+    e.close(pos, "squareoff")
+    r = e.journal.rows[-1] if e.journal.rows else {}
+    check("O8. a stop_loss exit that fills late is booked as stop_loss, cooldown set, "
+          "whichever close() finds it", r.get("exit_reason") == "stop_loss"
+          and pos.symbol in e._symbol_cooldown, str(r.get("exit_reason")))
+
+
+def tO9_exit_all():
+    api = ExitAngel([("open", 0, 0.0), ("complete", 130, 104.0)], netqty=130)
+    api.sticky = True
+    e, pos = live_engine(api, market=True)
+    e.close(pos, "stop_loss")
+    e._mark_of = lambda p: 105.0
+    e.book.time_to_close = lambda *_: 300.0
+    e.manual_exit_all()
+    _clk.t += 1.0
+    e.manage()
+    kept = e.exit_all_requested
+    api.set("1", "cancelled", 0)
+    for _ in range(5):
+        _clk.t += 1.0
+        e.manage()
+    check("O9. exit-all held by a pending exit is kept, and closes the position once it can",
+          kept and e.book.count() == 0 and not e.exit_all_requested and api.placed() == 2,
+          f"kept {kept}, book {e.book.count()}, placed {api.placed()}")
+
+
+def tO10_paced():
+    api = ExitAngel()
+    api.seed("complete")
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b._status("u1", "1")
+    b._last_call["individual_order_details"] += 600.0     # a clock step back of 600 s
+    t0 = _clk.t
+    b._status("u1", "1")
+    check("O10. a 600 s clock step does not make the next poll sleep 600 s",
+          _clk.t - t0 <= LiveBroker.POLL_GAP["individual_order_details"] + 1e-9,
+          f"slept {_clk.t - t0:.1f}s")
+
+
+def tO11_stop_timeout():
+    e, pos = engine([])
+    e.L.exit_safety_fixes = True
+    seen = []
+    e._thread = SimpleNamespace(join=lambda timeout=None: seen.append(timeout))
+    e.stop()
+    check("O11. stop() waits long enough for a slow live square-off (>= 45 s)",
+          seen and seen[0] >= 45.0, str(seen))
+
+
+class PropAngel(ModeAngel):
+    """Random answers, fills, late fills and a lagging position book. Records
+    every SELL sent over more than is held, and any moment the account is net
+    short."""
+
+    def __init__(self, rng, lag, sticky_p):
+        super().__init__()
+        self.rng, self.lag, self.sticky_p = rng, lag, sticky_p
+        self.hist, self.bad = [], []
+
+    def _seen(self, what):
+        net = self.true_net()
+        self.hist.append((_clk.t, net))
+        if net < 0:
+            self.bad.append(f"{what}: net {net}")
+
+    def hold(self, qty, side="BUY"):
+        super().hold(qty, side)
+        self.hist.append((-1e18, self.true_net()))
+
+    def placeOrderFullResponse(self, params):
+        rng, qty = self.rng, int(params["quantity"])
+        working = sum(int(o["params"]["quantity"]) - o["filled"] for o in self.orders.values()
+                      if o["status"] == "open" and o["params"]["transactiontype"] == "SELL")
+        if params["transactiontype"] == "SELL" and qty + working > self.true_net():
+            self.bad.append(f"SELL {qty} sent with {self.true_net()} held, {working} working")
+        self.modes = [rng.choice(["ok", "ok", "ok", "null", "uid", "raise", "lost", "refuse"])]
+        part = (qty // 2) if qty >= 2 else 0
+        self.script = [rng.choice([("complete", qty, 99.0), ("cancelled", part, 99.0),
+                                   ("cancelled", 0, 0.0), ("open", 0, 0.0)])]
+        try:
+            return super().placeOrderFullResponse(params)
+        finally:
+            self._seen("place")
+
+    def cancelOrder(self, oid, variety):
+        o = self.orders.get("u" + str(oid))
+        if o and o["status"] == "open" and self.rng.random() < self.sticky_p:
+            self.cancels.append((oid, variety))
+            return {"status": True, "data": {"orderid": oid}}
+        if o and o["status"] == "open" and self.rng.random() < 0.5:
+            o["status"], o["filled"], o["avg"] = "complete", int(o["params"]["quantity"]), 98.0
+            self._seen("late fill")
+            return {"status": True, "data": {"orderid": oid}}
+        r = super().cancelOrder(oid, variety)
+        return r
+
+    def individual_order_details(self, uid):
+        if self.rng.random() < 0.15:
+            return None                                   # the status endpoint hiccups
+        return super().individual_order_details(uid)
+
+    def position(self):
+        at = _clk.t - self.lag
+        net = next((n for t, n in reversed(self.hist) if t <= at), self.hist[0][1])
+        return {"status": True, "data": [{"tradingsymbol": SYM, "netqty": str(net)}]}
+
+
+def tP_property():
+    import random
+    bad, unsettled, runs = [], 0, int(os.environ.get("PROP_RUNS", "300"))
+    for seed in range(runs):
+        rng = random.Random(seed)
+        api = PropAngel(rng, lag=rng.choice([0.0, 1.5, 4.0]), sticky_p=rng.choice([0.0, 0.3]))
+        e, pos = live_engine(api, market=rng.random() < 0.5)
+        for _ in range(400):
+            if not e._in_book(pos):
+                break
+            e.close(pos, "stop_loss")
+            _clk.t += rng.choice([0.1, 0.5, 1.0, 3.0])
+        held = sum(p.qty for p in e.book.snapshot())
+        if api.bad:
+            bad.append((seed, api.bad[:2]))
+        elif not e._in_book(pos) and api.true_net() != 0:
+            bad.append((seed, f"engine flat, account holds {api.true_net()}"))
+        elif e._in_book(pos) and not pos.pending_exit_oid and not pos.pending_exit_tag \
+                and held != api.true_net():
+            bad.append((seed, f"engine holds {held}, account {api.true_net()}"))
+        unsettled += e._in_book(pos)
+    check(f"P. property: {runs} random runs of null answers, raised places, refusals, partial "
+          f"and late fills and a lagging position book never sell more than is held, never "
+          f"leave the account short, and agree with it at the end",
+          not bad, f"{len(bad)} bad, first {bad[:3]}; {unsettled} still open")
+
+
+_O_TESTS = [("O1", tO1_null_answer), ("O2", tO2_raise_lagging_book), ("O3", tO3_unknown_entry_lag),
+            ("O4", tO4_entry_late_fill), ("O5", tO5_backoff_budget), ("O6", tO6_silent_stall),
+            ("O7", tO7_ab07), ("O8", tO8_late_reason), ("O9", tO9_exit_all),
+            ("O10", tO10_paced), ("O11", tO11_stop_timeout), ("P", tP_property)]
+
+
 try:
     for _name, _fn in [("1", t1_golden), ("2", t2_pending_ioc), ("3", t3_place_raises),
                        ("3b", t3b_structure_raises), ("4", t4_late_fill), ("5", t5_sign),
@@ -769,6 +1143,9 @@ try:
                        ("8b", t8b_entry_may_work), ("9", t9_start_guard), ("10", t10_bucket),
                        ("12", t12_day), ("defaults", t13_flags_default)]:
         guarded(f"exit safety test {_name}", _fn)
+    section("6. Review group O: live order paths")
+    for _name, _fn in _O_TESTS:
+        guarded(f"review test {_name}", _fn)
 finally:
     _X.time, _IE.time = _real_time
 
