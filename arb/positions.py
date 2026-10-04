@@ -83,6 +83,12 @@ class Position:
     pending_exit_booked_px: float = 0.0   # ...and the price they were booked at
     pending_exit_at: float = 0.0     # last placed, cancel sent, or empty search
     pending_none_seen: int = 0       # reads that could not find or read it
+    pending_exit_since: float = 0.0  # when it was sent: how long the stop has waited (review O6)
+    pending_exit_reason: str = ""    # the exit that sent it; a late fill books under it (review O8)
+    # Refused or unfilled exits in a row, and when the next may go: 0.5 s
+    # doubling to 5 s, so a refusal is not re-sent on every tick (review O5).
+    exit_fails: int = 0
+    exit_retry_at: float = 0.0
     # Set when the broker shows the position past flat (a naked short or
     # long): no exit is sent for it again; a human closes it in the app.
     exit_blocked: str = ""

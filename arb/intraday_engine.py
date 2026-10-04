@@ -17,6 +17,7 @@ Honest naming: nothing here is arbitrage. The scanners this file replaces
 produced structures whose profit was fixed at entry; a long call is a bet on
 direction that decays while you hold it.
 """
+import html
 import json
 import os
 import threading
@@ -60,6 +61,13 @@ class _Ticket:
 
 
 class IntradayEngine:
+    # exit_safety_fixes timings (review O4-O6, 2 Oct 2026).
+    EXIT_BACKOFF = (0.5, 5.0)       # first and longest wait after a refused or unfilled exit
+    EXIT_ALERT_AFTER = 5            # refused or unfilled exits in a row before one alert
+    PENDING_ALERT_SEC = 30.0        # an exit or entry order unsettled this long is reported
+    ENTRY_POLL_SEC = 2.0            # a pending entry order is looked at this often
+    SQUAREOFF_RETRY_SEC = 30.0      # run()'s square-off keeps trying this long
+
     def __init__(self, feed, bindings, cfg, cost_model, limits, broker, journal,
                  capital_book, candles, notifier=None, log=print):
         self.feed = feed
@@ -87,6 +95,8 @@ class IntradayEngine:
         self.halted = False
         self.halt_reason = ""
         self.exit_all_requested = False
+        self._pending_entries = []      # entry orders not known to be over (review O3, O4)
+        self._alerted = set()           # keys of the one-off exit alerts already sent (O2, O6)
         self.last_trade_ts = 0.0
         self._symbol_cooldown = {}
         self.structures = {}            # underlying -> Structure, for the dashboard
@@ -399,10 +409,22 @@ class IntradayEngine:
 
     def manage(self):
         """Review every open position. Runs before any new entry is considered."""
+        fixes = getattr(self.L, "exit_safety_fixes", False)
+        if self._pending_entries:
+            self._poll_entries()
+        tried = set()
         if self.exit_all_requested:
-            self.exit_all_requested = False
+            if not fixes:
+                self.exit_all_requested = False
             for pos in self.book.snapshot():
                 self.close(pos, "manual_exit_all")
+                if fixes:
+                    tried.add(pos.trade_id)
+            if fixes and all(p.exit_blocked for p in self.book.snapshot()):
+                # Kept until the book is empty (or holds only what a human must
+                # close): one close() held by a pending exit or a back-off used
+                # to use it up and leave the position open (review O9, 2 Oct 2026).
+                self.exit_all_requested = False
         mins = self.book.time_to_close(self.cfg.session_end)
         for pos in self.book.snapshot():
             bid = self._mark_of(pos)
@@ -421,7 +443,7 @@ class IntradayEngine:
             if reason in ("trailed_to_breakeven", "trail_advanced"):
                 self.log(f"[intraday] {pos.symbol} {reason} -> stop {pos.stop:.2f} "
                          f"({pos.r_multiple:+.2f}R)")
-            if action == EXIT:
+            if action == EXIT and pos.trade_id not in tried:
                 self.close(pos, reason)
         if self.book.count():
             self._save_open()
@@ -465,9 +487,11 @@ class IntradayEngine:
                     return None
                 if not self._in_book(pos):
                     return self.records[-1] if self.records else None
+            if 0.0 < pos.exit_retry_at - time.time() <= self.EXIT_BACKOFF[1]:
+                return None                     # backing off after a refusal or a miss (O5)
         leg = self._exit_leg(pos, px)
-        if getattr(self.L, "order_tags", False):
-            leg["kind"] = "X"
+        if fixes or getattr(self.L, "order_tags", False):
+            leg["kind"] = "X"                   # tags it, and spends the exits' order budget
         # A limit at the touch that keeps missing in a running market is how a
         # stop turns into a disaster. After exit_market_after unfilled tries,
         # get out at market.
@@ -484,21 +508,15 @@ class IntradayEngine:
             if fixes and hasattr(self.broker, "open_orders"):
                 # It may have raised after the order went: look for it by
                 # symbol before anything else is sent.
-                self._clear_pending(pos)
-                pos.pending_exit_tag, pos.pending_exit_at = "?", time.time()
-                self._save_open(force=True)
+                self._set_pending(pos, reason)
+                self._exit_failed(pos, {}, [repr(e)])
             return None
         fill = float(legs[0].get("fill_price") or px)
         if fixes and (legs[0].get("final") is False or legs[0].get("place_exception")):
             # Not over at Angel - still working after its cancel, or the place
             # call raised - so it may yet fill. Remember it before anything else.
-            pos.pending_exit_oid = str(legs[0].get("order_id") or "")
-            pos.pending_exit_uid = str(legs[0].get("uid") or "")
-            pos.pending_exit_tag = str(legs[0].get("tag") or "") or \
-                ("" if pos.pending_exit_oid else "?")
-            pos.pending_exit_booked, pos.pending_exit_booked_px = 0, 0.0
-            pos.pending_exit_at, pos.pending_none_seen = time.time(), 0
-            self._save_open(force=True)
+            self._set_pending(pos, reason, legs[0].get("order_id"), legs[0].get("uid"),
+                              legs[0].get("tag"))
             self.log(f"[intraday] exit order for {pos.symbol} not final at Angel "
                      f"({pos.pending_exit_oid or 'no id'}, {legs[0].get('broker_status', '')}); "
                      f"no new exit until it is")
@@ -515,7 +533,16 @@ class IntradayEngine:
                     self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\nExit of <code>{pos.symbol}</code> "
                                        f"could not be confirmed. New entries halted.")
                 return None
-            if held != want:
+            if fixes and hasattr(self.broker, "order_rows"):
+                # ...and only when both of its books agree: a SELL that filled
+                # before its place call could answer is missing from a lagging
+                # position book, and booking on that book alone has sold the
+                # same position twice (review O2, 2 Oct 2026).
+                held, why = self._held_agreed(pos.symbol, held=held)
+                if held is None:
+                    self.log(f"[intraday] {pos.symbol}: exit status unknown and {why}; "
+                             f"nothing booked or sent until the books agree")
+            if held is not None and held != want:
                 # Some or all of it did go: book what went, at the price we sent.
                 if fixes:
                     gone = self._held_gone(pos, held, short)
@@ -529,6 +556,8 @@ class IntradayEngine:
                          f"{held} held, so {gone} closed")
         if not legs[0].get("filled"):
             pos.exit_attempts += 1
+            if fixes:
+                self._exit_failed(pos, legs[0], errors)
             self.log(f"[intraday] exit not filled for {pos.symbol} "
                      f"(try {pos.exit_attempts}, {legs[0].get('broker_status', '')}); "
                      f"position still open, retrying"
@@ -580,16 +609,140 @@ class IntradayEngine:
         pos.pending_exit_oid = pos.pending_exit_uid = pos.pending_exit_tag = ""
         pos.pending_exit_booked, pos.pending_exit_booked_px = 0, 0.0
         pos.pending_exit_at, pos.pending_none_seen = 0.0, 0
+        pos.pending_exit_since, pos.pending_exit_reason = 0.0, ""
 
-    def _resolve_pending_exit(self, pos, reason, px, _again=True):
+    def _set_pending(self, pos, reason, oid="", uid="", tag=""):
+        """Remember an exit order that may still fill; no other exit goes out
+        until it is settled. "?" for the tag: no id came back, look for it by
+        symbol. The reason is kept for a late fill (review O8), the time for a
+        wait that runs long (review O6)."""
+        pos.pending_exit_oid, pos.pending_exit_uid = str(oid or ""), str(uid or "")
+        pos.pending_exit_tag = str(tag or "") or ("" if pos.pending_exit_oid else "?")
+        pos.pending_exit_booked, pos.pending_exit_booked_px = 0, 0.0
+        pos.pending_exit_at = pos.pending_exit_since = time.time()
+        pos.pending_none_seen, pos.pending_exit_reason = 0, reason
+        self._save_open(force=True)
+
+    def _exit_failed(self, pos, leg, errors):
+        """A refused or unfilled exit (exit_safety_fixes): the next try waits
+        0.5 s, doubling to 5 s, and EXIT_ALERT_AFTER in a row are reported once.
+        A refusal used to be re-sent on every tick, about 8 a second - Angel's
+        1000-an-hour order budget gone in two minutes, and then every exit
+        refused, the stop and the square-off too (review O5, 2 Oct 2026)."""
+        pos.exit_fails += 1
+        first, longest = self.EXIT_BACKOFF
+        pos.exit_retry_at = time.time() + min(longest, first * 2 ** min(pos.exit_fails - 1, 16))
+        if pos.exit_fails == self.EXIT_ALERT_AFTER:
+            why = "; ".join(str(x) for x in errors or []) or str(leg.get("broker_status") or "not filled")
+            self.log(f"[intraday] exit of {pos.symbol} refused or unfilled {pos.exit_fails} times "
+                     f"in a row ({why}); still trying")
+            if self.notifier:
+                self.notifier.send(f"⚠️ <b>EXIT NOT GOING THROUGH</b>\n<code>{pos.symbol}</code>: "
+                                   f"{pos.exit_fails} tries in a row refused or unfilled "
+                                   f"(<code>{html.escape(why[:200])}</code>). Still trying every "
+                                   f"few seconds - check the Angel app.")
+
+    def _held_agreed(self, symbol, rows=None, held=None):
+        """(held, why): what the broker holds in symbol, only when its two books
+        agree - the position book's net, and BUY filled less SELL filled over
+        ALL of today's order-book rows in it, completed ones included. Either
+        alone has sent a second SELL over a filled one: an order Angel took
+        before its place call timed out is complete, never a working row, and
+        the position book can lag it (review O2, 2 Oct 2026). held is None,
+        and why says what is wrong, while either cannot be read or they differ."""
+        b = self.broker
+        if rows is None:
+            rows = b.order_rows(symbol) if hasattr(b, "order_rows") else None
+        if held is None:
+            held = b.net_position(symbol) if hasattr(b, "net_position") else None
+        if rows is None or held is None:
+            return None, f"the {'order' if rows is None else 'position'} book cannot be read"
+        ob = b.signed_net(rows)
+        if ob != held:
+            return None, f"the position book shows {held} held and the order book {ob}"
+        return held, ""
+
+    def _agreed_or_wait(self, pos, rows=None):
+        """_held_agreed for a pending exit: the agreed figure, or None after
+        saying why. An unreadable book is reported at once (review O6); a
+        disagreement that outlives PENDING_ALERT_SEC halts new entries (O2)."""
+        held, why = self._held_agreed(pos.symbol, rows=rows)
+        if held is not None:
+            return held
+        key = ("books", pos.trade_id, pos.pending_exit_since)
+        if key not in self._alerted:
+            self._alerted.add(key)
+            self.log(f"[intraday] exit of {pos.symbol}: {why}; nothing booked or sent "
+                     f"until they agree")
+        if why.endswith("cannot be read"):
+            self._pending_alert(pos, why)
+        elif time.time() - pos.pending_exit_since >= self.PENDING_ALERT_SEC:
+            self._halt_alert(f"position and order books disagree on {pos.symbol} - check the Angel app",
+                             f"Exit of <code>{pos.symbol}</code> cannot be settled: {why}. "
+                             f"No exit is sent until they agree. New entries halted.")
+        return None
+
+    def _pending_alert(self, pos, what):
+        """One alert per pending exit: while it waits the software stop sends
+        nothing, and that used to happen in silence (review O6, 2 Oct 2026)."""
+        key = ("pending", pos.trade_id, pos.pending_exit_since)
+        if key in self._alerted:
+            return
+        self._alerted.add(key)
+        oid = pos.pending_exit_oid or "not found"
+        self.log(f"[intraday] STOP ON HOLD: exit order {oid} for {pos.symbol}: {what}; "
+                 f"no new exit until it is settled - check the Angel app")
+        if self.notifier:
+            self.notifier.send(f"⚠️ <b>CHECK THE ANGEL APP</b>\nExit order <code>{oid}</code> for "
+                               f"<code>{pos.symbol}</code>: {html.escape(what)}. Until it is "
+                               f"settled the software stop sends nothing.")
+
+    def _resolve_pending_exit(self, pos, reason, px):
         """Settle an exit order not known to be over at Angel. True once no
         exit order of ours can still be working, with whatever it filled
-        booked; False while one may be - and then nothing new may be sent."""
+        booked and both books agreeing on the rest; False while one may be -
+        and then nothing new may be sent. What it filled books under the exit
+        that sent it, not the call that finds it (review O8); a wait past
+        PENDING_ALERT_SEC is reported once (review O6)."""
+        if not pos.pending_exit_since:
+            pos.pending_exit_since = time.time()
+        done = self._settle_pending_exit(pos, pos.pending_exit_reason or reason, px)
+        if not done:
+            age = time.time() - pos.pending_exit_since
+            if age >= self.PENDING_ALERT_SEC:
+                self._pending_alert(pos, f"not settled after {age:.0f} s")
+        return done
+
+    def _settle_rest(self, pos, held, short, reason, px, what):
+        """Both books agree the broker holds `held`: book what else of pos has
+        gone, then let the next exit go (True), unless pos is blocked."""
+        gone = self._held_gone(pos, held, short)
+        if gone is None and pos.exit_blocked:
+            return False
+        self._clear_pending(pos)
+        self._save_open(force=True)
+        if gone:
+            self.log(f"[intraday] {pos.symbol}: {what}; broker shows {held} held, "
+                     f"so {gone} closed")
+            self._book_fill(pos, min(gone, pos.qty), float(px), reason,
+                            self._exit_leg(pos, px), extra={"exit_order": "reconciled"})
+        return True
+
+    def _settle_pending_exit(self, pos, reason, px, _again=True):
         b, now = self.broker, time.time()
         short = pos.opt == "EQ" and pos.side < 0
+        if not pos.pending_exit_oid and pos.pending_exit_uid and _again \
+                and hasattr(b, "order_state"):
+            # The answer carried only a uniqueorderid: read the order by that
+            # before looking for it by symbol (review O1).
+            st = b.order_state(pos.pending_exit_uid, "")
+            if st and st["oid"]:
+                pos.pending_exit_oid = st["oid"]
+                self._save_open(force=True)
         if not pos.pending_exit_oid:
-            # The place call raised: find the order by its tag, else by side.
-            rows = b.open_orders(pos.symbol) if hasattr(b, "open_orders") else None
+            # The place call raised, or answered with no order id: find the
+            # order by its tag, else by side among the ones still working.
+            rows = b.order_rows(pos.symbol) if hasattr(b, "order_rows") else None
             if rows is None:
                 # Cannot look for it, so cannot rule it out: nothing goes out.
                 self._halt_alert(f"exit order for {pos.symbol} lost and the order book is "
@@ -600,34 +753,25 @@ class IntradayEngine:
                 return False
             tag, side = pos.pending_exit_tag, "BUY" if short else "SELL"
             hit = next((r for r in rows if tag not in ("", "?") and r["tag"] == tag), None) \
-                or next((r for r in rows if r["side"] == side), None)
+                or next((r for r in rows if not r["final"] and r["side"] == side), None)
             if hit:
                 if not _again:
                     return False
                 pos.pending_exit_oid, pos.pending_exit_uid = hit["oid"], hit["uid"]
                 pos.pending_none_seen = 0
                 self._save_open(force=True)
-                return self._resolve_pending_exit(pos, reason, px, _again=False)
-            # Nothing working - believed only after two reads 2 s apart.
+                return self._settle_pending_exit(pos, reason, px, _again=False)
+            # Nothing working - believed only after two reads 2 s apart, and
+            # then only from what both books agree is held (review O2).
             if pos.pending_none_seen == 0 or now - pos.pending_exit_at >= 2.0:
                 pos.pending_none_seen += 1
                 pos.pending_exit_at = now
             if pos.pending_none_seen < 2:
                 return False
-            held = b.net_position(pos.symbol) if hasattr(b, "net_position") else None
+            held = self._agreed_or_wait(pos, rows)
             if held is None:
                 return False
-            gone = self._held_gone(pos, held, short)
-            if gone is None and pos.exit_blocked:
-                return False
-            self._clear_pending(pos)
-            self._save_open(force=True)
-            if gone:
-                self.log(f"[intraday] {pos.symbol}: lost exit order; broker shows {held} held, "
-                         f"so {gone} closed")
-                self._book_fill(pos, min(gone, pos.qty), float(px), reason,
-                                self._exit_leg(pos, px), extra={"exit_order": "reconciled"})
-            return True
+            return self._settle_rest(pos, held, short, reason, px, "lost exit order")
         st = b.order_state(pos.pending_exit_uid, pos.pending_exit_oid) \
             if hasattr(b, "order_state") else None
         if st is None:
@@ -641,7 +785,9 @@ class IntradayEngine:
             return False
         pos.pending_none_seen = 0
         if not st["final"]:
-            if now - pos.pending_exit_at >= 3.0:
+            # The cancel is repeated less often the longer it waits (3 s, up to
+            # 30 s): each one spends the order budget the stop needs (review O5).
+            if now - pos.pending_exit_at >= min(30.0, max(3.0, (now - pos.pending_exit_since) / 4.0)):
                 b.cancel_order(pos.pending_exit_oid, st["variety"] or "NORMAL")
                 pos.pending_exit_at = now
                 self.log(f"[intraday] exit order {pos.pending_exit_oid} for {pos.symbol} still "
@@ -650,8 +796,6 @@ class IntradayEngine:
         booked, booked_px = pos.pending_exit_booked, pos.pending_exit_booked_px
         new = st["filled"] - booked
         oid = pos.pending_exit_oid
-        self._clear_pending(pos)
-        self._save_open(force=True)
         if new > 0:
             # Angel's average covers every fill of the order; the part booked
             # earlier went at booked_px, so the rest went at what makes the
@@ -662,9 +806,22 @@ class IntradayEngine:
                 late = avg
             self.log(f"[intraday] exit order {oid} for {pos.symbol} {st['status']} with "
                      f"{new} more filled @ {late:.2f} - booked")
-            self._book_fill(pos, min(new, pos.qty), late, reason,
+            if new >= pos.qty:
+                self._clear_pending(pos)
+                self._save_open(force=True)
+                self._book_fill(pos, pos.qty, late, reason,
+                                self._exit_leg(pos, px), extra={"exit_order": "late_fill"})
+                return True
+            pos.pending_exit_booked, pos.pending_exit_booked_px = st["filled"], avg
+            self._book_fill(pos, new, late, reason,
                             self._exit_leg(pos, px), extra={"exit_order": "late_fill"})
-        return True
+        # The order is over and some of the position is still open: nothing
+        # more is sent for it until both books agree on what is held (O2).
+        held = self._agreed_or_wait(pos)
+        if held is None:
+            return False
+        return self._settle_rest(pos, held, short, reason, px,
+                                 f"exit order {oid} {st['status']}")
 
     def _book_fill(self, pos, q, fill, reason, leg, extra=None):
         """Book q units of pos closed at fill. Returns the trade record once the
@@ -678,6 +835,7 @@ class IntradayEngine:
         part_points = (pos.entry - fill) if short else (fill - pos.entry)
         part_net = part_points * q - part_cost
         self.realised_pnl += part_net
+        pos.exit_fails, pos.exit_retry_at = 0, 0.0      # it filled: no back-off (review O5)
         if hasattr(self.capital, "record"):
             try:
                 self.capital.record(part_net, count=(q >= pos.qty))
@@ -842,6 +1000,8 @@ class IntradayEngine:
         L = self.L
         if self.halted:
             return f"halted: {self.halt_reason}"
+        if self._pending_entries:
+            return "entry_pending"              # the last entry may yet fill (review O4)
         if self.book.count() >= L.max_open_positions:
             return "position_open"
         if self.trades_today >= L.max_trades_per_day:
@@ -1125,7 +1285,7 @@ class IntradayEngine:
         if desk is not None and desk.active:
             self._hunt_stocks(available)
 
-    def _unknown_entry(self, leg, symbol, adopt=None):
+    def _unknown_entry(self, leg, symbol, adopt=None, side=1):
         """An entry whose status could not be read may still have filled, and a
         position the engine does not know about has no stop. Stop opening new
         ones until a human has looked. With adopt_unknown_entry (options), what
@@ -1133,9 +1293,31 @@ class IntradayEngine:
         stop manages it in the meantime."""
         if leg.get("broker_status") != "unknown":
             return
+        fixes = getattr(self.L, "exit_safety_fixes", False)
+        if fixes and hasattr(self.broker, "order_rows"):
+            # Followed until it is known: by its own status once it has an id,
+            # else from both of the broker's books. On the position book alone
+            # a BUY that filled while the book lagged was dropped - no position,
+            # no halt, no alert (review O1, O3, O4, 2 Oct 2026).
+            rec = self._pend_entry(leg, symbol, adopt, side)
+            try:
+                state = self._follow_entry(rec)
+            except Exception as e:              # never out of hunt(); manage() looks again
+                self.log(f"[intraday] pending entry {symbol}: {e!r}")
+                state = "unreadable"
+            if state == "working":
+                self._halt_alert(f"entry order for {symbol} may still be working at Angel "
+                                 f"- check the Angel app",
+                                 f"Entry in <code>{symbol}</code> could not be confirmed and "
+                                 f"may still be working (cancel sent). New entries halted.")
+            elif state == "unreadable":
+                self._halt_alert(f"entry status unknown for {symbol} (the broker's books cannot "
+                                 f"be read) - check the Angel app",
+                                 f"Entry in <code>{symbol}</code> could not be confirmed and the "
+                                 f"broker's books cannot be read. New entries halted.")
+            return
         working = False
-        if getattr(self.L, "exit_safety_fixes", False) and leg.get("final") is False \
-                and hasattr(self.broker, "cancel_working"):
+        if fixes and leg.get("final") is False and hasattr(self.broker, "cancel_working"):
             # The order may still be live at Angel (the place call raised, or
             # its status could not be read) - as a DAY order it could fill an
             # hour from now. Pull anything working in the symbol first.
@@ -1153,6 +1335,12 @@ class IntradayEngine:
                                  f"Entry in <code>{symbol}</code> could not be confirmed and "
                                  f"may still be working (cancel sent). New entries halted.")
             return
+        self._take_on(symbol, held, adopt)
+
+    def _take_on(self, symbol, held, adopt, note=""):
+        """The broker shows `held` from an entry the engine did not see fill:
+        with adopt_unknown_entry an option is adopted under the software stop;
+        either way new entries halt until a human has looked."""
         adopted = False
         if adopt is not None and held is not None and held > 0 \
                 and getattr(self.L, "adopt_unknown_entry", False):
@@ -1160,18 +1348,19 @@ class IntradayEngine:
                 adopted = adopt(held)
             except Exception as e:
                 self.log(f"[intraday] could not adopt {symbol}: {e!r}")
+        shows = f"broker shows {held}" + (f", {note}" if note else "")
         self.halted = True
-        self.halt_reason = f"entry status unknown for {symbol} (broker shows {held}) - check the Angel app"
+        self.halt_reason = f"entry status unknown for {symbol} ({shows}) - check the Angel app"
         if adopted:
             self.halt_reason += "; adopted under software stop"
         self.log(f"[intraday] HALTED: {self.halt_reason}")
         if self.notifier:
             self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\nEntry in <code>{symbol}</code> could not "
-                               f"be confirmed (broker shows {held}). New entries halted; "
+                               f"be confirmed ({shows}). New entries halted; "
                                + (f"adopted under software stop." if adopted else
                                   f"MIS square-off will close anything left."))
 
-    def _entry_working(self, leg, symbol):
+    def _entry_working(self, leg, symbol, adopt=None, side=1):
         """exit_safety_fixes: an entry still working at Angel after its cancel
         (a DAY order) can fill later into a position nobody manages."""
         if getattr(self.L, "exit_safety_fixes", False) and leg.get("final") is False \
@@ -1183,6 +1372,129 @@ class IntradayEngine:
                              f"Entry order <code>{leg.get('order_id')}</code> for "
                              f"<code>{symbol}</code> is still working after its cancel. "
                              f"New entries halted.")
+            if hasattr(self.broker, "order_state"):
+                # One cancel and a halt, then nothing looked at it again: a
+                # later fill sat at Angel with no software stop. manage() now
+                # follows it to the end (review O4, 2 Oct 2026).
+                self._pend_entry(leg, symbol, adopt, side)
+
+    def _pend_entry(self, leg, symbol, adopt, side):
+        """Remember an entry order not known to be over at Angel: manage()
+        looks at it every ENTRY_POLL_SEC until it is (review O4)."""
+        rec = {"symbol": symbol, "oid": str(leg.get("order_id") or ""),
+               "uid": str(leg.get("uid") or ""), "side": "BUY" if side > 0 else "SELL",
+               "sign": 1 if side > 0 else -1, "adopt": adopt,
+               "booked": int(leg.get("qty") or 0) if leg.get("filled") else 0,
+               "since": time.time(), "next_at": 0.0, "cancel_at": 0.0,
+               "clean": 0, "alerted": False}
+        self._pending_entries.append(rec)
+        return rec
+
+    def _drop_entry(self, rec):
+        self._pending_entries = [r for r in self._pending_entries if r is not rec]
+
+    def _poll_entries(self):
+        """Look again at each pending entry order, each at most every
+        ENTRY_POLL_SEC; never raises out of manage() (review O4)."""
+        now = time.time()
+        for rec in list(self._pending_entries):
+            if 0.0 < rec["next_at"] - now <= self.ENTRY_POLL_SEC:
+                continue
+            try:
+                self._follow_entry(rec)
+            except Exception as e:
+                self.log(f"[intraday] pending entry {rec['symbol']}: {e!r}")
+
+    def _engine_held(self, symbol):
+        """What the engine itself holds in symbol, signed like the broker's net."""
+        return sum(-p.qty if p.opt == "EQ" and p.side < 0 else p.qty
+                   for p in self.book.snapshot() if p.symbol == symbol)
+
+    def _follow_entry(self, rec):
+        """One look at a pending entry order. "done" once it is over: what it
+        filled is taken on (_take_on) and the record dropped. Otherwise
+        "working" (cancel re-sent), "unreadable", or "waiting" - with no id
+        and nothing seen, it is believed refused only after two clean reads
+        ENTRY_POLL_SEC apart, as an exit is."""
+        b, now, sym = self.broker, time.time(), rec["symbol"]
+        rec["next_at"] = now + self.ENTRY_POLL_SEC
+        if not rec["oid"] and rec["uid"]:
+            st = b.order_state(rec["uid"], "")
+            if st and st["oid"]:
+                rec["oid"] = st["oid"]
+        if rec["oid"]:
+            st = b.order_state(rec["uid"], rec["oid"])
+            if st is None:
+                self._entry_stall(rec, now, "its status cannot be read")
+                return "unreadable"
+            if not st["final"]:
+                if now - rec["cancel_at"] >= min(30.0, max(3.0, (now - rec["since"]) / 4.0)):
+                    b.cancel_order(rec["oid"], st["variety"] or "NORMAL")
+                    rec["cancel_at"] = now
+                self._entry_stall(rec, now, f"still {st['status'] or 'working'} after its cancel")
+                return "working"
+            self._drop_entry(rec)
+            more = st["filled"] - rec["booked"]
+            if more > 0:
+                self.log(f"[intraday] entry order {rec['oid']} for {sym} {st['status']} with "
+                         f"{more} filled that the engine did not see")
+                self._take_on(sym, rec["sign"] * more, rec["adopt"],
+                              note=f"order {rec['oid']} {st['status']}")
+            return "done"
+        rows = b.order_rows(sym)
+        work = next((r for r in rows or [] if not r["final"] and r["side"] == rec["side"]), None)
+        if work:
+            rec["oid"], rec["uid"], rec["cancel_at"] = work["oid"], work["uid"], now
+            b.cancel_order(work["oid"], work["variety"] or "NORMAL")
+            self.log(f"[intraday] entry order for {sym} found working ({work['oid']}); cancel sent")
+            return "working"
+        held = b.net_position(sym)
+        if rows is None or held is None:
+            self._entry_stall(rec, now, "the order or position book cannot be read")
+            return "unreadable"
+        mine = self._engine_held(sym)
+        ob, held = b.signed_net(rows) - mine, held - mine
+        if ob != held and ob * rec["sign"] <= 0:
+            self._halt_alert(f"entry status unknown for {sym} (position and order books "
+                             f"disagree) - check the Angel app",
+                             f"Entry in <code>{sym}</code> could not be confirmed: the position "
+                             f"book shows {held} and the order book {ob}. New entries halted.")
+            return "waiting"
+        if ob:
+            # The order book shows a fill before the position book does (O3).
+            self._drop_entry(rec)
+            self._take_on(sym, ob, rec["adopt"], note="" if ob == held else f"position book {held}")
+            return "done"
+        rec["clean"] += 1
+        if rec["clean"] >= 2:
+            self._drop_entry(rec)
+            return "done"
+        return "waiting"
+
+    def _entry_stall(self, rec, now, what):
+        """One alert for an entry order that stays unsettled (review O4, O6)."""
+        if rec["alerted"] or now - rec["since"] < self.PENDING_ALERT_SEC:
+            return
+        rec["alerted"] = True
+        oid = rec["oid"] or "not found"
+        self.log(f"[intraday] entry order {oid} for {rec['symbol']} {what} after "
+                 f"{now - rec['since']:.0f} s - check the Angel app")
+        if self.notifier:
+            self.notifier.send(f"⚠️ <b>CHECK THE ANGEL APP</b>\nEntry order <code>{oid}</code> for "
+                               f"<code>{rec['symbol']}</code>: {html.escape(what)}. Whatever it "
+                               f"fills is taken on when it is seen; no new entry until then.")
+
+    def _adopt_more(self, pos, more):
+        """More of a part-filled entry filled after its cancel: the position it
+        opened grows by that much, under the same stop (review O4)."""
+        if more <= 0 or not self._in_book(pos):
+            return False
+        pos.qty += int(more)
+        pos.detail["adopted_more"] = int(pos.detail.get("adopted_more") or 0) + int(more)
+        self._save_open(force=True)
+        self.log(f"[intraday] ADOPTED {more} more {pos.symbol} into trade {pos.trade_id}: "
+                 f"now x{pos.qty}")
+        return True
 
     def _adopt_entry(self, cand, plan, structure, zone, verdict, held):
         """The position an unknown-status entry turned out to be, at the quote
@@ -1342,8 +1654,8 @@ class IntradayEngine:
                "side": side, "price": quote, "qty": qty, "instrument": "EQ",
                "exchange": "NSE", "underlying": sym, "strike": 0.0, "opt": "EQ",
                "depth": qty, "age_ms": 0.0, "market": bool(getattr(L, "market_orders", False))}
-        if getattr(L, "order_tags", False):
-            leg["kind"] = "E"
+        if getattr(L, "order_tags", False) or getattr(L, "exit_safety_fixes", False):
+            leg["kind"] = "E"                   # an entry: held to its share of the order budget (O5)
         ticket = _Ticket([leg], qty, f"INTRADAY_EQ", f"{side.lower()} {sym}", "")
         try:
             legs, _ = self.broker.place_structure(ticket, 1)
@@ -1351,9 +1663,9 @@ class IntradayEngine:
             self.log(f"[intraday] stock entry failed: {e!r}")
             self._note("entry_error")
             return False
-        self._entry_working(legs[0], leg["symbol"])
+        self._entry_working(legs[0], leg["symbol"], side=v.side)
         if not legs[0].get("filled"):
-            self._unknown_entry(legs[0], leg["symbol"])
+            self._unknown_entry(legs[0], leg["symbol"], side=v.side)
             self._note("entry_not_filled")
             return False
         fill = float(legs[0]["fill_price"])
@@ -1493,8 +1805,8 @@ class IntradayEngine:
                "exchange": cand.segment, "underlying": cand.underlying,
                "strike": cand.strike, "opt": cand.opt, "depth": cand.depth,
                "age_ms": cand.age_ms, "market": bool(getattr(L, "market_orders", False))}
-        if getattr(L, "order_tags", False):
-            leg["kind"] = "E"
+        if getattr(L, "order_tags", False) or getattr(L, "exit_safety_fixes", False):
+            leg["kind"] = "E"                   # an entry: held to its share of the order budget (O5)
         ticket = _Ticket([leg], cand.lot_size, f"INTRADAY_{cand.opt}",
                          f"buy {cand.symbol}", cand.expiry)
         lots = max(1, int(lots))
@@ -1504,10 +1816,12 @@ class IntradayEngine:
             self.log(f"[intraday] entry failed: {e!r}")
             self._note("entry_error")
             return False
-        self._entry_working(legs[0], cand.symbol)
+
+        def adopt(held):
+            return self._adopt_entry(cand, plan, structure, zone, verdict, held)
         if not legs[0].get("filled"):
-            self._unknown_entry(legs[0], cand.symbol, adopt=lambda held: self._adopt_entry(
-                cand, plan, structure, zone, verdict, held))
+            self._entry_working(legs[0], cand.symbol, adopt=adopt)
+            self._unknown_entry(legs[0], cand.symbol, adopt=adopt)
             self._note("entry_not_filled")
             return False
         qty = int(legs[0].get("qty") or cand.lot_size * lots)
@@ -1516,6 +1830,9 @@ class IntradayEngine:
         pos = self._option_position(cand, plan, structure, zone, verdict, lots, qty, fill)
         self.book.add(pos)
         self._save_open(force=True)
+        # Part filled and still working after its cancel: more of it may fill (O4).
+        self._entry_working(legs[0], cand.symbol,
+                            adopt=lambda more: self._adopt_more(pos, more) or adopt(more))
 
         why = " + ".join(verdict.plays()) if verdict and verdict.plays() \
             else structure.last_event
@@ -1574,10 +1891,46 @@ class IntradayEngine:
             self._save_open(force=True)
             self.log(f"[intraday] restart: {self.book.count()} open position(s) "
                      f"handed to the next engine, not squared off")
+        elif getattr(self.L, "exit_safety_fixes", False):
+            self._square_off()
         else:
             for pos in self.book.snapshot():
                 self.close(pos, "squareoff")
         self._running.clear()
+
+    def _square_off(self):
+        """exit_safety_fixes: run()'s square-off keeps trying for
+        SQUAREOFF_RETRY_SEC - a close() held by a pending exit or a back-off
+        used to end it after one pass - and then says what is left at the
+        broker, in the log and on Telegram (review O6, 2 Oct 2026)."""
+        end = time.time() + self.SQUAREOFF_RETRY_SEC
+        while True:
+            try:
+                if self._pending_entries:
+                    self._poll_entries()
+                for pos in self.book.snapshot():
+                    if not pos.exit_blocked:
+                        self.close(pos, "squareoff")
+            except Exception as e:
+                self.log(f"[intraday] square-off error: {e!r}")
+            left = [p for p in self.book.snapshot() if not p.exit_blocked]
+            if not left or not (0.0 <= end - time.time() <= self.SQUAREOFF_RETRY_SEC):
+                break
+            time.sleep(0.5)
+        left = self.book.snapshot()
+        if left or self._pending_entries:
+            what = ", ".join(f"{p.symbol} x{p.qty}" + (f" ({p.exit_blocked})" if p.exit_blocked else "")
+                             for p in left)
+            if self._pending_entries:
+                what += ("; " if what else "") + "entry order(s) not settled in " + \
+                    ", ".join(r["symbol"] for r in self._pending_entries)
+            self.log(f"[intraday] SQUARE-OFF INCOMPLETE: still open at the broker: {what} "
+                     f"- close it in the Angel app")
+            self._save_open(force=True)
+            if self.notifier:
+                self.notifier.send(f"🛑 <b>SQUARE-OFF INCOMPLETE</b>\nStill open: "
+                                   f"<code>{html.escape(what)}</code>. Close it in the Angel app "
+                                   f"(MIS auto square-off is the last resort).")
 
     def start(self, **kw):
         self._thread = threading.Thread(target=self.run, kwargs=kw,
@@ -1585,7 +1938,16 @@ class IntradayEngine:
         self._thread.start()
         return self
 
-    def stop(self, timeout=10.0):
+    def stop(self, timeout=None):
+        """Stop the loop and wait for its square-off. With exit_safety_fixes
+        the wait covers SQUAREOFF_RETRY_SEC plus one slow exit (confirm
+        timeout, cancel, 3 s more, paced reads) per open position: 10 s let
+        run_bot exit mid square-off on a daemon thread (review O11)."""
+        if timeout is None:
+            timeout = 10.0
+            if getattr(self.L, "exit_safety_fixes", False):
+                slow = float(getattr(self.broker, "confirm_timeout", 6.0) or 6.0) + 9.0
+                timeout = max(45.0, self.SQUAREOFF_RETRY_SEC + slow * max(1, self.book.count()))
         self._running.clear()
         if self._thread:
             self._thread.join(timeout=timeout)
