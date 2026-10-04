@@ -141,6 +141,7 @@ class ContractSelector:
         hi = min(len(strikes) - 1, a + L.max_strike_offset)
 
         out, seen_any = [], False
+        top = None          # the largest per-candidate delta ceiling met (D-L4)
         for i in range(lo, hi + 1):
             px, dq, ag = float(ask[i]), float(askq[i]), float(age[i])
             if px <= 0 or float(bid[i]) <= 0:
@@ -167,6 +168,8 @@ class ContractSelector:
             # With costs inside the cap the ceiling depends on the contract's
             # own premium and spread, so it is asked per candidate.
             ceiling = max_delta_fn(px, spread) if max_delta_fn is not None else max_delta
+            if ceiling is not None:
+                top = ceiling if top is None else max(top, ceiling)
             if ceiling is not None and d > ceiling:
                 continue
             out.append(Candidate(
@@ -178,10 +181,14 @@ class ContractSelector:
                 detail={"spread": spread, "atm_strike": float(strikes[a])}))
 
         if not out:
-            if max_delta is not None and max_delta < L.min_delta:
+            # The ceiling the candidates were actually held to: with costs
+            # inside the cap (max_delta_fn) it is lower than the cost-free
+            # max_delta, and quoting that one misreported the refusal (D-L4).
+            limit = top if top is not None else max_delta
+            if limit is not None and limit < L.min_delta:
                 self.last_reject = "chart stop too wide for the risk cap even at min_delta"
-            elif max_delta is not None and seen_any:
-                self.last_reject = (f"no strike at delta <= {max_delta:.2f} "
+            elif limit is not None and seen_any:
+                self.last_reject = (f"no strike at delta <= {limit:.2f} "
                                     f"fits the risk cap")
             else:
                 self.last_reject = ("no strike quoting" if not seen_any else

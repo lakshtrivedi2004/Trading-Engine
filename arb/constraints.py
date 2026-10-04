@@ -12,7 +12,6 @@ import json
 import os
 import time
 
-from arb.costs import leg_cost
 from arb.instruments import market_phase, now_ist
 from arb.intraday import atm_index, chain_delta, structural_invalidation
 from arb.regime import atr, atr_ratio, session_phase
@@ -287,25 +286,47 @@ def _index_rows(e, und, now):
         else:
             d = chain_delta(ask, strikes, i, opt)
             spread = px - bd
-            lot = cv.lot_size
-            row["delta"] = _cell(f"{d:.2f}", d >= L.min_delta)
+            lot = max(int(cv.lot_size), 1)
+            # The engine's own figures (review D-L3): the exact round trip when
+            # exact_trade_costs is on (_round_trip_points), and with
+            # risk_includes_costs the F5 extra - round trip plus exit slippage -
+            # inside the cap (_extra_risk_points).
+            cost = e._round_trip_points(px, lot)
+            extra = e._extra_risk_points(px, spread, lot) if e._costs_inside() else 0.0
+            # ContractSelector's delta ceiling for the chart's stop, as hunt()
+            # passes it (max_delta, or max_delta_fn with costs inside).
+            ceiling = None
+            if index_risk > 0 and str(getattr(L, "stop_policy", "delta")) == "delta":
+                ceiling = ((cap_inr / lot - extra) / index_risk if e._costs_inside()
+                           else cap_inr / (index_risk * lot))
+            row["delta"] = _cell(f"{d:.2f}", d >= L.min_delta and (ceiling is None or d <= ceiling),
+                                 f"≤ {ceiling:.2f} for this stop" if ceiling is not None else "")
             row["spread"] = _cell(f"{spread:.2f}", spread <= L.max_spread_points)
             row["quote"] = _cell(f"{float(age[i]):.0f} ms · {float(askq[i]) / lot:.1f} lots",
                                  float(age[i]) <= MAX_AGE_MS and float(askq[i]) >= lot * MIN_DEPTH_MULT)
             row["lot"] = _cell(f"₹{px * lot:,.0f}", px * lot <= free)
-            cost = e._round_trip_points(px, lot)
             if index_risk > 0:
                 # plan_trade's premium risk, to the letter.
                 prem = max(index_risk * d, spread * 2.0)
                 prem = min(prem, px * L.max_risk_frac_of_premium)
-                row["risk"] = _cell(f"₹{prem * lot:,.0f}", prem * lot <= cap_inr * 1.05,
-                                    f"cap ₹{cap_inr:,.0f}")
+                # What a stop-out costs in all, held to the cap the way
+                # plan_trade and hunt() hold it (planned_risk_inr <= cap).
+                planned = (prem + extra) * lot
+                fits = planned <= cap_inr + 1e-6
+                row["risk"] = _cell(f"₹{planned:,.0f}", fits,
+                                    (f"stop ₹{prem * lot:,.0f} + costs ₹{extra * lot:,.0f} · "
+                                     if extra else "") + f"cap ₹{cap_inr:,.0f}")
                 row["stop"] = (_cell(f"{index_risk / a_idx:.2f} ATR", index_risk >= L.min_stop_atr * a_idx)
                                if a_idx > 0 else _cell("no ATR yet", None))
                 net = L.reward_risk * prem - cost
                 row["net"] = _cell(f"{net:.1f} pts", net >= L.min_net_points, f"at 1:{L.reward_risk:g}")
-                row["costfrac"] = _cell(f"{cost / prem:.2f}" if prem > 0 else "—",
-                                        prem > 0 and cost <= L.max_cost_frac_of_risk * prem)
+                # Friction against the whole bet: the stop plus what it carries
+                # inside the cap (plan_trade's prem_risk + extra).
+                bet = prem + extra
+                frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
+                row["costfrac"] = _cell(f"{cost / bet:.2f}" if bet > 0 else "—",
+                                        bet > 0 and (frac <= 0 or cost <= frac * bet),
+                                        "of stop + costs" if extra else "")
             else:
                 why = "needs a direction and a stop level"
                 row.update({k: _cell("—", None, why) for k in ("risk", "stop", "net", "costfrac")})
@@ -322,7 +343,6 @@ def _stock_rows(e, now):
         return []
     store = e.feed.store
     cap_inr = e.capital.capital * L.max_risk_pct_per_trade / 100.0
-    lev = float(getattr(L, "stocks_leverage", 5.0))
     free = e.capital.capital - e.book.deployed()
     na = _cell("n/a", None, "options only")
     out = []
@@ -353,15 +373,18 @@ def _stock_rows(e, now):
             risk = abs(ref - inv) if inv else 0.0
         if risk > 0:
             fill = ak if side > 0 else bd
-            qty = min(int(cap_inr // risk), int(max(0.0, free) * lev // fill))
+            # The engine's own sizing - with risk_includes_costs the bisection
+            # to the largest size whose stop-out, costs included, fits (D-L3).
+            qty = e._stock_qty(risk, fill, bd, ak, free, cap_inr)
             a1 = atr(rows[:-1], period=L.atr_period)
             row["stop"] = (_cell(f"{risk / a1:.2f} ATR", risk >= L.min_stop_atr * a1)
                            if a1 > 0 else _cell("no ATR yet", None))
             if qty > 0:
-                rt = (leg_cost(fill, qty, "BUY", "EQ", e.cm) + leg_cost(fill, qty, "SELL", "EQ", e.cm)
-                      + 2 * e.cm.slippage_points() * qty + (ak - bd) * qty)
-                row["risk"] = _cell(f"₹{risk * qty:,.0f} · {qty} sh", risk * qty <= cap_inr * 1.05,
-                                    f"cap ₹{cap_inr:,.0f}")
+                rt = e._stock_round_trip(fill, qty, bd, ak)
+                bet = risk * qty + (rt if e._costs_inside() else 0.0)
+                row["risk"] = _cell(f"₹{bet:,.0f} · {qty} sh", bet <= cap_inr + 1e-6,
+                                    (f"stop ₹{risk * qty:,.0f} + costs ₹{rt:,.0f} · "
+                                     if e._costs_inside() else "") + f"cap ₹{cap_inr:,.0f}")
                 net = L.reward_risk * risk * qty - rt
                 need = float(getattr(L, "stocks_min_net_inr", 100.0))
                 row["net"] = _cell(f"₹{net:,.0f}", net >= need, f"est. at 1:{L.reward_risk:g}")

@@ -286,6 +286,20 @@ check("F5: the per-candidate delta ceiling is asked for each contract and applie
                                       max_delta_fn=lambda px, spr: 0.0) is None,
       f"{len(fn_hits)} contracts asked")
 
+# Review D-L4 (2 Oct 2026): the refusal quotes the ceiling the candidates were
+# held to, not the cost-free max_delta hunt() also passes.
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: 0.17 if px > 50.0 else 0.18)
+check("D-L4: the reject text quotes the largest per-contract ceiling, not the cost-free max_delta",
+      "0.18" in sel.last_reject and "0.90" not in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: 0.10)
+check("D-L4: costs that push every ceiling under min_delta say the stop is too wide",
+      sel.last_reject == "chart stop too wide for the risk cap even at min_delta", sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.17)
+check("D-L4: without max_delta_fn the text is unchanged",
+      sel.last_reject == "no strike at delta <= 0.17 fits the risk cap", sel.last_reject)
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("5. Managing the position: stop, target, trail, square-off")
 

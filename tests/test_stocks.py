@@ -263,6 +263,83 @@ check("stocks are off by default in code (config/intraday.json turns them on)",
       IntradayLimits().stocks_enabled is False)
 
 # ─────────────────────────────────────────────────────────────────────────────
+section("3b. 2 Oct 2026 review: the chase guard and the constraints page (D-L2, D-L3)")
+
+import time as _time
+import arb.intraday_engine as _ie
+from arb import constraints as _cons
+
+_bars = [[f"2026-10-01T10:{m:02d}:00+05:30", 500.0, 501.0, 499.0, 500.0, 1000.0] for m in range(40)]
+
+
+class _RowsCandles:
+    def get(self, name, limit=120):
+        return [list(r) for r in _bars][-limit:]
+
+
+def stock_engine(**kw):
+    e = engine()
+    e.L = IntradayLimits(**kw)
+    e.candles = _RowsCandles()
+    e._closed_rows = lambda name, rows, t0=None: (rows, "")     # the bars are closed: test the guard
+    e.stocks = SimpleNamespace(active=[SimpleNamespace(symbol="AAA")],
+                               universe={"AAA": {"eq_symbol": "AAA-EQ", "eq_token": "11"}},
+                               slots={"AAA": 0})
+    return e
+
+
+_verdict = SimpleNamespace(tradable=True, side=BULL, grade="A", setups=[], veto="",
+                           reason="t", reversal=False, count=1,
+                           names=lambda: [], plays=lambda: ["test"], chain=lambda: [])
+_real_eval, _real_gate = _ie.evaluate, _ie.regime_gate
+_ie.evaluate = lambda rows, px, L, strike_step=0.0: _verdict
+_ie.regime_gate = lambda rows, L, name=None: ""
+try:
+    ec = stock_engine(decide_on_closed_bars=True, max_chase_atr=0.5)
+    ec.feed.store.ltp[0], ec.feed.store.bid[0], ec.feed.store.ask[0] = 510.0, 509.95, 510.05
+    ec._hunt_stocks(10_000.0)
+    check("D-L2: a stock 10 ATRs past the closed bar's close is not chased",
+          ec.rejects.get("stock:price_moved_since_close", 0) == 1 and ec.book.count() == 0,
+          f"rejects {ec.rejects}")
+    ec2 = stock_engine(decide_on_closed_bars=True, max_chase_atr=0.5)
+    ec2.feed.store.ltp[0], ec2.feed.store.bid[0], ec2.feed.store.ask[0] = 500.2, 500.15, 500.25
+    ec2._hunt_stocks(10_000.0)
+    check("D-L2: one near the close passes the guard (refused later or taken, never as a chase)",
+          "stock:price_moved_since_close" not in ec2.rejects, f"rejects {ec2.rejects}")
+    ec3 = stock_engine(decide_on_closed_bars=False, max_chase_atr=0.5)
+    ec3.feed.store.ltp[0], ec3.feed.store.bid[0], ec3.feed.store.ask[0] = 510.0, 509.95, 510.05
+    ec3._hunt_stocks(10_000.0)
+    check("D-L2: with decide_on_closed_bars off there is no chase guard, as for the indices",
+          "stock:price_moved_since_close" not in ec3.rejects, f"rejects {ec3.rejects}")
+finally:
+    _ie.evaluate, _ie.regime_gate = _real_eval, _real_gate
+
+# The constraints page sizes a stock the way _hunt_stocks does: with costs
+# inside the cap, the largest size whose stop-out PLUS its round trip fits.
+ep = stock_engine(risk_includes_costs=True, max_risk_pct_per_trade=5.0)
+ep.feed.store.ltp[0], ep.feed.store.bid[0], ep.feed.store.ask[0] = 500.0, 499.95, 500.05
+ep.verdicts["AAA"] = _verdict
+ep.evaluated_at["AAA"] = ep.verdict_at["AAA"] = _time.time()
+ep.stock_structures["AAA"] = SimpleNamespace(closes=[500.0], invalidation=lambda side: 490.0)
+_srow = _cons._stock_rows(ep, _time.time())[0]
+
+
+def _rt(q, px=500.05, bid=499.95, ask=500.05):
+    return (leg_cost(px, q, "BUY", "EQ", ep.cm) + leg_cost(px, q, "SELL", "EQ", ep.cm)
+            + 2 * ep.cm.slippage_points() * q + (ask - bid) * q)
+
+
+_want = max(q for q in range(0, 51) if 10.0 * q + _rt(q) <= 500.0)
+_shown = int(str(_srow["risk"]["v"]).split("·")[1].split("sh")[0])
+check("D-L3: the page sizes a stock by the engine's costs-inside bisection",
+      _shown == _want and _want < 50 and _srow["risk"]["ok"] is True,
+      f"page {_srow['risk']['v']} vs {_want} shares (cap/stop alone: 50)")
+check("D-L3: ...and shows the stop plus its costs against the cap",
+      abs(float(str(_srow["risk"]["v"]).split("·")[0].strip(" ₹").replace(",", ""))
+          - round(10.0 * _want + _rt(_want))) <= 1.0,
+      f"{_srow['risk']}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 section("4. The desk: whole-day figures after a restart, retried history")
 
 import numpy as np
