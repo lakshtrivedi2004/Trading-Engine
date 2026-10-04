@@ -56,6 +56,8 @@ case "$cmd" in
     echo
     "$PY" tests/test_api.py || exit 1
     echo
+    "$PY" tests/test_candles.py || exit 1
+    echo
     "$PY" tests/test_playbooks.py || exit 1
     echo
     "$PY" tests/test_scalper.py || exit 1

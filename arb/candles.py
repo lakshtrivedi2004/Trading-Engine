@@ -3,6 +3,7 @@
 Fetched on a background thread and served from memory. The trading engine never
 waits on this - a chart that fails to load must not delay an order.
 """
+import hashlib
 import json
 import os
 import tempfile
@@ -46,8 +47,33 @@ def _rate_limited(text):
 
 
 def _budget_path(api):
-    key = "".join(c for c in str(getattr(api, "api_key", "") or "default") if c.isalnum())[:16]
-    return os.path.join(tempfile.gettempdir(), f"angel_hist_{key or 'default'}.json")
+    # A hash, not the key itself: /tmp is world-readable and an 8-character
+    # Angel key would otherwise be the whole file name (review D-B3).
+    key = str(getattr(api, "api_key", "") or "default")
+    tag = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), f"angel_hist_{tag}.json")
+
+
+_local_stamps = []
+
+
+def _take_slot_local():
+    """The same budget within this process only, for when the shared file
+    cannot be used (owned by another user, /tmp read-only or full) - pacing
+    must degrade, never stop history altogether (review D-B2)."""
+    while True:
+        with _hist_lock:
+            now = time.time()
+            _local_stamps[:] = [t for t in _local_stamps if 0.0 <= now - t < 3600.0]
+            wait = (_local_stamps[-1] + HIST_GAP_SEC - now) if _local_stamps else 0.0
+            for window, cap in ((60.0, HIST_PER_MIN), (3600.0, HIST_PER_HOUR)):
+                inside = [t for t in _local_stamps if now - t < window]
+                if len(inside) >= cap:
+                    wait = max(wait, inside[0] + window - now)
+            if wait <= 0:
+                _local_stamps.append(now)
+                return
+        time.sleep(min(wait, 5.0))
 
 
 def _take_slot(api):
@@ -59,7 +85,11 @@ def _take_slot(api):
     """
     path = _budget_path(api)
     while True:
-        with _hist_lock, open(path + ".lock", "a+") as lf:
+        try:
+            lf = open(path + ".lock", "a+")
+        except OSError:
+            return _take_slot_local()
+        with _hist_lock, lf:
             if fcntl is not None:
                 fcntl.flock(lf, fcntl.LOCK_EX)
             try:
@@ -68,7 +98,10 @@ def _take_slot(api):
             except (OSError, ValueError, TypeError):
                 stamps = []
             now = time.time()
-            stamps = [t for t in stamps if now - t < 3600.0]
+            # Only the past hour: a stamp from the future (the clock stepped
+            # back) would otherwise block every call for the size of the step
+            # (review D-B1).
+            stamps = [t for t in stamps if 0.0 <= now - t < 3600.0]
             wait = (stamps[-1] + HIST_GAP_SEC - now) if stamps else 0.0
             for window, cap in ((60.0, HIST_PER_MIN), (3600.0, HIST_PER_HOUR)):
                 inside = [t for t in stamps if now - t < window]
@@ -235,7 +268,14 @@ class CandleStore:
                 if bar is not None:
                     with self._lock:
                         rows = self.data.get(name) or []
-                        if not rows or rows[-1][0] < bar[0]:
+                        if rows and rows[-1][0] == bar[0]:
+                            # A history row for this same minute was fetched
+                            # while the minute was still open, so it is partial;
+                            # the bar built from every tick is the complete one
+                            # (review D-H1).
+                            rows[-1] = bar
+                            self.data[name] = rows
+                        elif not rows or rows[-1][0] < bar[0]:
                             rows.append(bar)
                             # Bounded: the engine reads at most a few hundred.
                             keep = int(self.max_rows)
@@ -322,7 +362,7 @@ class CandleStore:
             if not force and fresh < self.refresh_sec * 0.9:
                 continue                      # cache still current; spend nothing
             try:
-                rows = self._fetch(u)
+                rows = self._complete_only(self._fetch(u))
                 if rows:
                     with self._lock:
                         # Merge rather than replace: history is authoritative for
@@ -402,12 +442,23 @@ class CandleStore:
     def seed(self, name, rows):
         """Merge fetched 1-minute history under the live bars (a new stock pick).
         History is authoritative for the minutes it covers; newer live bars stay."""
+        rows = self._complete_only(rows)
         if not rows:
             return
         with self._lock:
             mine = self.data.get(name) or []
             tail = [r for r in mine if r[0] > rows[-1][0]]
             self.data[name] = (list(rows) + tail)[-int(self.max_rows):]
+
+    def _complete_only(self, rows):
+        """History rows whose minute has fully elapsed. Angel's history API
+        also returns the minute still in progress; merged as the last row it
+        became the "closed" bar the engine decided on, with a wrong close and
+        a missing wick, until the next refresh (review D-H1, 2 Oct 2026)."""
+        if not rows:
+            return rows
+        cur = self._bucket_iso(time.time())
+        return [r for r in rows if str(r[0]) < cur]
 
     def premium(self, slot, limit=30):
         """Closing mid of one option per minute, oldest first, live mid last."""
