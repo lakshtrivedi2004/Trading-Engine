@@ -15,6 +15,17 @@ from SmartApi import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 
 from arb.apilog import instrument
+
+try:
+    # Every websocket operation gets a deadline. Without one, a link that dies
+    # mid-frame leaves the reader blocked until TCP gives up (~15 min) and
+    # close_connection() blocked behind it (review F-H1, reproduced against the
+    # real library). Angel's 10 s heartbeat keeps a healthy idle socket well
+    # inside 20 s.
+    import websocket as _websocket
+    _websocket.setdefaulttimeout(20)
+except Exception:                       # pragma: no cover - library missing
+    pass
 from arb.book import QuoteStore, normalise_best5, PAISE
 
 NSE_CM, NSE_FO, BSE_CM, BSE_FO = 1, 2, 3, 4
@@ -32,6 +43,12 @@ class _RedactSecrets(logging.Filter):
         (re.compile(r"('jwtToken':\s*')[^']*(')"), r"\1***\2"),
         (re.compile(r"('refreshToken':\s*')[^']*(')"), r"\1***\2"),
         (re.compile(r"('feedToken':\s*')[^']*(')"), r"\1***\2"),
+        # The same fields URL-encoded in a query string or quoted in JSON: a
+        # login that succeeds and a follow-up call that fails on the network
+        # puts the refresh token in the exception text (review F-L7).
+        (re.compile(r"((?:refreshToken|jwtToken|feedToken)(?:%22|\"|')?\s*(?::|%3A)\s*"
+                    r"(?:%20|\s)*(?:%22|\"|')?(?:Bearer(?:%20|\s))?)[A-Za-z0-9._\-]{8,}"),
+         r"\1***"),
     ]
 
     def filter(self, record):
@@ -43,6 +60,14 @@ class _RedactSecrets(logging.Filter):
         except Exception:
             pass
         return True
+
+
+def redact(text):
+    """The same scrubbing for the engine's own log lines (exception texts)."""
+    text = str(text)
+    for pat, rep in _RedactSecrets.PATTERNS:
+        text = pat.sub(rep, text)
+    return text
 
 
 def _install_redaction():
@@ -166,8 +191,11 @@ class MarketFeed:
         self._gen = 0
         self._gen_started = 0.0
         self._opened_ns = 0
-        self._dead = threading.Event()
+        self._dead = threading.Event()  # the CURRENT generation's; each gen gets its own
         self.connect_timeout = 30.0
+        self.max_retry_delay = 60.0
+        self.relogin_every_sec = 600.0  # never re-login more often than this
+        self._last_relogin = 0.0
         self._slot_cache = self.store.slot_of_token
         # Which chain (expiry) each slot belongs to, and a monotonic per-chain
         # tick counter. A tick touches exactly one expiry, so the scanner can skip
@@ -249,82 +277,122 @@ class MarketFeed:
         sws.on_close = live(self._on_close)
         return sws
 
-    def _connect(self, sws, gen):
+    def _connect(self, sws, gen, dead):
         try:
             sws.connect()                      # returns only when the socket closes
         except Exception as e:
             if gen == self._gen:
-                self.log(f"[feed] connect failed: {e}")
-        if gen == self._gen:
-            self._dead.set()
+                self.log(f"[feed] connect failed: {redact(e)}")
+        dead.set()                             # this generation's event only
+
+    @staticmethod
+    def _close_async(sws):
+        """close_connection() can block until TCP gives up when the link died
+        mid-frame (review F-H1), so it never runs on a thread anyone waits on."""
+        if sws is None:
+            return
+
+        def run():
+            try:
+                sws.close_connection()
+            except Exception:
+                pass
+        threading.Thread(target=run, name="ws-close", daemon=True).start()
 
     def _run(self):
         """Connect, wait until the socket dies or is declared dead, reconnect. Forever."""
         while not self._stopping.is_set():
-            self._gen += 1
-            gen = self._gen
-            self._dead.clear()
-            self.connected.clear()
-            self._opened_ns = 0
-            self._gen_started = time.time()
-            self.sws = sws = self._new_socket(gen)
-            threading.Thread(target=self._connect, args=(sws, gen),
-                             name=f"ws-{gen}", daemon=True).start()
-            while not self._dead.wait(0.5):
-                if self._stopping.is_set():
-                    break
-            self.connected.clear()
+            try:
+                self._run_once()
+            except Exception as e:             # a dead reconnect loop is a blind engine
+                try:
+                    self.log(f"[feed] reconnect loop error: {redact(e)!r}")
+                except Exception:
+                    pass
+                self._stopping.wait(5.0)
+
+    def _run_once(self):
+        self._gen += 1
+        gen = self._gen
+        # A generation's own event: a late close of an abandoned socket can no
+        # longer end the NEXT socket's life (review F-M1).
+        self._dead = dead = threading.Event()
+        self.connected.clear()
+        self._opened_ns = 0
+        self._gen_started = time.time()
+        self.sws = sws = self._new_socket(gen)
+        threading.Thread(target=self._connect, args=(sws, gen, dead),
+                         name=f"ws-{gen}", daemon=True).start()
+        while not dead.wait(0.5):
             if self._stopping.is_set():
                 break
-            # A socket that lived less than a few seconds did not really connect.
-            if time.time() - self._gen_started < 5.0 or not self._opened_ns:
-                self._consecutive_failures += 1
-            else:
-                self._consecutive_failures = 0
-            self.reconnects += 1
-            self.last_reconnect_at = time.time()
-            delay = min(2.0 * self._consecutive_failures + 1.0, 20.0)
-            if self._consecutive_failures and self._consecutive_failures % 3 == 0:
-                # Three straight refusals usually mean the tokens are dead, not
-                # the network. A fresh login renews jwt and feed token together.
-                try:
-                    self.session.login()
-                    self.log("[feed] re-login ok; reconnecting with fresh tokens")
-                except Exception as e:
-                    self.log(f"[feed] re-login failed: {e}")
-            self.log(f"[feed] reconnecting in {delay:.0f}s (reconnect #{self.reconnects})")
-            self._stopping.wait(delay)
+        self.connected.clear()
+        if self._stopping.is_set():
+            return
+        # A socket that did not really connect, or that opened and never sent a
+        # tick, is a failure: the delay grows instead of reconnecting every few
+        # seconds all session (a market holiday, review F-L1).
+        ticked = bool(self._opened_ns) and self.last_tick_ns > self._opened_ns
+        if time.time() - self._gen_started < 5.0 or not self._opened_ns or not ticked:
+            self._consecutive_failures += 1
+        else:
+            self._consecutive_failures = 0
+        self.reconnects += 1
+        self.last_reconnect_at = time.time()
+        delay = min(2.0 * self._consecutive_failures + 1.0, float(self.max_retry_delay))
+        if self._consecutive_failures and self._consecutive_failures % 3 == 0 \
+                and time.time() - self._last_relogin >= float(self.relogin_every_sec):
+            # Three straight failures usually mean the tokens are dead, not the
+            # network. A fresh login renews jwt and feed token together - but
+            # at most once per relogin_every_sec, or a quiet holiday logs in
+            # every minute.
+            self._last_relogin = time.time()
+            try:
+                self.session.login()
+                self.log("[feed] re-login ok; reconnecting with fresh tokens")
+            except Exception as e:
+                self.log(f"[feed] re-login failed: {type(e).__name__}")
+        self.log(f"[feed] reconnecting in {delay:.0f}s (reconnect #{self.reconnects})")
+        self._stopping.wait(delay)
 
-    def _declare_dead(self, why):
+    def _declare_dead(self, gen, why):
+        if gen != self._gen:
+            return
+        dead, sws = self._dead, self.sws
         self.stalls += 1
+        self.connected.clear()
+        dead.set()                             # _run moves on now, whatever close does
+        self._close_async(sws)
         self.log(f"[feed] {why}; forcing reconnect (stall #{self.stalls})")
-        try:
-            self.sws.close_connection()        # best effort; it may never return the socket
-        except Exception as e:
-            self.log(f"[feed] close on stall failed: {e}")
-        self._dead.set()                       # _run moves on either way
 
     def _watch(self):
         alarmed = 0                            # one alarm per generation
         while not self._stopping.wait(1.0):
-            gen = self._gen
-            if gen == alarmed or self._dead.is_set() or not self.market_open():
-                continue
-            if not self.connected.is_set():
-                # A connect that never opens is as dead as one that went quiet.
-                waited = time.time() - self._gen_started
-                if self._gen_started and waited > self.connect_timeout:
-                    alarmed = gen
-                    self._declare_dead(f"socket not open after {waited:.0f}s")
-                continue
-            # Quiet is measured from the last tick, or from the open if this
-            # socket has not ticked yet: a socket that opens and never ticks is
-            # caught too, which the old "no tick yet" skip missed.
-            heard = max(self.last_tick_ns, self._opened_ns)
-            quiet = (time.perf_counter_ns() - heard) / 1e9
-            if quiet > self.stale_sec:
-                alarmed = gen
-                self._declare_dead(f"no ticks for {quiet:.0f}s while market open")
+            try:
+                alarmed = self._watch_once(alarmed)
+            except Exception:                  # the watchdog must outlive any error
+                pass
+
+    def _watch_once(self, alarmed):
+        gen = self._gen
+        if gen == alarmed or self._dead.is_set() or not self.market_open():
+            return alarmed
+        if not self.connected.is_set():
+            # A connect that never opens is as dead as one that went quiet.
+            waited = time.time() - self._gen_started
+            if self._gen_started and waited > self.connect_timeout:
+                self._declare_dead(gen, f"socket not open after {waited:.0f}s")
+                return gen
+            return alarmed
+        # Quiet is measured from the last tick, or from the open if this
+        # socket has not ticked yet: a socket that opens and never ticks is
+        # caught too, which the old "no tick yet" skip missed.
+        heard = max(self.last_tick_ns, self._opened_ns)
+        quiet = (time.perf_counter_ns() - heard) / 1e9
+        if quiet > self.stale_sec:
+            self._declare_dead(gen, f"no ticks for {quiet:.0f}s while market open")
+            return gen
+        return alarmed
 
     def start(self, block=False):
         self._stopping.clear()
@@ -339,11 +407,8 @@ class MarketFeed:
 
     def stop(self):
         self._stopping.set()
-        try:
-            if self.sws:
-                self.sws.close_connection()
-        except Exception:
-            pass
+        self._dead.set()
+        self._close_async(self.sws)            # a stop must not hang on a dead link
 
     def wait_for_quotes(self, slots, timeout=30.0, need=1):
         """Block until at least ``need`` of the given slots have two-sided quotes."""

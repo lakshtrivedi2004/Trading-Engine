@@ -10,6 +10,7 @@ never waits on the disk, and a failed write never fails the call.
 Columns: ts (epoch), iso, pid, thread, endpoint, ms, outcome, detail.
 outcome is ok | refused | rate_limited | error.
 """
+import atexit
 import os
 import queue
 import threading
@@ -63,6 +64,28 @@ def _write_loop(path):
             pass
 
 
+def _drain(path):
+    """Write whatever is still queued. The writer is a daemon thread, so at
+    exit the last calls - the run.sh_real pre-flight, a tool's whole run -
+    were lost (review F-M2)."""
+    rows = []
+    while True:
+        try:
+            rows.append(_q.get_nowait())
+        except queue.Empty:
+            break
+    if not rows:
+        return
+    try:
+        new = not os.path.exists(path)
+        with open(path, "a") as fh:
+            if new:
+                fh.write(HEADER)
+            fh.writelines(rows)
+    except OSError:
+        pass
+
+
 def _start_writer(path):
     global _writer
     with _writer_lock:
@@ -71,6 +94,7 @@ def _start_writer(path):
             _writer = threading.Thread(target=_write_loop, args=(path,),
                                        name="apilog", daemon=True)
             _writer.start()
+            atexit.register(_drain, path)
 
 
 def _wrap(name, fn):

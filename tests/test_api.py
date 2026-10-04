@@ -107,6 +107,7 @@ class FakeWS:
     SNAP_QUOTE = 3
     made = []
     plan = []
+    blocked = []
 
     def __init__(self, *a, **kw):
         self.mode = FakeWS.plan.pop(0) if FakeWS.plan else "tick"
@@ -121,6 +122,10 @@ class FakeWS:
             threading.Event().wait()                 # blocks for ever
         self.on_open(None)
         n = 0
+        if self.mode in ("silent", "silent_block"):     # opens, never ticks (a holiday)
+            while not self.closed.is_set():
+                time.sleep(0.05)
+            return
         while True:
             if self.mode == "tick" and self.closed.is_set():
                 self.on_close(None)
@@ -133,6 +138,11 @@ class FakeWS:
     def close_connection(self):
         if self.mode == "tick":
             self.closed.set()                        # 'hang' ignores it, like the real stall
+        elif self.mode in ("block", "silent_block"):
+            # The real library when the link died mid-frame: close waits for
+            # the reader's frame lock and never returns (review F-H1).
+            FakeWS.blocked.append(self)
+            threading.Event().wait()
 
 
 def until(cond, timeout=12.0):
@@ -183,6 +193,78 @@ check("a healthy socket is left alone", mf.stalls == 0 and len(FakeWS.made) == 1
 mf.stop()
 time.sleep(0.8)
 check("stop() ends the feed without reconnecting", len(FakeWS.made) == 1)
+
+# Review F-H1 (2 Oct 2026): with the real library a link that dies mid-frame
+# makes close_connection() block for good. The watchdog must not wait on it.
+FakeWS.made, FakeWS.plan, logs[:] = [], ["block", "tick"], []
+mf = F.MarketFeed(session, 4, log=logs.append, stale_sec=1.0)
+mf.register("1")
+mf.start()
+ok = until(lambda: len(FakeWS.made) >= 2 and mf.connected.is_set() and mf.ticks > 3, 15.0)
+before = mf.ticks
+time.sleep(0.5)
+check("a close that never returns does not stop the reconnect (watchdog not stuck)",
+      ok and mf.ticks > before and len(FakeWS.blocked) >= 1 and mf._watchdog.is_alive(),
+      f"sockets {len(FakeWS.made)}, blocked closes {len(FakeWS.blocked)}, ticks {mf.ticks}")
+t = time.time()
+mf.stop()
+check("stop() returns at once even if the socket's close would block",
+      time.time() - t < 1.0, f"{time.time() - t:.2f}s")
+
+# Review F-L1: a socket that opens and never ticks (a market holiday) is a
+# failure, so the delay grows and re-logins are rationed.
+relogins = []
+sess2 = SimpleNamespace(jwt="j", feed_token="f", login=lambda: relogins.append(1),
+                        creds=SimpleNamespace(api_key="k", client_id="c"))
+FakeWS.made, FakeWS.plan, logs[:] = [], ["silent"] * 20, []
+mf = F.MarketFeed(sess2, 4, log=logs.append, stale_sec=0.5)
+mf.max_retry_delay = 1.0
+mf.register("1")
+mf.start()
+until(lambda: mf._consecutive_failures >= 4, 20.0)
+mf.stop()
+check("an open socket that never ticks counts as a failure: failures escalate",
+      mf._consecutive_failures >= 4, f"failures {mf._consecutive_failures}")
+check("...and re-login is rationed (at most once per relogin_every_sec)",
+      len(relogins) <= 1, f"{len(relogins)} re-logins in {len(FakeWS.made)} sockets")
+
+# Review F-L2: a raising log must not kill the watchdog or the reconnect loop.
+boom = {"n": 0}
+
+
+def bad_log(msg):
+    boom["n"] += 1
+    if boom["n"] <= 3:
+        raise OSError("disk full")
+
+
+FakeWS.made, FakeWS.plan = [], ["hang", "tick"]
+mf = F.MarketFeed(session, 4, log=bad_log, stale_sec=1.0)
+mf.register("1")
+mf.start()
+ok = until(lambda: len(FakeWS.made) >= 2 and mf.connected.is_set(), 15.0)
+check("a log that raises does not kill the watchdog or the reconnect loop",
+      ok and mf._watchdog.is_alive() and mf._thread.is_alive(),
+      f"sockets {len(FakeWS.made)}, watchdog {mf._watchdog.is_alive()}")
+mf.stop()
+
+leak = ("Error occurred while making a GET request to https://apiconnect.angelone.in/x?"
+        "data=%7B%22refreshToken%22:%20%22eyJhbGciOiJIUzUxMiJ9.abcdefgh.ijklmnop%22%7D")
+check("a URL-encoded refresh token in an exception text is redacted",
+      "eyJhbGciOiJIUzUxMiJ9" not in F.redact(leak), F.redact(leak)[-60:])
+
+# Review F-M2: rows still queued at exit are written, not lost.
+import subprocess                                   # noqa: E402
+csv = os.path.join(tempfile.mkdtemp(prefix="apilog_exit_"), "calls.csv")
+code = ("import sys; sys.path.insert(0, %r)\n"
+        "from arb import apilog\n"
+        "class A:\n"
+        "    def ltpData(self, *a): return {'status': True}\n"
+        "a = apilog.instrument(A(), path=%r)\n"
+        "for _ in range(4): a.ltpData()\n") % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), csv)
+subprocess.run([sys.executable, "-c", code], check=False, timeout=60)
+rows = open(csv).read().splitlines()[1:] if os.path.exists(csv) else []
+check("every call made just before exit reaches api_calls.csv", len(rows) == 4, f"{len(rows)} of 4 rows")
 
 # ─────────────────────────────────────────────────────────────────────────────
 section("3. Confirming an order never polls orderBook faster than Angel's 1/s")
