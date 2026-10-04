@@ -1265,12 +1265,43 @@ def tP_property():
           not bad, f"{len(bad)} bad, first {bad[:3]}; {unsettled} still open")
 
 
+def tOsq_pending_entry():
+    """Shutdown square-off with an entry order still being followed: an empty
+    book is not the end - the entry fills during the square-off and that fill
+    is taken on and sold, not left at the broker (reverify O, 5 Oct 2026)."""
+    class LateFill(ExitAngel):
+        def individual_order_details(self, uid):
+            o = self.orders.get(uid)
+            if o is not None and o["id"] == "1" and _clk.t >= self.fill_at and o["status"] == "open":
+                o["status"], o["filled"], o["avg"] = "cancelled", 65, 111.0
+            return super().individual_order_details(uid)
+    api = LateFill([("open", 0, 0.0), ("complete", 65, 109.0)])
+    api.sticky = True
+    api.fill_at = _clk.t + 30.0        # after enter()'s own confirm window
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.L.market_orders = True
+    e.enter(_cand(), _plan(), _struct, None)
+    pending = bool(e._pending_entries) and e.book.count() == 0
+    logs = []
+    e.log = logs.append
+    e._running.set()
+    e.feed.tick_event.set()
+    e.run(stop_predicate=lambda: True)
+    check("square-off waits for a pending entry: its late fill is taken on and sold, the account "
+          "ends flat", pending and api.true_net() == 0 and e.book.count() == 0
+          and not any("SQUARE-OFF INCOMPLETE" in x for x in logs),
+          f"account {api.true_net()}, book {e.book.count()}, pending {len(e._pending_entries)}")
+
+
 _O_TESTS = [("O1", tO1_null_answer), ("O2", tO2_raise_lagging_book), ("O3", tO3_unknown_entry_lag),
             ("O4", tO4_entry_late_fill), ("O5", tO5_backoff_budget), ("O6", tO6_silent_stall),
             ("O7", tO7_ab07), ("O8", tO8_late_reason), ("O9", tO9_exit_all),
             ("O10", tO10_paced), ("O11", tO11_stop_timeout), ("P", tP_property),
             ("O-ADV-1", tOadv1_double_adopt), ("O-obs1", tOobs1_lost_exit_price),
-            ("O-ADV-2", tOadv2_unit_stop_timeout), ("O-ADV-3", tOadv3_miss_gap)]
+            ("O-ADV-2", tOadv2_unit_stop_timeout), ("O-ADV-3", tOadv3_miss_gap),
+            ("O-SQ", tOsq_pending_entry)]
 
 
 try:

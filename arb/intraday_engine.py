@@ -2114,7 +2114,12 @@ class IntradayEngine:
             except Exception as e:
                 self.log(f"[intraday] square-off error: {e!r}")
             left = [p for p in self.book.snapshot() if not p.exit_blocked]
-            if not left or not (0.0 <= end - time.time() <= self.SQUAREOFF_RETRY_SEC):
+            # An entry order still being followed may yet be taken on (its
+            # fills wait while an exit in the symbol settles), so an empty book
+            # is not the end while one is pending: stopping there left its
+            # fills open at the broker (review reverify O, 5 Oct 2026).
+            if (not left and not self._pending_entries) or \
+                    not (0.0 <= end - time.time() <= self.SQUAREOFF_RETRY_SEC):
                 break
             time.sleep(0.5)
         left = self.book.snapshot()

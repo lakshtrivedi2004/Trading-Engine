@@ -302,6 +302,10 @@ def play_day(day, bars, workdir, capital, args, log_lines):
                 path = (o, l, h, c) if c >= o else (o, h, l, c)
                 m.quote(name, path[idx], now)
             cs._sample_live()
+            # Quote ages are measured on the real clock; re-stamp them as fresh
+            # just before the engine reads them, so a busy machine cannot make a
+            # strike look stale and change the replay (system test, 5 Oct 2026).
+            m.store.recv_ns[:] = time.perf_counter_ns()
             try:
                 eng.manage()
                 eng.hunt()
