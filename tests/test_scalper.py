@@ -763,6 +763,14 @@ with tempfile.TemporaryDirectory() as _d:
     r3 = _boot()
     check("a win afterwards does not clear the last loss's side or time",
           r3._loss_side == BEAR and abs(r3._loss_side_ts - want_ts) < 1e-3)
+    # D-ADV-1: F4 off (default flags; the latest loss, a stock, was 1 min ago,
+    # inside the default 180 s cooldown): a restart restores no loss state, as before D-L1.
+    r5 = IntradayEngine(_feed, [_Binding()], _Cfg(), CostModel(), IntradayLimits(),
+                        PaperBroker(CostModel()), _j, _Cap(), _Candles(day), log=lambda *_: None)
+    check("flags off: a restart restores neither the loss cooldown nor the side",
+          r5.last_loss_ts == 0.0 and r5._loss_side == 0 and r5._loss_side_ts == 0.0
+          and r5._gates() != "cooldown_after_loss",
+          f"last_loss {r5.last_loss_ts:.0f} side {r5._loss_side} gate {r5._gates()!r}")
 
 with tempfile.TemporaryDirectory() as _d:
     from arb.journal import Journal as _J

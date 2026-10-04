@@ -196,7 +196,13 @@ class IntradayEngine:
         from the last losing trade of any kind; _loss_side and _loss_side_ts
         from the last losing INDEX OPTION trade only (a bought CE is long the
         index, a bought PE short), exactly as _book_fill sets them.
+
+        Only with F4 on (same_side_cooldown_min > 0): with every flag at its
+        default a restart keeps its old behaviour and starts with no loss
+        state (review D-ADV-1, 5 Oct 2026).
         """
+        if float(getattr(self.L, "same_side_cooldown_min", 0.0) or 0.0) <= 0:
+            return
         now = time.time()
 
         def when(r):
