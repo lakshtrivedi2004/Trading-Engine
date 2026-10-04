@@ -157,11 +157,35 @@ def live_futures(scrip_master, underlying="NIFTY", segment="NFO",
     return out[:n]
 
 
+_HOLIDAYS = None
+
+
+def holidays():
+    """Exchange trading holidays (config/holidays.json), as 'YYYY-MM-DD' strings.
+
+    Without them every holiday looked like an open market: the engine logged in
+    at 09:15, found no ticks, and the feed reconnected all day (review F-L1,
+    2 Oct 2026 - Gandhi Jayanti). An unreadable file means no holidays, never
+    a refusal to trade."""
+    global _HOLIDAYS
+    if _HOLIDAYS is None:
+        try:
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "config", "holidays.json")
+            with open(path) as fh:
+                _HOLIDAYS = set(json.load(fh).get("holidays") or [])
+        except (OSError, ValueError, AttributeError):
+            _HOLIDAYS = set()
+    return _HOLIDAYS
+
+
 def market_phase(ref=None, start="09:15", end="15:15"):
-    """'preopen' | 'open' | 'closed' | 'weekend' for the given IST time."""
+    """'preopen' | 'open' | 'closed' | 'weekend' | 'holiday' for the given IST time."""
     ref = ref or now_ist()
     if ref.weekday() >= 5:
         return "weekend"
+    if ref.strftime("%Y-%m-%d") in holidays():
+        return "holiday"
     sh, sm = (int(x) for x in start.split(":"))
     eh, em = (int(x) for x in end.split(":"))
     t = ref.hour * 60 + ref.minute

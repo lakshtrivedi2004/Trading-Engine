@@ -152,6 +152,17 @@ try:
         ok = False
         print("   ", e)
     check("an unusable lock file falls back to in-process pacing, never raises", ok)
+    # ═════════════════════════════════════════════════════════════════════════
+    section("3. Exchange holidays are not trading days")
+    from arb.instruments import market_phase
+    check("Gandhi Jayanti 2026 (a Friday) is a holiday, not an open market",
+          market_phase(datetime(2026, 10, 2, 10, 0, tzinfo=IST)) == "holiday")
+    check("the next Monday at 10:00 is open",
+          market_phase(datetime(2026, 10, 5, 10, 0, tzinfo=IST)) == "open")
+    check("Diwali Balipratipada 2026 is a holiday",
+          market_phase(datetime(2026, 11, 10, 11, 0, tzinfo=IST)) == "holiday")
+    check("a weekend is still a weekend",
+          market_phase(datetime(2026, 10, 3, 10, 0, tzinfo=IST)) == "weekend")
 finally:
     time.time = _real_time
 
