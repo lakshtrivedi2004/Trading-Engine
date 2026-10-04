@@ -5,6 +5,7 @@ otherwise: a structure that fills partially is recorded as a broken structure
 with its unwind cost, never as profit. The old bot booked the theoretical edge
 straight to cash and never modelled a fill at all.
 """
+import collections
 import concurrent.futures
 import math
 import random
@@ -94,6 +95,7 @@ class LiveBroker:
         self._last_call = {}
         self._order_lock = threading.Lock()   # the order gate's own: a paced
         self._next_order_at = 0.0             # poll sleeping must not hold up an exit
+        self._order_times = collections.deque()   # monotonic stamps, the last hour
         self._tag_n = 0
 
     # Polling pace per endpoint, in seconds between calls. Angel publishes 1/s
@@ -104,12 +106,17 @@ class LiveBroker:
     POLL_GAP = {"orderBook": 1.1, "position": 1.1, "individual_order_details": 0.5}
 
     def _paced(self, name, *a):
-        """Call api.<name>, waiting first if the last call was too recent."""
+        """Call api.<name>, waiting first if the last call was too recent. On
+        the monotonic clock: with the wall clock, a step back of X seconds (NTP
+        after a resume) made the next poll sleep X seconds on the engine thread,
+        holding every other endpoint behind the lock (review O10, 2 Oct 2026)."""
         with self._pace_lock:
-            wait = self.POLL_GAP.get(name, 0.0) - (time.time() - self._last_call.get(name, 0.0))
+            gap = self.POLL_GAP.get(name, 0.0)
+            # Never more than one gap, whatever the stamps say.
+            wait = min(gap, gap - (time.monotonic() - self._last_call.get(name, float("-inf"))))
             if wait > 0:
                 time.sleep(wait)
-            self._last_call[name] = time.time()
+            self._last_call[name] = time.monotonic()
         return getattr(self.api, name)(*a)
 
     # Place, modify and cancel share one budget at Angel: 9 requests a second
@@ -121,18 +128,44 @@ class LiveBroker:
     # Set from IntradayLimits by run_bot (exit_safety_fixes, order_tags).
     exit_safety_fixes = False
     order_tags = False
+    # Angel also caps order calls at 500 a minute and 1000 an hour per client
+    # code (reader_angel.md section 5); past either, every order is refused -
+    # the stop and the square-off too - until the window clears. With
+    # exit_safety_fixes the gate keeps under both, and entries stop at
+    # ENTRY_SHARE of each, so exits and cancels always have a reserve: a
+    # refused exit re-sent on every tick used to spend the hour in about two
+    # minutes (review O5, 2 Oct 2026).
+    ORDER_BUDGET = ((60.0, 400), (3600.0, 900))     # (window s, calls allowed)
+    ENTRY_SHARE = 0.5
 
-    def _order_gate(self):
+    def _order_gate(self, kind="X"):
+        """Hold an order call to order_rate_per_sec and, with exit_safety_fixes,
+        to the minute and hour budget. kind "E" is an entry; anything else (an
+        exit, a cancel) may use the whole budget. False: do not send it."""
         rate = float(self.order_rate_per_sec or 0.0)
-        if rate <= 0:
-            return
+        budget = bool(self.exit_safety_fixes)
+        if rate <= 0 and not budget:
+            return True
         with self._order_lock:
-            now = time.monotonic()
-            wait = self._next_order_at - now
-            if wait > 0:
-                time.sleep(wait)
-                now += wait
-            self._next_order_at = now + 1.0 / rate
+            if budget:
+                now, q = time.monotonic(), self._order_times
+                span = max(w for w, _ in self.ORDER_BUDGET)
+                while q and now - q[0] >= span:
+                    q.popleft()
+                share = self.ENTRY_SHARE if kind == "E" else 1.0
+                for window, cap in self.ORDER_BUDGET:
+                    if sum(1 for t in q if now - t < window) >= int(cap * share):
+                        return False
+            if rate > 0:
+                now = time.monotonic()
+                wait = self._next_order_at - now
+                if wait > 0:
+                    time.sleep(wait)
+                    now += wait
+                self._next_order_at = now + 1.0 / rate
+            if budget:
+                self._order_times.append(time.monotonic())
+        return True
 
     def new_tag(self, kind):
         """An ordertag that marks the order as the engine's: TE, L(ive) or
@@ -186,7 +219,8 @@ class LiveBroker:
 
     def _place_one(self, leg):
         try:
-            self._order_gate()
+            if not self._order_gate("E"):
+                return leg, None, "not sent: the order budget is spent"
             oid = self.api.placeOrder(self._order_params(leg, leg["quote_price"]))
             return leg, oid, None
         except Exception as e:
@@ -227,25 +261,47 @@ class LiveBroker:
         cancel, or one whose place call raised, may yet fill, and nothing may
         be sent over it."""
         fixes = self.exit_safety_fixes
+        kind = leg.get("kind") or ("E" if leg["side"] == "BUY" else "X")
         if self.order_tags:
-            kind = leg.get("kind") or ("E" if leg["side"] == "BUY" else "X")
             leg["tag"] = self.new_tag(kind)
         params = self._order_params(leg, leg.get("quote_price"), market=bool(leg.get("market")))
         leg["filled"], leg["fill_price"], leg["order_id"] = False, 0.0, None
         try:
-            self._order_gate()
+            if not self._order_gate(kind):
+                leg["broker_status"], leg["final"] = "budget", True     # never sent (review O5)
+                return f"{leg['symbol']}: not sent - Angel's order budget for the minute or hour is spent"
             r = self.api.placeOrderFullResponse(params)
         except Exception as e:
             if fixes:
                 # A timeout here does not mean Angel never took the order.
                 leg["broker_status"], leg["place_exception"], leg["final"] = "unknown", True, False
+                leg["uid"] = ""
             return f"{leg['symbol']}: place failed: {e}"
         data = (r or {}).get("data") if isinstance(r, dict) else None
-        if not data or not data.get("orderid"):
-            if fixes:
-                leg["final"] = True               # refused: nothing is working
-            return f"{leg['symbol']}: order refused: {(r or {}).get('message') if isinstance(r, dict) else r}"
+        data = data if isinstance(data, dict) else {}
         oid, uid = data.get("orderid"), data.get("uniqueorderid")
+        why = (r or {}).get("message") if isinstance(r, dict) else r
+        if fixes and not oid and uid:
+            # Only a uniqueorderid came back (Angel answers an LPP refusal so,
+            # forum 4703): read the order by it before calling it anything.
+            end, row = time.monotonic() + min(2.0, self.confirm_timeout), None
+            while True:
+                row = self.order_state(uid, "")
+                if row or time.monotonic() >= end:
+                    break
+                time.sleep(0.3)
+            oid = (row or {}).get("oid") or None
+        if not oid:
+            if fixes:
+                # No order id is not proof that nothing was placed: Angel has
+                # executed orders whose answer carried no data (SmartAPI forum
+                # topic 1189). Calling it refused let close() send a second SELL
+                # over a filled one - a naked short on a stock. It is now looked
+                # for like a place call that raised (review O1, 2 Oct 2026).
+                leg["broker_status"], leg["place_exception"], leg["final"] = "unknown", True, False
+                leg["uid"] = str(uid or "")
+                return f"{leg['symbol']}: no order id in Angel's answer ({why}) - status unknown"
+            return f"{leg['symbol']}: order refused: {why}"
         leg["order_id"] = oid
         if fixes:
             leg["uid"] = uid or ""
@@ -259,8 +315,8 @@ class LiveBroker:
         if not st or st[0] not in self._FINAL:
             # Still working after the timeout: pull it, then read what filled.
             try:
-                self._order_gate()
-                self.api.cancelOrder(oid, params["variety"] if fixes else "NORMAL")
+                if self._order_gate("X"):
+                    self.api.cancelOrder(oid, params["variety"] if fixes else "NORMAL")
             except Exception:
                 pass
             end = time.time() + 3.0
@@ -292,7 +348,11 @@ class LiveBroker:
             except (TypeError, ValueError):
                 return 0.0
         status = str(row.get("orderstatus") or row.get("status") or "").lower()
-        return {"status": status, "final": status in self._FINAL,
+        # "cancelled after market order" (AB07, a cancelled AMO) is over too:
+        # read as working, it made the start guard refuse live all day. "cancel
+        # pending" and "cancel after market order req received" are not over
+        # (review O7, 2 Oct 2026).
+        return {"status": status, "final": status in self._FINAL or status.startswith("cancelled"),
                 "filled": int(num("filledshares")), "avg": num("averageprice"),
                 "unfilled": int(num("unfilledshares")), "qty": int(num("quantity")),
                 "trigger": num("triggerprice"), "price": num("price"),
@@ -324,9 +384,10 @@ class LiveBroker:
                 row = None
         return self._row_state(row) if isinstance(row, dict) and row else None
 
-    def open_orders(self, symbol=None):
-        """Every order still working at Angel (one paced orderBook read), for
-        one tradingsymbol if given. None if the book cannot be read."""
+    def order_rows(self, symbol=None):
+        """Every one of today's orders at Angel, finished ones included (one
+        paced orderBook read), for one tradingsymbol if given. None if the
+        book cannot be read."""
         try:
             r = self._paced("orderBook")
         except Exception:
@@ -334,14 +395,29 @@ class LiveBroker:
         if not isinstance(r, dict) or r.get("status") is False:
             return None
         rows = [self._row_state(x) for x in (r.get("data") or []) if isinstance(x, dict)]
-        return [x for x in rows if not x["final"]
-                and (symbol is None or x["symbol"] == str(symbol))]
+        return [x for x in rows if symbol is None or x["symbol"] == str(symbol)]
+
+    def open_orders(self, symbol=None):
+        """Every order still working at Angel (one paced orderBook read), for
+        one tradingsymbol if given. None if the book cannot be read."""
+        rows = self.order_rows(symbol)
+        return None if rows is None else [x for x in rows if not x["final"]]
+
+    @staticmethod
+    def signed_net(rows):
+        """BUY filled less SELL filled over these order rows: what they leave
+        held. Over all of a symbol's rows of the day it must match the position
+        book - a SELL that filled before its timed-out place call could answer
+        is never a working row, and the position book can lag it (review O2)."""
+        return sum(r["filled"] if r["side"] == "BUY" else -r["filled"] if r["side"] == "SELL" else 0
+                   for r in rows)
 
     def cancel_order(self, oid, variety):
         """Cancel one order with its own variety. {ok, error, code}; ok only
         means Angel took the request - the order's status says if it worked."""
         try:
-            self._order_gate()
+            if not self._order_gate("X"):
+                return {"ok": False, "error": "not sent: the order budget is spent", "code": "budget"}
             r = self.api.cancelOrder(oid, variety)
         except Exception as e:
             return {"ok": False, "error": str(e), "code": ""}
@@ -417,7 +493,8 @@ class LiveBroker:
             flip = dict(leg)
             flip["side"] = "SELL" if leg["side"] == "BUY" else "BUY"
             try:
-                self._order_gate()
+                if not self._order_gate("X"):
+                    return f"unwind {leg['symbol']}: not sent - the order budget is spent"
                 oid = self.api.placeOrder(self._order_params(flip, market=True))
                 return None if oid else f"unwind {leg['symbol']}: no order id"
             except Exception as e:
