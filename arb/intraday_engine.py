@@ -62,7 +62,8 @@ class _Ticket:
 
 class IntradayEngine:
     # exit_safety_fixes timings (review O4-O6, 2 Oct 2026).
-    EXIT_BACKOFF = (0.5, 5.0)       # first and longest wait after a refused or unfilled exit
+    EXIT_BACKOFF = (0.5, 5.0)       # first and longest wait after a refused exit
+    EXIT_MISS_GAP = 1.0             # wait after an exit Angel took that did not fill (O-ADV-3)
     EXIT_ALERT_AFTER = 5            # refused or unfilled exits in a row before one alert
     PENDING_ALERT_SEC = 30.0        # an exit or entry order unsettled this long is reported
     ENTRY_POLL_SEC = 2.0            # a pending entry order is looked at this often
@@ -533,31 +534,38 @@ class IntradayEngine:
                     self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\nExit of <code>{pos.symbol}</code> "
                                        f"could not be confirmed. New entries halted.")
                 return None
+            rows = None
             if fixes and hasattr(self.broker, "order_rows"):
                 # ...and only when both of its books agree: a SELL that filled
                 # before its place call could answer is missing from a lagging
                 # position book, and booking on that book alone has sold the
-                # same position twice (review O2, 2 Oct 2026).
-                held, why = self._held_agreed(pos.symbol, held=held)
+                # same position twice (review O2, 2 Oct 2026). Fills of an entry
+                # order not taken on yet are no part of this position (O-ADV-1).
+                held, why, rows = self._agreed_net(pos.symbol, held=held)
                 if held is None:
                     self.log(f"[intraday] {pos.symbol}: exit status unknown and {why}; "
                              f"nothing booked or sent until the books agree")
             if held is not None and held != want:
                 # Some or all of it did go: book what went, at the price we sent.
+                fill = float(px)
                 if fixes:
                     gone = self._held_gone(pos, held, short)
                     if gone is None:
                         return None             # wrong sign: book nothing, send nothing
+                    fill, oids = self._gone_price(pos, rows, min(gone, pos.qty), short, px)
+                    self._know(oids)
                 else:
                     gone = abs(want - held)
-                legs[0].update(filled=True, qty=min(gone, pos.qty), fill_price=float(px))
-                fill = float(px)
+                legs[0].update(filled=True, qty=min(gone, pos.qty), fill_price=fill)
                 self.log(f"[intraday] {pos.symbol}: exit status unknown; broker shows "
                          f"{held} held, so {gone} closed")
         if not legs[0].get("filled"):
             pos.exit_attempts += 1
             if fixes:
-                self._exit_failed(pos, legs[0], errors)
+                # Angel took it and it did not fill (an IOC that missed): a
+                # short fixed wait, not the refusals' doubling (O-ADV-3).
+                missed = str(legs[0].get("broker_status") or "").lower().startswith("cancel")
+                self._exit_failed(pos, legs[0], errors, missed=missed)
             self.log(f"[intraday] exit not filled for {pos.symbol} "
                      f"(try {pos.exit_attempts}, {legs[0].get('broker_status', '')}); "
                      f"position still open, retrying"
@@ -623,15 +631,24 @@ class IntradayEngine:
         pos.pending_none_seen, pos.pending_exit_reason = 0, reason
         self._save_open(force=True)
 
-    def _exit_failed(self, pos, leg, errors):
-        """A refused or unfilled exit (exit_safety_fixes): the next try waits
-        0.5 s, doubling to 5 s, and EXIT_ALERT_AFTER in a row are reported once.
-        A refusal used to be re-sent on every tick, about 8 a second - Angel's
-        1000-an-hour order budget gone in two minutes, and then every exit
-        refused, the stop and the square-off too (review O5, 2 Oct 2026)."""
+    def _exit_failed(self, pos, leg, errors, missed=False):
+        """A refused or unfilled exit (exit_safety_fixes): after a refusal the
+        next try waits 0.5 s, doubling to 5 s; after an order Angel took that
+        did not fill (`missed`: an IOC in a fast market) it waits EXIT_MISS_GAP.
+        EXIT_ALERT_AFTER in a row of either are reported once. A refusal used
+        to be re-sent on every tick, about 8 a second - Angel's 1000-an-hour
+        order budget gone in two minutes, and then every exit refused, the stop
+        and the square-off too (review O5, 2 Oct 2026). A miss is not a
+        refusal: doubled to 5 s it left a stop that kept missing unmanaged for
+        5 s between tries (review O-ADV-3, 5 Oct 2026); 1 s keeps a single
+        stop's tries inside the order budget for a quarter of an hour, and
+        after exit_market_after misses it goes at market anyway."""
         pos.exit_fails += 1
         first, longest = self.EXIT_BACKOFF
-        pos.exit_retry_at = time.time() + min(longest, first * 2 ** min(pos.exit_fails - 1, 16))
+        if missed:
+            pos.exit_retry_at = time.time() + self.EXIT_MISS_GAP
+        else:
+            pos.exit_retry_at = time.time() + min(longest, first * 2 ** min(pos.exit_fails - 1, 16))
         if pos.exit_fails == self.EXIT_ALERT_AFTER:
             why = "; ".join(str(x) for x in errors or []) or str(leg.get("broker_status") or "not filled")
             self.log(f"[intraday] exit of {pos.symbol} refused or unfilled {pos.exit_fails} times "
@@ -662,13 +679,73 @@ class IntradayEngine:
             return None, f"the position book shows {held} held and the order book {ob}"
         return held, ""
 
+    def _unadopted(self, symbol, rows):
+        """Signed fills of pending entry orders in symbol that the engine has
+        not taken on yet, read from the same order-book rows the two books
+        were agreed on; None while one of those orders cannot be found in them
+        (no id yet). Those fills are in the account's position but in no open
+        position: an exit reconciliation that counted them booked too little
+        as gone and sent a second SELL over a filled one, and the entry's poll
+        then took the same shares on again - the engine holding what the
+        account did not, and its stop selling the account short (review
+        O-ADV-1, 5 Oct 2026)."""
+        total = 0
+        for rec in self._pending_entries:
+            if rec["symbol"] != symbol:
+                continue
+            row = next((r for r in rows or []
+                        if (rec["oid"] and r["oid"] == rec["oid"])
+                        or (rec["uid"] and r["uid"] == rec["uid"])), None)
+            if row is None:
+                return None
+            total += rec["sign"] * max(0, row["filled"] - rec["booked"])
+        return total
+
+    def _agreed_net(self, symbol, rows=None, held=None):
+        """(held, why, rows): _held_agreed less the fills of pending entry
+        orders not taken on yet (_unadopted) - what the engine's own open
+        positions in symbol stand for at the broker."""
+        b = self.broker
+        if rows is None and hasattr(b, "order_rows"):
+            rows = b.order_rows(symbol)
+        held, why = self._held_agreed(symbol, rows=rows, held=held)
+        if held is not None and any(r["symbol"] == symbol for r in self._pending_entries):
+            extra = self._unadopted(symbol, rows)
+            if extra is None:
+                return None, "an entry order in it is not settled yet", rows
+            held -= extra
+        return held, why, rows
+
+    def _gone_price(self, pos, rows, gone, short, px):
+        """(price, order ids): what `gone` units of pos that went without a
+        known fill price went at - the average of the finished exit-side
+        order-book rows that no order id known to the engine accounts for
+        (the lost exit's own), when they add up to exactly `gone`. Otherwise
+        the mark px, as before: a lost exit was booked at the mark even when
+        the order book showed its real fill (review O-obs1, 5 Oct 2026)."""
+        known = getattr(self.broker, "known_oids", None)
+        if gone <= 0 or not rows or not isinstance(known, set):
+            return float(px), []
+        side = "BUY" if short else "SELL"
+        mine = [r for r in rows if r["final"] and r["side"] == side and r["filled"] > 0
+                and r["avg"] > 0 and r["oid"] not in known and r["oid"] != pos.pending_exit_oid]
+        if not mine or sum(r["filled"] for r in mine) != gone:
+            return float(px), []
+        return sum(r["avg"] * r["filled"] for r in mine) / gone, [r["oid"] for r in mine]
+
+    def _know(self, oids):
+        """Order ids now accounted for: never priced a second time."""
+        known = getattr(self.broker, "known_oids", None)
+        if isinstance(known, set):
+            known.update(str(o) for o in oids if o)
+
     def _agreed_or_wait(self, pos, rows=None):
-        """_held_agreed for a pending exit: the agreed figure, or None after
-        saying why. An unreadable book is reported at once (review O6); a
+        """(held, rows): _agreed_net for a pending exit, held None after saying
+        why. An unreadable book is reported at once (review O6); a
         disagreement that outlives PENDING_ALERT_SEC halts new entries (O2)."""
-        held, why = self._held_agreed(pos.symbol, rows=rows)
+        held, why, rows = self._agreed_net(pos.symbol, rows=rows)
         if held is not None:
-            return held
+            return held, rows
         key = ("books", pos.trade_id, pos.pending_exit_since)
         if key not in self._alerted:
             self._alerted.add(key)
@@ -680,7 +757,7 @@ class IntradayEngine:
             self._halt_alert(f"position and order books disagree on {pos.symbol} - check the Angel app",
                              f"Exit of <code>{pos.symbol}</code> cannot be settled: {why}. "
                              f"No exit is sent until they agree. New entries halted.")
-        return None
+        return None, rows
 
     def _pending_alert(self, pos, what):
         """One alert per pending exit: while it waits the software stop sends
@@ -713,18 +790,21 @@ class IntradayEngine:
                 self._pending_alert(pos, f"not settled after {age:.0f} s")
         return done
 
-    def _settle_rest(self, pos, held, short, reason, px, what):
+    def _settle_rest(self, pos, held, short, reason, px, what, rows=None):
         """Both books agree the broker holds `held`: book what else of pos has
-        gone, then let the next exit go (True), unless pos is blocked."""
+        gone - at its order-book price when that can be told (_gone_price) -
+        then let the next exit go (True), unless pos is blocked."""
         gone = self._held_gone(pos, held, short)
         if gone is None and pos.exit_blocked:
             return False
+        fill, oids = self._gone_price(pos, rows, min(gone or 0, pos.qty), short, px)
         self._clear_pending(pos)
         self._save_open(force=True)
         if gone:
+            self._know(oids)
             self.log(f"[intraday] {pos.symbol}: {what}; broker shows {held} held, "
-                     f"so {gone} closed")
-            self._book_fill(pos, min(gone, pos.qty), float(px), reason,
+                     f"so {gone} closed" + (f" @ {fill:.2f} (order book)" if oids else ""))
+            self._book_fill(pos, min(gone, pos.qty), fill, reason,
                             self._exit_leg(pos, px), extra={"exit_order": "reconciled"})
         return True
 
@@ -757,6 +837,7 @@ class IntradayEngine:
             if hit:
                 if not _again:
                     return False
+                self._know([hit["oid"]])
                 pos.pending_exit_oid, pos.pending_exit_uid = hit["oid"], hit["uid"]
                 pos.pending_none_seen = 0
                 self._save_open(force=True)
@@ -768,10 +849,10 @@ class IntradayEngine:
                 pos.pending_exit_at = now
             if pos.pending_none_seen < 2:
                 return False
-            held = self._agreed_or_wait(pos, rows)
+            held, rows = self._agreed_or_wait(pos, rows)
             if held is None:
                 return False
-            return self._settle_rest(pos, held, short, reason, px, "lost exit order")
+            return self._settle_rest(pos, held, short, reason, px, "lost exit order", rows)
         st = b.order_state(pos.pending_exit_uid, pos.pending_exit_oid) \
             if hasattr(b, "order_state") else None
         if st is None:
@@ -817,11 +898,11 @@ class IntradayEngine:
                             self._exit_leg(pos, px), extra={"exit_order": "late_fill"})
         # The order is over and some of the position is still open: nothing
         # more is sent for it until both books agree on what is held (O2).
-        held = self._agreed_or_wait(pos)
+        held, rows = self._agreed_or_wait(pos)
         if held is None:
             return False
         return self._settle_rest(pos, held, short, reason, px,
-                                 f"exit order {oid} {st['status']}")
+                                 f"exit order {oid} {st['status']}", rows)
 
     def _book_fill(self, pos, q, fill, reason, leg, extra=None):
         """Book q units of pos closed at fill. Returns the trade record once the
@@ -1337,10 +1418,12 @@ class IntradayEngine:
             return
         self._take_on(symbol, held, adopt)
 
-    def _take_on(self, symbol, held, adopt, note=""):
+    def _take_on(self, symbol, held, adopt, note="", account=None):
         """The broker shows `held` from an entry the engine did not see fill:
         with adopt_unknown_entry an option is adopted under the software stop;
-        either way new entries halt until a human has looked."""
+        either way new entries halt until a human has looked. `account`, when
+        known, is the account's whole position in symbol - what the alert
+        reports (review O-ADV-1)."""
         adopted = False
         if adopt is not None and held is not None and held > 0 \
                 and getattr(self.L, "adopt_unknown_entry", False):
@@ -1348,7 +1431,11 @@ class IntradayEngine:
                 adopted = adopt(held)
             except Exception as e:
                 self.log(f"[intraday] could not adopt {symbol}: {e!r}")
-        shows = f"broker shows {held}" + (f", {note}" if note else "")
+        if account is not None and account != held:
+            shows = f"broker shows {account}, {held} of it from this entry"
+        else:
+            shows = f"broker shows {held}"
+        shows += f", {note}" if note else ""
         self.halted = True
         self.halt_reason = f"entry status unknown for {symbol} ({shows}) - check the Angel app"
         if adopted:
@@ -1433,13 +1520,48 @@ class IntradayEngine:
                     rec["cancel_at"] = now
                 self._entry_stall(rec, now, f"still {st['status'] or 'working'} after its cancel")
                 return "working"
-            self._drop_entry(rec)
             more = st["filled"] - rec["booked"]
-            if more > 0:
-                self.log(f"[intraday] entry order {rec['oid']} for {sym} {st['status']} with "
-                         f"{more} filled that the engine did not see")
-                self._take_on(sym, rec["sign"] * more, rec["adopt"],
-                              note=f"order {rec['oid']} {st['status']}")
+            if more <= 0:
+                self._drop_entry(rec)
+                return "done"
+            account = None
+            if hasattr(b, "order_rows"):
+                # Taken on only as far as the account holds more than the
+                # engine: fills an exit reconciliation has already sold must
+                # not be taken on again (review O-ADV-1, 5 Oct 2026). So that
+                # what the engine holds is known, an exit in the symbol is
+                # settled first.
+                if any(p.symbol == sym and not p.exit_blocked
+                       and (p.pending_exit_oid or p.pending_exit_tag)
+                       for p in self.book.snapshot()):
+                    self._entry_stall(rec, now, f"{st['status']} with {more} more filled, "
+                                                f"waiting for an exit in it to settle")
+                    return "waiting"
+                rows = b.order_rows(sym)
+                if rows is None:
+                    self._entry_stall(rec, now, "the order book cannot be read")
+                    return "unreadable"
+                account = b.signed_net(rows)
+            self._drop_entry(rec)
+            self.log(f"[intraday] entry order {rec['oid']} for {sym} {st['status']} with "
+                     f"{more} filled that the engine did not see")
+            take = more
+            if account is not None:
+                take = min(more, max(0, (account - self._engine_held(sym)) * rec["sign"]))
+            if take <= 0:
+                self._halt_alert(f"entry order {rec['oid']} for {sym} filled {more} the engine did "
+                                 f"not see, but the broker shows {account} - nothing taken on; "
+                                 f"check the Angel app",
+                                 f"Entry order <code>{rec['oid']}</code> for <code>{sym}</code> "
+                                 f"filled {more} the engine did not see, but the account holds "
+                                 f"no more than the engine ({account}). Nothing taken on. "
+                                 f"New entries halted.")
+                return "done"
+            if take < more:
+                self.log(f"[intraday] {sym}: the account holds only {take} of them; "
+                         f"{take} taken on")
+            self._take_on(sym, rec["sign"] * take, rec["adopt"],
+                          note=f"order {rec['oid']} {st['status']}", account=account)
             return "done"
         rows = b.order_rows(sym)
         work = next((r for r in rows or [] if not r["final"] and r["side"] == rec["side"]), None)

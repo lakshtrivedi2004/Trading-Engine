@@ -1045,6 +1045,141 @@ def tO11_stop_timeout():
           seen and seen[0] >= 45.0, str(seen))
 
 
+def tOadv1_double_adopt():
+    # A 3-lot entry fills 65 and stays working after its cancel; 65 more fill
+    # while it works; the stop's SELL 65 has its place call time out after
+    # Angel filled it; then the entry order ends cancelled with 130 filled.
+    api = ExitAngel([("open", 65, 110.5)])
+    api.sticky = True
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.notifier = Notes()
+    e.L.market_orders = True
+    e.enter(_cand(), _plan(), _struct, None, lots=3)
+    e.book.time_to_close = lambda *_: 300.0
+    mark = [111.0]
+    e._mark_of = lambda p: mark[0]
+    _clk.t += 2.5
+    e.manage()
+    api.set("1", "open", 130, 110.5)
+    api.script = [("complete", 65, 85.0)] * 3
+    api.raise_place = True
+    mark[0] = 85.0
+    low = 0
+    for _ in range(8):
+        _clk.t += 0.5
+        e.manage()
+        low = min(low, api.true_net())
+    mid = api.true_net(), _sells(api)
+    api.sticky = False
+    api.set("1", "cancelled", 130, 110.5)
+    for _ in range(10):
+        _clk.t += 1.0
+        e.manage()
+        low = min(low, api.true_net())
+    held = sum(p.qty for p in e.book.snapshot())
+    check("O-ADV-1. fills of a working entry are not read as the position a lost stop SELL "
+          "closed, nor taken on twice: no second SELL over the filled one, the late 65 adopted "
+          "once, the account never short and level with the engine",
+          low >= 0 and mid == (65, 1) and api.true_net() == held == 0 and _sells(api) == 2
+          and not e._pending_entries and e.journal.rows and e.journal.rows[0]["exit"] == 85.0,
+          f"low {low}, mid {mid}, account {api.true_net()}, engine {held}, sells {_sells(api)}")
+    # The entry poll takes on only what the account holds beyond the engine.
+    api = ExitAngel()
+    api._add({"variety": "NORMAL", "tradingsymbol": SYM, "transactiontype": "BUY",
+              "quantity": "130", "ordertype": "LIMIT"}, "complete", 130, 110.5)
+    api._add({"variety": "NORMAL", "tradingsymbol": SYM, "transactiontype": "SELL",
+              "quantity": "130", "ordertype": "LIMIT"}, "complete", 130, 85.0)
+    b = LiveBroker(api, CostModel(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    e = _empty_engine(b)
+    e.notifier = Notes()
+    taken = []
+    rec = e._pend_entry({"order_id": "1", "uid": "u1", "filled": True, "qty": 65}, SYM,
+                        lambda q: taken.append(q) or True, 1)
+    e._follow_entry(rec)
+    check("O-ADV-1. ...an entry order that ends with 65 more filled, already sold at the "
+          "account: nothing taken on, entries halt with the account's real position",
+          not taken and e.book.count() == 0 and not e._pending_entries and e.halted
+          and "broker shows 0" in e.halt_reason, f"taken {taken}, {e.halt_reason}")
+
+
+def tOobs1_lost_exit_price():
+    api = ExitAngel([("complete", 130, 108.0)], netqty=130)
+    api.raise_place = True
+    e, pos = live_engine(api, market=True)
+    e._mark_of = lambda p: 110.0
+    e.close(pos, "stop_loss")
+    for _ in range(3):
+        _clk.t += 1.0
+        e.close(pos, "stop_loss")
+    api.netqty = None                                  # the position book catches up
+    _clk.t += 3.0
+    e.close(pos, "stop_loss")
+    r = e.journal.rows[-1] if e.journal.rows else {}
+    check("O-obs1. a lost exit settled once the books agree is booked at the order book's "
+          "fill (108), not the mark (110)",
+          e.book.count() == 0 and _sells(api) == 1 and r.get("exit") == 108.0
+          and r.get("exit_order") == "reconciled", str(r.get("exit")))
+    api = ExitAngel([("complete", 130, 108.0)])
+    api.raise_place = True
+    e, pos = live_engine(api, market=True)
+    e._mark_of = lambda p: 110.0
+    e.close(pos, "stop_loss")
+    r = e.journal.rows[-1] if e.journal.rows else {}
+    check("O-obs1. ...settled at once (books current): 108 too",
+          e.book.count() == 0 and r.get("exit") == 108.0, str(r.get("exit")))
+    api = ExitAngel([("complete", 130, 108.0)])
+    api.raise_place = True
+    e, pos = live_engine(api, market=True)
+    api.hold(30)
+    api.hold(30, side="SELL")                          # an earlier SELL no id of ours explains
+    e._mark_of = lambda p: 110.0
+    e.close(pos, "stop_loss")
+    r = e.journal.rows[-1] if e.journal.rows else {}
+    check("O-obs1. ...unknown SELL rows that do not add up to what went: the mark, as before",
+          e.book.count() == 0 and r.get("exit") == 110.0, str(r.get("exit")))
+
+
+def tOadv2_unit_stop_timeout():
+    import re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    e, pos = engine([])
+    e.L.exit_safety_fixes = True
+    e.broker = SimpleNamespace(confirm_timeout=6.0)
+    e.book.count = lambda: 4
+    seen = []
+    e._thread = SimpleNamespace(join=lambda timeout=None: seen.append(timeout))
+    e.stop()
+    need = seen[0] + 20.0                              # run_bot's shutdown after the join
+    got = {}
+    for name in ("trading-engine.service", "trading-engine-dev.service"):
+        txt = open(os.path.join(root, "deployment", name)).read()
+        m = re.search(r"^TimeoutStopSec=(\d+)", txt, re.M)
+        got[name] = int(m.group(1)) if m else 0
+    check("O-ADV-2. the systemd units give a live square-off (4 open positions) time to "
+          "finish before SIGKILL", all(v >= need for v in got.values()), f"{got} need {need}")
+
+
+def tOadv3_miss_gap():
+    api = ExitAngel([("cancelled", 0, 0.0)] * 80)
+    e, pos = live_engine(api, market=False)
+    e.log = lambda *_: None
+    t0, sends = _clk.t, []
+    while _clk.t - t0 < 20:
+        n = api.placed()
+        e.close(pos, "stop_loss")
+        if api.placed() > n:
+            sends.append(_clk.t - t0)
+        _clk.t += 0.25
+    gaps = [b - a for a, b in zip(sends, sends[1:])]
+    check("O-ADV-3. an IOC exit that misses (cancelled, 0 filled) is tried again about every "
+          "1 s, not backed off to 5 s like a refusal",
+          len(sends) >= 15 and gaps and max(gaps) <= 1.25 and pos.exit_attempts >= 15,
+          f"{len(sends)} sends, longest gap {max(gaps) if gaps else None}")
+
+
 class PropAngel(ModeAngel):
     """Random answers, fills, late fills and a lagging position book. Records
     every SELL sent over more than is held, and any moment the account is net
@@ -1133,7 +1268,9 @@ def tP_property():
 _O_TESTS = [("O1", tO1_null_answer), ("O2", tO2_raise_lagging_book), ("O3", tO3_unknown_entry_lag),
             ("O4", tO4_entry_late_fill), ("O5", tO5_backoff_budget), ("O6", tO6_silent_stall),
             ("O7", tO7_ab07), ("O8", tO8_late_reason), ("O9", tO9_exit_all),
-            ("O10", tO10_paced), ("O11", tO11_stop_timeout), ("P", tP_property)]
+            ("O10", tO10_paced), ("O11", tO11_stop_timeout), ("P", tP_property),
+            ("O-ADV-1", tOadv1_double_adopt), ("O-obs1", tOobs1_lost_exit_price),
+            ("O-ADV-2", tOadv2_unit_stop_timeout), ("O-ADV-3", tOadv3_miss_gap)]
 
 
 try:

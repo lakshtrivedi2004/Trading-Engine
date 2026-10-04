@@ -97,6 +97,10 @@ class LiveBroker:
         self._next_order_at = 0.0             # poll sleeping must not hold up an exit
         self._order_times = collections.deque()   # monotonic stamps, the last hour
         self._tag_n = 0
+        # Every order id an order call of ours got back: an order-book row
+        # whose id is not here is one whose place call raised or answered
+        # with no id - the engine prices a lost exit from it (review O-obs1).
+        self.known_oids = set()
 
     # Polling pace per endpoint, in seconds between calls. Angel publishes 1/s
     # for orderBook and the position book; the old status loop asked every
@@ -167,6 +171,12 @@ class LiveBroker:
                 self._order_times.append(time.monotonic())
         return True
 
+    def _know(self, oid):
+        if oid:
+            known = getattr(self, "known_oids", None)
+            if isinstance(known, set):
+                known.add(str(oid))
+
     def new_tag(self, kind):
         """An ordertag that marks the order as the engine's: TE, L(ive) or
         P(aper), the kind (E entry, X exit, S broker stop), then a stamp.
@@ -222,6 +232,7 @@ class LiveBroker:
             if not self._order_gate("E"):
                 return leg, None, "not sent: the order budget is spent"
             oid = self.api.placeOrder(self._order_params(leg, leg["quote_price"]))
+            self._know(oid)
             return leg, oid, None
         except Exception as e:
             return leg, None, str(e)
@@ -303,6 +314,7 @@ class LiveBroker:
                 return f"{leg['symbol']}: no order id in Angel's answer ({why}) - status unknown"
             return f"{leg['symbol']}: order refused: {why}"
         leg["order_id"] = oid
+        self._know(oid)
         if fixes:
             leg["uid"] = uid or ""
         st = None
@@ -496,6 +508,7 @@ class LiveBroker:
                 if not self._order_gate("X"):
                     return f"unwind {leg['symbol']}: not sent - the order budget is spent"
                 oid = self.api.placeOrder(self._order_params(flip, market=True))
+                self._know(oid)
                 return None if oid else f"unwind {leg['symbol']}: no order id"
             except Exception as e:
                 return f"unwind {leg['symbol']}: {e}"
