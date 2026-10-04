@@ -29,7 +29,12 @@ ExecStart=/root/Trading-Engine/deployment/run_engine.sh
 Restart=on-failure
 RestartSec=10
 KillSignal=SIGUSR1
-TimeoutStopSec=30
+# A live engine squares off on the way down and keeps trying for 30 s
+# (SQUAREOFF_RETRY_SEC) plus a slow exit per open position before it says
+# what is still open; IntradayEngine.stop() waits at least 45 s for that.
+# At 30 s systemd's SIGKILL cut the square-off and its SQUARE-OFF
+# INCOMPLETE alert (review O-ADV-2, 5 Oct 2026).
+TimeoutStopSec=150
 StandardOutput=append:/root/Trading-Engine/engine.log
 StandardError=append:/root/Trading-Engine/engine.log
 

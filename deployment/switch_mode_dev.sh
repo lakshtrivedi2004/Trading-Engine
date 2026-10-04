@@ -15,7 +15,9 @@ echo "$target" > .trading_mode
 
 if systemctl is-active --quiet trading-engine-dev; then
   systemctl kill --signal=SIGTERM trading-engine-dev
-  for _ in $(seq 1 40); do
+  # Up to 150 s, as the unit's TimeoutStopSec: a live square-off can take
+  # longer than 40 s, and starting before it is done does nothing.
+  for _ in $(seq 1 150); do
     systemctl is-active --quiet trading-engine-dev || break
     sleep 1
   done
