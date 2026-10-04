@@ -1,0 +1,5 @@
+old lab: flat Rs 75, no friction   n= 95 win= 55% year Rs +13,278 (IN  +4,556 / OUT  +8,722) avg  +140 worst   -915 maxDD  5,536
+exact fees + friction test         n= 82 win= 51% year Rs  +9,373 (IN  +1,861 / OUT  +7,511) avg  +114 worst   -937 maxDD  5,272
+exact + F4 30 min                  n= 76 win= 53% year Rs +10,004 (IN  +1,664 / OUT  +8,339) avg  +132 worst   -937 maxDD  5,073
+exact + F5                         n= 92 win= 50% year Rs  +9,595 (IN  +2,260 / OUT  +7,335) avg  +104 worst   -742 maxDD  4,722
+exact + F4 + F5 (the live config)  n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058

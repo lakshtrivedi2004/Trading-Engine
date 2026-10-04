@@ -21,8 +21,19 @@ def gate_halves(t, a, b):
     X = a if t["m"] < HALF else b
     return X <= 0 or t["ar"] <= 0 or t["ar"] >= X
 
-def run(ts):
-    return bt.run(sorted(ts, key=lambda t: (t["day"], t["m"], t["u"])))
+def run(ts, side_cooldown=0):
+    return bt.run(sorted(ts, key=lambda t: (t["day"], t["m"], t["u"])),
+                  side_cooldown=side_cooldown, halt_pct=live_halt_pct())
+
+def live_halt_pct():
+    """bt.run's daily halt in its own units (percent of a Rs 10,000 book), set
+    to the live loss limit on the traded capital: Rs 2,020 at 15% of Rs 13,467,
+    not the Rs 3,000 bt.run defaults to (review R2)."""
+    from arb.config import IntradayLimits
+    L = IntradayLimits.load()
+    capital = float(L.capital_ceiling or L.starting_capital)
+    return L.max_daily_loss_pct * capital / 10000.0
+
 
 def summ(tr):
     ins = [t["net2"] for t in tr if t["day"] < SPLIT]; out = [t["net2"] for t in tr if t["day"] >= SPLIT]

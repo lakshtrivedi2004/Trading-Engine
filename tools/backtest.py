@@ -92,7 +92,10 @@ def work(args):
                 ex = min(o, lvl) if sd > 0 else max(o, lvl)
                 why = "trail_stop" if pos.index_trailed else "stop"; break
             if pos.index_target and ((sd > 0 and h >= pos.index_target) or (sd < 0 and l <= pos.index_target)):
-                win = rows[j - 399:j + 1] + [rows[j]]
+                # Bars to j-1 completed, j still forming: live try_extend sees no
+                # more when the target is touched (review R1 - the old window
+                # read bar j's own close, a look-ahead worth ~Rs 6,000 a year).
+                win = rows[j - 399:j] + [rows[j]]
                 if not trailing.try_extend(pos, win, pos.index_target, L, STEP[name]):
                     ex, why = pos.index_target, "target"; break
             r_now = (c - spot) * sd / risk

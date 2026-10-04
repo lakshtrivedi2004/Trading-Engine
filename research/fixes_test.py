@@ -58,7 +58,8 @@ def features(ts, IX):
 
 
 def run(ts, side_cooldown=0):
-    return bt.run(sorted(ts, key=lambda t: (t["day"], t["m"], t["u"])), side_cooldown=side_cooldown)
+    from common import run as lab_run          # the live daily halt (review R2)
+    return lab_run(ts, side_cooldown=side_cooldown)
 
 
 def line(label, tr, base=None):

@@ -45,7 +45,9 @@ class Index:
         lr = np.diff(np.log(np.array([closes[d.isoformat()] for d in self.days])))
         self.rv = {}
         for k, d in enumerate(self.days):
-            w = lr[max(0, k - 20):k]
+            # Returns up to the PREVIOUS close: lr[k-1] is the move into day k,
+            # which is not known at an intraday entry (review R3).
+            w = lr[max(0, k - 21):k - 1] if k >= 1 else lr[:0]
             self.rv[d] = float(np.std(w) * math.sqrt(252)) if len(w) >= 10 else None
         rv_last = next(v for v in (self.rv[d] for d in reversed(self.days)) if v)
         self.iv_add = IV_REF.get(name, IV_REF["BANKNIFTY"]) - rv_last
