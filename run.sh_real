@@ -40,8 +40,8 @@ case "$cmd" in
     pid=$(live_pid)
     if [ -n "$pid" ]; then
       kill "$pid" && green "stopping LIVE engine (pid $pid) - it squares off open positions first"
-      for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-      kill -0 "$pid" 2>/dev/null && red "still running after 30s - check the log and the Angel app" || green "stopped"
+      for _ in $(seq 1 150); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      kill -0 "$pid" 2>/dev/null && red "still running after 150s - check the log and the Angel app" || green "stopped"
       rm -f "$PIDFILE"
     else dim "no live engine running"; fi
     exit 0 ;;
