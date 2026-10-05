@@ -31,7 +31,7 @@ dim()   { printf '\033[2m%s\033[0m\n' "$*"; }
 [ -f .angel.env ] || { red ".angel.env missing"; exit 1; }
 
 live_pid() {
-  pgrep -f "run_bot.py --mode live" | head -n1 || true
+  pgrep -f "^venv/bin/python run_bot.py --mode live" | head -n1 || true
 }
 
 cmd="${1:-start}"

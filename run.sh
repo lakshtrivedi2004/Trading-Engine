@@ -69,7 +69,7 @@ case "$cmd" in
     [ -n "$f" ] || { red "no session logs yet"; exit 1; }
     exec tail -n 40 -f "$f" ;;
   stop)
-    if pgrep -f "run_bot.py --mode live" >/dev/null 2>&1; then
+    if pgrep -f "^venv/bin/python run_bot.py --mode live" >/dev/null 2>&1; then
       red "the running engine is LIVE - stop it with ./run.sh_real stop"; exit 1
     fi
     pid=$(running_pid)
@@ -86,7 +86,7 @@ esac
 # ── start ─────────────────────────────────────────────────────────────────────
 # Never touch a LIVE engine from here: restarting it would square off real
 # positions. Real money is started and stopped only by ./run.sh_real.
-if pgrep -f "run_bot.py --mode live" >/dev/null 2>&1; then
+if pgrep -f "^venv/bin/python run_bot.py --mode live" >/dev/null 2>&1; then
   red "a LIVE engine is running - ./run.sh will not touch it. Use ./run.sh_real stop first."
   exit 1
 fi
