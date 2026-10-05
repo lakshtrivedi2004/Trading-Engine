@@ -39,3 +39,8 @@ config/calibration.json
 # Runtime
 .engine.pid
 .trading_mode
+
+# Engine pid files (runtime state)
+.engine.pid
+.engine_live.pid
+.watchdog*.pid
