@@ -1330,11 +1330,482 @@ class IntradayEngine:
             except OSError as e:
                 self.log(f"[shadow] journal write failed: {e}")
 
+    # ── noise-area breakout, shadow mode ────────────────────────────────────
+    # Zarattini, Aziz & Barbon (2024); the rule is arb/noise_breakout.py, which
+    # research/noise_parity.py matches bar for bar against the backtest the
+    # evidence comes from (research_out/momentum/screen.py). Owner's approval
+    # of 5 Oct 2026 is for SHADOW only: nothing here can reach the broker -
+    # it reads candles, the chain and quotes, and writes the log and
+    # journal/<mode>/shadow_YYYY-MM-DD.jsonl.
+    def _nb_log_once(self, key, text):
+        seen = self.__dict__.setdefault("_nb_logged", {})
+        if seen.get(key) != text:
+            seen[key] = text
+            self.log(text)
+
+    @staticmethod
+    def _nb_hhmm(s):
+        try:
+            hh, mm = (int(x) for x in str(s).split(":")[:2])
+            return hh * 60 + mm
+        except Exception:
+            return 15 * 60 + 15
+
+    def _nb_enabled(self):
+        mode = str(getattr(self.L, "noise_breakout", "off") or "off")
+        if mode == "shadow":
+            return True
+        if mode != "off":
+            self._nb_log_once("mode", f"[shadow] noise_breakout = {mode!r} is not supported - "
+                                      f"treated as off (only 'shadow'; real orders need the "
+                                      f"owner's separate approval)")
+        return False
+
+    def _nb_history(self):
+        h = self.__dict__.get("_nb_hist")
+        if h is None:
+            from arb.noise_sigma import SigmaHistory
+            L = self.L
+            h = self._nb_hist = SigmaHistory(
+                lambda: getattr(self.candles, "api", None),
+                dict(getattr(self.candles, "underlyings", None) or {}),
+                ndays=int(L.nb_sigma_days), min_days=int(L.nb_sigma_min_days),
+                history_days=int(getattr(L, "nb_history_days", 28)), log=self.log)
+        return h
+
+    def _shadow_noise(self):
+        """noise_breakout = "shadow": on each 30-minute grid bar, note the
+        trade the noise-area breakout would take - contract, premium, index
+        stop, which live gates pass - and follow it on the trailed band and
+        live quotes until its stop or the square-off. No order is ever sent.
+        Every raw signal is followed, gates failed or not, so the index is
+        busy exactly as in the backtest; the gates decide what counts."""
+        if not self._nb_enabled():
+            return
+        from arb.instruments import market_phase
+        now = now_ist()
+        day = now.strftime("%Y-%m-%d")
+        end = str(getattr(self.cfg, "session_end", "15:15"))
+        phase = market_phase(now, start=getattr(self.cfg, "session_start", "09:15"), end=end)
+        if phase not in ("preopen", "open"):
+            # After the session end no new decision, but a shadow trade still
+            # open (its square-off waiting for a quote, or a restart after the
+            # close) is closed now, so the day's record is complete.
+            if phase == "closed" and now.hour * 60 + now.minute >= self._nb_hhmm(end):
+                st = self.__dict__.get("_nb")
+                if st is None or st["day"] != day:
+                    st = self._nb = {"day": day, "idx": {}}
+                    self._nb_resume(st)
+                for und, S in list(st["idx"].items()):
+                    if S.get("open") is not None:
+                        try:
+                            self._nb_follow(S, und, None, None, now, closing=True)
+                        except Exception as e:
+                            self._nb_log_once(f"close:{und}", f"[shadow] noise_breakout {und} "
+                                                              f"close error: {e!r}")
+            return
+        if not self.candles or str(getattr(self.candles, "interval", "1m")) != "1m":
+            self._nb_log_once("interval", "[shadow] noise_breakout needs 1-minute candles - off")
+            return
+        st = self.__dict__.get("_nb")
+        if st is None or st["day"] != day:
+            st = self._nb = {"day": day, "idx": {}}
+            self._nb_resume(st)
+        names = [str(u) for u in (getattr(self.L, "nb_indices", ()) or ())]
+        hist = self._nb_history()
+        hist.ensure(day, names)                 # a background thread, never a wait
+        for und in names:
+            try:
+                self._nb_index(st, und, hist.get(day, und), hist, now)
+            except Exception as e:
+                self._nb_log_once(f"err:{und}", f"[shadow] noise_breakout {und} error: {e!r}")
+
+    def _nb_closed(self, und, t0):
+        """Completed in-session 1-minute bars (the live bar and anything still
+        forming when they were copied dropped, as _closed_rows), and whether
+        the last closed within entry_window_sec."""
+        from arb import noise_breakout as nb
+        rows = self.candles.get(und, limit=3000)
+        live = (getattr(self.candles, "live", None) or {}).get(und)
+        if live and rows and rows[-1][0] == live[0]:
+            rows = rows[:-1]
+        rows = nb.in_session(rows)
+        closed_at = None
+        while rows:
+            closed_at = datetime.fromisoformat(str(rows[-1][0])).timestamp() + 60.0
+            if closed_at <= t0:
+                break
+            rows = rows[:-1]
+        fresh = bool(rows) and time.time() - closed_at <= float(getattr(self.L, "entry_window_sec", 15.0))
+        return rows, fresh
+
+    def _nb_index(self, st, und, prof, hist, now):
+        from arb import noise_breakout as nb
+        L = self.L
+        S = st["idx"].setdefault(und, {"open": None, "free_after": "", "last_grid": "",
+                                       "have_bar": "", "trades": 0})
+        sh = S["open"]
+        # The bar that should be the last closed one now; once it is in, the
+        # rows are not copied again until the next minute.
+        want = (now.replace(second=0, microsecond=0)).timestamp() - 60.0
+        want_iso = datetime.fromtimestamp(want, now.tzinfo).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        rows, fresh = None, False
+        if S["have_bar"] != want_iso:
+            rows, fresh = self._nb_closed(und, time.time())
+            if rows and rows[-1][0] == want_iso and prof is not None:
+                S["have_bar"] = want_iso        # (no sigma yet: copied again next pass)
+        if sh is not None:
+            self._nb_follow(S, und, rows, prof, now)
+            if S["open"] is not None:
+                return
+            # Closed on this pass. The bar in hand may be a grid bar after the
+            # exit bar, which the backtest decides (screen.gen: i > busy); on a
+            # pass without new rows (the exit waited for a quote) they are
+            # copied again rather than the decision being lost.
+            if rows is None:
+                rows, fresh = self._nb_closed(und, time.time())
+        if not rows or rows[-1][0][:10] != st["day"]:
+            return
+        last = rows[-1]
+        t = nb.end_minute(last[0])
+        if not (nb.hhmm(L.nb_lo) <= t <= nb.hhmm(L.nb_hi)) or not nb.on_grid(t, int(L.nb_grid_min)):
+            return
+        if last[0] <= S["last_grid"] or last[0] <= S["free_after"]:
+            return                              # decided, or the last trade exited on/after it
+        hm = f"{t // 60:02d}:{t % 60:02d}"     # the decision time: the bar's END minute
+        if not fresh:
+            S["last_grid"] = last[0]
+            self.log(f"[shadow] noise_breakout {und} {hm}: grid bar seen too late - not decided")
+            return
+        if prof is None:
+            S["have_bar"] = ""                  # look again next pass: it may land in the window
+            self._nb_log_once(f"nosig:{und}:{last[0]}", f"[shadow] noise_breakout {und} {hm}: "
+                              f"sigma not ready ({hist.status(st['day'], und)}) - nothing done")
+            return
+        S["last_grid"] = last[0]
+        self._nb_open(S, und, rows, prof, now)
+
+    def _nb_open(self, S, und, rows, prof, now):
+        from arb import noise_breakout as nb
+        L = self.L
+        k = nb.today_of(rows)
+        prev = rows[:k]
+        pc_candles = float(prev[-1][4]) if prev else None
+        pc_day = prev[-1][0][:10] if prev else ""
+        # The previous close from the sigma history fetch - the same Angel
+        # history the backtest's rows are, and normally the same last bar the
+        # live store holds for yesterday once its morning refresh has run. The
+        # store's value only when it holds a later session than the history
+        # returned; both are journalled.
+        if pc_candles is not None and pc_day > str(prof.get("prev_day") or ""):
+            pc, src = pc_candles, "candles"
+        else:
+            pc, src = float(prof["prev_close"]), "history"
+        vm, minr, grid = float(L.nb_vm), float(L.nb_minr), int(L.nb_grid_min)
+        sig = nb.signal(rows[-450:], pc, prof["sigma"], vm, minr, L.nb_lo, L.nb_hi, grid,
+                        require_open="09:15")
+        te = nb.end_minute(rows[-1][0])
+        hm = f"{te // 60:02d}:{te % 60:02d}"
+        if not sig["side"]:
+            if sig["why"] == "inside_noise_area":
+                self.log(f"[shadow] noise_breakout {und} {hm}: inside the noise area "
+                         f"(close {sig['close']:.1f}, band {sig['lb']:.1f} - {sig['ub']:.1f})")
+            else:
+                self.log(f"[shadow] noise_breakout {und} {hm}: no decision ({sig['why']})")
+            return
+        side, close, stop = sig["side"], sig["close"], sig["stop"]
+        # The live gates the evidence applied: the 4-hour trend and the half-day pace.
+        h4 = trend_4h(rows, int(getattr(L, "trend_4h_bars", 0) or 5))
+        pace = nb.pace_ratio(rows, period=20, base=200)
+        halves = (getattr(L, "atr_by_index", None) or {}).get(und) or (L.min_atr_ratio, L.min_atr_ratio)
+        t = sig["t"]
+        split = nb.hhmm(str(getattr(L, "atr_half_split", "12:15")))
+        need = float(halves[0] if t < split else halves[1])
+        pace_pass = nb.pace_ok(pace, t, halves, half=split)
+        gates_ok = h4 == side and pace_pass
+        others = [u for u, s in self._nb["idx"].items()
+                  if u != und and s["open"] and s["open"]["gates"]["all"]]
+        sh = {"playbook": "noise_breakout", "shadow": True, "event": "open",
+              "id": f"NB-{rows[-1][0][:10]}-{und}-{hm.replace(':', '')}",
+              "und": und, "side": side, "decision_bar": rows[-1][0], "t": f"{t // 60:02d}:{t % 60:02d}",
+              "close": close, "o": sig["o"], "pc": pc, "pc_source": src,
+              "pc_history": prof.get("prev_close"), "prev_day": prof.get("prev_day"),
+              "pc_candles": pc_candles, "pc_candles_bar": prev[-1][0] if prev else "",
+              "sigma_days": len(prof.get("days") or []), "ub": sig["ub"], "lb": sig["lb"],
+              "sigma": sig["sigma"], "band": sig["band"], "atr": sig["atr"],
+              "index_stop0": stop, "index_stop": stop, "stop_path": [[rows[-1][0], stop]],
+              "gates": {"trend_4h": h4, "trend_ok": h4 == side, "pace": round(pace, 4),
+                        "pace_need": need, "pace_ok": pace_pass, "all": gates_ok},
+              "live_position_open": bool(self.book.count() or self._pending_entries),
+              "f4_blocked": self._same_idea_blocked(side), "other_shadow_open": others,
+              "opened": now.isoformat(), "last_bar": rows[-1][0],
+              "symbol": None, "token": None, "lot": 0, "entry": 0.0}
+        spot = self._spot(und) or close
+        sh["index_entry"] = spot
+        self._nb_contract(sh, und, spot, abs(close - stop))
+        S["open"] = sh
+        S["trades"] += 1
+        sides = S.setdefault("sides", {})
+        sides[side] = sides.get(side, 0) + 1
+        sh["nth_today_this_side"] = sides[side]     # the backtest takes at most 2 a side a day
+        g = (f"4h {h4:+d} {'ok' if h4 == side else 'AGAINST'}, pace {pace:.2f}/{need:.2f} "
+             f"{'ok' if pace_pass else 'LOW'} -> {'GATES PASS' if gates_ok else 'gates fail'}")
+        what = (f"WOULD BUY {sh['symbol']} @ {sh['entry']:.2f} x{sh['lot']}" if sh["symbol"]
+                else f"signal {'CE' if side > 0 else 'PE'} but no contract ({sh.get('no_contract', '')})")
+        self.log(f"[shadow] noise_breakout {what} | {und} {hm} close {close:.1f} "
+                 f"{'>' if side > 0 else '<'} {sig['ub'] if side > 0 else sig['lb']:.1f} | index stop "
+                 f"{stop:.1f} | {g} | live position {'yes' if sh['live_position_open'] else 'no'}"
+                 f"{', F4 would block' if sh['f4_blocked'] else ''} | NO ORDER SENT")
+        self._nb_journal(sh)
+
+    def _nb_contract(self, sh, und, spot, idx_risk):
+        """The contract the live playbook would buy: selector.select at the
+        per-trade cap (max_risk_pct_per_trade of capital), costs inside when
+        risk_includes_costs; plus the premium stop plan_trade would set, for
+        the record."""
+        L = self.L
+        b = self._binding_for(und)
+        if b is None or idx_risk <= 0:
+            sh["no_contract"] = "no binding" if b is None else "zero index risk"
+            return
+        cv = b.view(self.feed.store, time.perf_counter_ns(), time.time())
+        capital = float(self.capital.capital)
+        cap_inr = capital * float(L.max_risk_pct_per_trade) / 100.0
+        lot = max(int(cv.lot_size), 1)
+        inside = self._costs_inside()
+        cand = self.selector.select(
+            cv, spot, sh["side"], capital, max_age_ms=400.0, min_depth_mult=1.0,
+            max_delta=cap_inr / (idx_risk * lot),
+            max_delta_fn=(lambda px, spr: (cap_inr / lot - self._extra_risk_points(px, spr, lot)) / idx_risk)
+            if inside else None)
+        sh["cap_inr"] = round(cap_inr, 2)
+        if cand is None:
+            sh["no_contract"] = self.selector.last_reject or "no contract"
+            return
+        sp = float(cand.detail.get("spread", 0.0) or 0.0)
+        ask, q = float(cand.ask), int(cand.lot_size)
+        prem_risk = min(max(idx_risk * float(cand.delta), 2.0 * sp), ask * float(L.max_risk_frac_of_premium))
+        extra = self._extra_risk_points(ask, sp, q) if inside else 0.0
+        cost_pts = self._round_trip_points(ask, q)
+        why = ""
+        if (prem_risk + extra) * q > (cap_inr + 1e-6 if inside else cap_inr * 1.05):
+            why = "premium risk over the cap"
+        elif 2.0 * prem_risk - cost_pts < float(L.min_net_points):
+            why = "move too small for costs"
+        frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
+        if not why and frac > 0 and cost_pts > frac * (prem_risk + extra):
+            why = "costs too large a part of the risk"
+        sh.update(symbol=cand.symbol, token=str(cand.token), lot=q, entry=ask, entry_bid=float(cand.bid),
+                  delta=round(float(cand.delta), 4), spread=sp, strike=cand.strike,
+                  prem_risk=round(prem_risk, 2), prem_stop=round(ask - prem_risk, 2),
+                  cost_pts=round(cost_pts, 2), plan_ok=not why, plan_why=why,
+                  best_bid=0.0, worst_bid=0.0)
+
+    def _nb_walk(self, sh, und, rows, prof, now):
+        """Today's completed bars after sh["last_bar"] through the trail; the
+        exit it finds (a dict for exit_due) or None.
+
+        A missing minute is not stepped over at once: the trail holds there
+        for up to nb_gap_hold_sec (the history refresh normally fills it, e.g.
+        after a restart), then goes on and lists it in sh["gaps"]. A listed
+        minute that turns up later is checked against the stop that was in
+        force then: a stop it hit is the exit, as the backtest would have it
+        ("seen": "late_bar"). sh["gaps"] marks the trade as followed with a
+        hole in its bars, for the evaluation."""
+        from arb import noise_breakout as nb
+        L = self.L
+        k = nb.today_of(rows)
+        if rows[k][0][:10] != sh["decision_bar"][:10]:
+            return None
+        today = rows[k:]
+        side = sh["side"]
+        gaps = sh.get("gaps") or []
+        if gaps:
+            checked = sh.setdefault("gaps_checked", [])
+            for r in today:
+                if r[0] in gaps and r[0] not in checked:
+                    checked.append(r[0])
+                    stop_then = [s for b, s in sh["stop_path"] if b < r[0]][-1]
+                    if (side > 0 and float(r[3]) <= stop_then) or (side < 0 and float(r[2]) >= stop_then):
+                        px = min(float(r[1]), stop_then) if side > 0 else max(float(r[1]), stop_then)
+                        self.log(f"[shadow] noise_breakout {und}: the late {r[0][11:16]} bar went through "
+                                 f"the stop {stop_then:.1f} then | NO ORDER SENT")
+                        return {"why": "index_stop", "bar": r[0], "index_ref": px, "seen": "late_bar",
+                                "at": now.isoformat()}
+        tz = now.tzinfo
+        prev_ts = datetime.fromisoformat(sh["last_bar"]).timestamp()
+        hold = float(getattr(L, "nb_gap_hold_sec", 180.0))
+        state = {"side": side, "stop": sh["index_stop"]}
+        for n, r in enumerate(today):
+            if r[0] <= sh["last_bar"]:
+                continue
+            ts = datetime.fromisoformat(r[0]).timestamp()
+            if ts - prev_ts > 60.0 + 1e-6:
+                missing = [datetime.fromtimestamp(prev_ts + 60.0 * m, tz).isoformat()
+                           for m in range(1, int(round((ts - prev_ts) / 60.0)))]
+                waits = sh.setdefault("gap_wait", {})
+                first = waits.setdefault(missing[0], now.isoformat())
+                if (now - datetime.fromisoformat(first)).total_seconds() < hold:
+                    break                       # hold the trail: the minute may still arrive
+                sh["gaps"] = (sh.get("gaps") or []) + missing
+                self.log(f"[shadow] noise_breakout {und}: {len(missing)} minute(s) from "
+                         f"{missing[0][11:16]} missing - trail goes on, trade marked 'gaps'")
+            state = nb.trail_step(state, today[:n + 1], sh["o"], sh["pc"], prof["sigma"],
+                                  float(L.nb_vm), int(L.nb_grid_min), None)
+            sh["last_bar"] = r[0]
+            prev_ts = ts
+            if "exit" in state:
+                return {"why": "index_stop", "bar": r[0], "index_ref": state["exit"]["px"],
+                        "seen": "bar", "at": now.isoformat()}
+            if "moved" in state:
+                sh["index_stop"] = state["stop"]
+                sh["stop_path"].append([r[0], state["stop"]])
+                self.log(f"[shadow] noise_breakout {und} stop -> {state['stop']:.1f} "
+                         f"at {r[0][11:16]} | NO ORDER SENT")
+        return None
+
+    def _nb_follow(self, S, und, rows, prof, now, closing=False):
+        """The open shadow trade: every new completed bar through the trail
+        (stop on the bar's low / high, ratchet on grid bars), the live index
+        against the stop on every pass, the square-off; the exit at the bid.
+        `closing`: the session has ended - whatever is open is recorded now."""
+        L = self.L
+        sh = S["open"]
+        due = sh.get("exit_due")
+        if rows and prof is not None and not due:
+            due = self._nb_walk(sh, und, rows, prof, now)
+        spot = self._spot(und)
+        if not due and not closing and spot > 0 and (spot - sh["index_stop"]) * sh["side"] <= 0:
+            bar = now.replace(second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+            due = {"why": "index_stop", "bar": bar, "index_ref": sh["index_stop"], "seen": "tick",
+                   "at": now.isoformat()}
+        ttc = self.book.time_to_close(self.cfg.session_end)
+        if not due and (closing or ttc <= float(L.squareoff_minutes)):
+            bar = now.replace(second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+            due = {"why": "squareoff", "bar": bar, "index_ref": spot, "seen": "clock",
+                   "at": now.isoformat()}
+        if due and not sh.get("exit_due"):
+            due["index_spot"] = spot
+            sh["exit_due"] = due
+        bid = 0.0
+        if sh["token"]:
+            slot = self.feed.store.slot_of_token.get(sh["token"])
+            bid = float(self.feed.store.bid[slot]) if slot is not None else 0.0
+            if bid > 0:
+                sh["best_bid"] = max(sh.get("best_bid") or bid, bid)
+                sh["worst_bid"] = min(sh.get("worst_bid") or bid, bid)
+                self._nb_premium_rules(sh, bid, now)
+        due = sh.get("exit_due")
+        if not due:
+            return
+        if sh["token"] and bid <= 0:
+            # No quote to exit at. A minute of that is recorded as it is rather
+            # than holding the index busy for the rest of the day - and never
+            # past the session end (the 15:14 square-off cannot wait a minute):
+            # from 6 s before it, or once it has passed, it is recorded now.
+            waited = (now - datetime.fromisoformat(due["at"])).total_seconds()
+            if waited < 60.0 and not closing and ttc > 0.1:
+                return
+            due["why"] += "_no_quote"
+        q = sh["lot"]
+        net = None
+        if sh["token"] and bid > 0:
+            cost = leg_cost(sh["entry"], q, "BUY", "OPT", self.cm) + leg_cost(bid, q, "SELL", "OPT", self.cm)
+            net = round((bid - sh["entry"]) * q - cost, 2)
+        pe = sh.get("prem_exit")
+        sh.update(event="exit", done=True, exit=bid, why=due["why"], exit_bar=due["bar"],
+                  exit_seen=due["seen"], index_exit_ref=due["index_ref"], index_exit=spot,
+                  closed=now.isoformat(), net=net,
+                  net_with_premium_rules=(pe["net"] if pe else net))
+        S["open"] = None
+        S["free_after"] = max(S["free_after"], due["bar"])
+        self.log(f"[shadow] noise_breakout {sh['symbol'] or und} would EXIT"
+                 + (f" @ {bid:.2f}" if sh["token"] and bid > 0 else "")
+                 + f" ({due['why']}, index {spot:.1f}, stop {sh['index_stop']:.1f})"
+                 + (f" net Rs {net:+,.0f}" if net is not None else "")
+                 + (f"; premium rules would have left at {pe['bid']:.2f} ({pe['why']}) net Rs {pe['net']:+,.0f}"
+                    if pe else "")
+                 + f" | gates {'pass' if sh['gates']['all'] else 'fail'} | NO ORDER SENT")
+        self._nb_journal(sh)
+
+    def _nb_premium_rules(self, sh, bid, now):
+        """For the record only: where the live premium stop and the +1R
+        breakeven (arb/positions.py; research/lab/realistic.py reprice) would
+        have taken the trade out. The shadow keeps following the index rule."""
+        if sh.get("prem_exit") or not sh.get("prem_risk"):
+            return
+        stop = float(sh.get("prem_live_stop") or sh["prem_stop"])
+        if not sh.get("prem_trailed") and bid - sh["entry"] >= sh["prem_risk"]:
+            stop = max(stop, sh["entry"] + sh["cost_pts"])
+            sh["prem_trailed"] = True
+        sh["prem_live_stop"] = stop
+        if bid <= stop:
+            q = sh["lot"]
+            cost = leg_cost(sh["entry"], q, "BUY", "OPT", self.cm) + leg_cost(bid, q, "SELL", "OPT", self.cm)
+            sh["prem_exit"] = {"at": now.isoformat(), "bid": bid,
+                               "why": "prem_trail" if sh.get("prem_trailed") else "prem_stop",
+                               "net": round((bid - sh["entry"]) * q - cost, 2)}
+
+    def _nb_journal(self, sh):
+        jdir = getattr(self.journal, "dir", None)
+        if not jdir:
+            return
+        try:
+            with open(os.path.join(jdir, f"shadow_{sh['opened'][:10]}.jsonl"), "a") as fh:
+                fh.write(json.dumps(sh, default=str) + "\n")
+        except OSError as e:
+            self.log(f"[shadow] journal write failed: {e}")
+
+    def _nb_resume(self, st):
+        """A restart mid-day: today's shadow journal says which noise trades
+        are still open (followed again from their entry bar, so the trail is
+        rebuilt from the candles) and where the last ones exited."""
+        jdir = getattr(self.journal, "dir", None)
+        if not jdir:
+            return
+        try:
+            with open(os.path.join(jdir, f"shadow_{st['day']}.jsonl")) as fh:
+                lines = [json.loads(x) for x in fh if x.strip()]
+        except (OSError, ValueError):
+            return
+        opens, closed = {}, set()
+        for r in lines:
+            if r.get("playbook") != "noise_breakout":
+                continue
+            S = st["idx"].setdefault(r["und"], {"open": None, "free_after": "", "last_grid": "",
+                                                "have_bar": "", "trades": 0})
+            S["last_grid"] = max(S["last_grid"], r.get("decision_bar", ""))
+            if r.get("event") == "exit":
+                closed.add(r["id"])
+                S["free_after"] = max(S["free_after"], r.get("exit_bar", ""))
+            else:
+                opens[r["id"]] = r
+        for i, r in opens.items():
+            if i in closed:
+                continue
+            S = st["idx"][r["und"]]
+            r = dict(r, index_stop=r["index_stop0"], last_bar=r["decision_bar"],
+                     stop_path=[[r["decision_bar"], r["index_stop0"]]], resumed=True)
+            for k in ("exit_due", "prem_exit", "prem_trailed", "prem_live_stop", "gaps", "gap_wait",
+                      "gaps_checked"):
+                r.pop(k, None)
+            S["open"] = r
+            S["trades"] += 1
+            self.log(f"[shadow] noise_breakout {r['und']}: resumed the open shadow trade from "
+                     f"{r.get('t', r['decision_bar'][11:16])} | NO ORDER SENT")
+
     def hunt(self):
         try:
             self._shadow_lhm()                  # never sends an order
         except Exception as e:
             self.log(f"[shadow] last_half_hour error: {e!r}")
+        try:
+            self._shadow_noise()                # never sends an order
+        except Exception as e:
+            try:
+                self._nb_log_once("hunt", f"[shadow] noise_breakout error: {e!r}")
+            except Exception:
+                pass
         # The stock scan runs on its own clock, whatever the gates say: the
         # dashboard should show what is in play even while a position is open.
         desk = self.stocks

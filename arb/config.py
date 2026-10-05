@@ -887,6 +887,27 @@ class IntradayLimits:
     lhm_adr_days: int = 10
     lhm_stop_atr: float = 1.5
     lhm_risk_pct: float = 4.0
+    # Noise-area breakout (Zarattini, Aziz & Barbon 2024), owner's approval of
+    # 5 Oct 2026 for SHADOW only: on the nb_grid_min grid between nb_lo and
+    # nb_hi (bar end time), a close outside max(open, prev close) x (1 + nb_vm x
+    # sigma(t)) / min(...) x (1 - ...), sigma from the last nb_sigma_days
+    # sessions (need nb_sigma_min_days; fetched once a day, arb/noise_sigma.py);
+    # stop at the band (or nb_minr ATRs), trailed on the grid. A year with the
+    # 4h trend + pace gates (research/noise_breakout_result.txt): n=65,
+    # +9,385 / +14,108 - but it loses out of sample on a 5- or 4-session sigma.
+    # "off" | "shadow" (log and journal what it would do, send nothing). Any
+    # other value, "on" included, is off: real orders need a separate approval.
+    noise_breakout: str = "off"
+    nb_indices: tuple = ("NIFTY", "BANKNIFTY", "SENSEX")
+    nb_vm: float = 1.0
+    nb_minr: float = 1.5
+    nb_grid_min: int = 30
+    nb_lo: str = "09:45"
+    nb_hi: str = "14:45"
+    nb_sigma_days: int = 14
+    nb_sigma_min_days: int = 10
+    nb_history_days: int = 28           # calendar days fetched (Angel ONE_MINUTE: <= 30 a call)
+    nb_gap_hold_sec: float = 180.0      # a missing minute holds the shadow trail this long, then is marked
     exit_slip_spreads: float = 1.0
     exit_slip_frac: float = 0.01
     # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is

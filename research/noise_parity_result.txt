@@ -1,0 +1,15 @@
+noise-area breakout parity: vm 1.0 minr 1.5 09:45-14:45 grid 30 sigma 14d (min 10), exit trail noise, eod 15:25; tolerance 1e-06
+
+NIFTY      screen.gen  319 entries | module  319 | common  319 | only screen 0 | only module 0
+           entry (side, stop) match 319/319 | exit (bar, reason, index px) match 319/319 | 4h trend match 319/319 | pace match 319/319
+           exits {'stop': 280, 'eod': 39}
+
+BANKNIFTY  screen.gen  388 entries | module  388 | common  388 | only screen 0 | only module 0
+           entry (side, stop) match 388/388 | exit (bar, reason, index px) match 388/388 | 4h trend match 388/388 | pace match 388/388
+           exits {'stop': 342, 'eod': 46}
+
+SENSEX     screen.gen  342 entries | module  342 | common  342 | only screen 0 | only module 0
+           entry (side, stop) match 342/342 | exit (bar, reason, index px) match 342/342 | 4h trend match 342/342 | pace match 342/342
+           exits {'stop': 301, 'eod': 41}
+
+ALL        screen.gen 1049 | module 1049 | common 1049 | entries 1049/1049 (100.0%) | exits 1049/1049 (100.0%) | 4h 1049/1049 | pace 1049/1049

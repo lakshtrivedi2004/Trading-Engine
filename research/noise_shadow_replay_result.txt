@@ -1,0 +1,210 @@
+store shape: earlier sessions as the history API returns them
+NIFTY      last 20 sessions: gen 27 entries, live shadow 27, common 27, only gen [], only live []
+   2026-09-04T11:44 side +1 stop gen 23966.12 live 23966.12 ok | 4h -1/-1 ok | pace 0.9488/0.9488 ok | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 23847.12 live 23847.12 ok | 4h +1/+1 ok | pace 1.3415/1.3415 ok | pc history | stop ok
+   2026-09-07T14:44 side -1 stop gen 23782.77 live 23782.77 ok | 4h -1/-1 ok | pace 0.9516/0.9516 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-08T09:44 side -1 stop gen 23685.23 live 23685.23 ok | 4h -1/-1 ok | pace 1.4653/1.4653 ok | pc history | stop ok
+   2026-09-08T10:44 side -1 stop gen 23683.71 live 23683.71 ok | 4h -1/-1 ok | pace 1.2180/1.2180 ok | pc history | stop ok
+   2026-09-08T11:14 side -1 stop gen 23687.30 live 23687.30 ok | 4h -1/-1 ok | pace 1.0886/1.0886 ok | pc history | stop ok
+   2026-09-08T11:44 side -1 stop gen 23682.23 live 23682.23 ok | 4h -1/-1 ok | pace 1.0265/1.0265 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-15T10:44 side -1 stop gen 23362.77 live 23362.77 ok | 4h -1/-1 ok | pace 0.8901/0.8901 ok | pc history | stop ok
+   2026-09-15T11:44 side -1 stop gen 23353.77 live 23353.77 ok | 4h -1/-1 ok | pace 0.8749/0.8749 ok | pc history | stop ok
+   2026-09-15T12:14 side -1 stop gen 23347.59 live 23347.59 ok | 4h -1/-1 ok | pace 0.8837/0.8837 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-17T10:14 side +1 stop gen 23272.69 live 23272.69 ok | 4h -1/-1 ok | pace 1.1955/1.1955 ok | pc history | stop ok
+   2026-09-17T12:14 side +1 stop gen 23284.06 live 23284.06 ok | 4h -1/-1 ok | pace 1.0640/1.0640 ok | pc history | stop ok
+   2026-09-21T09:44 side +1 stop gen 23380.36 live 23380.36 ok | 4h +1/+1 ok | pace 1.4286/1.4286 ok | pc history | stop ok
+   2026-09-21T12:14 side +1 stop gen 23407.95 live 23407.95 ok | 4h +1/+1 ok | pace 1.0230/1.0230 ok | pc history | stop ok
+   2026-09-21T13:44 side +1 stop gen 23415.99 live 23415.99 ok | 4h +1/+1 ok | pace 0.9380/0.9380 ok | pc history | stop ok
+   2026-09-22T13:14 side -1 stop gen 23349.35 live 23349.35 ok | 4h +1/+1 ok | pace 1.0679/1.0679 ok | pc history | stop ok
+   2026-09-22T13:44 side -1 stop gen 23347.64 live 23347.64 ok | 4h +1/+1 ok | pace 0.9607/0.9607 ok | pc history | stop ok
+   2026-09-23T10:44 side +1 stop gen 23405.77 live 23405.77 ok | 4h -1/-1 ok | pace 0.6392/0.6392 ok | pc history | stop ok
+   2026-09-23T13:44 side +1 stop gen 23423.19 live 23423.19 ok | 4h +1/+1 ok | pace 1.0861/1.0861 ok | pc history | stop ok
+   2026-09-23T14:14 side +1 stop gen 23438.97 live 23438.97 ok | 4h +1/+1 ok | pace 0.8751/0.8751 ok | pc history | stop ok
+   2026-09-24T13:44 side -1 stop gen 23139.94 live 23139.94 ok | 4h -1/-1 ok | pace 1.6325/1.6325 ok | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-28T09:44 side -1 stop gen 22907.09 live 22907.09 ok | 4h -1/-1 ok | pace 1.4385/1.4385 ok | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 22849.47 live 22849.47 ok | 4h -1/-1 ok | pace 0.9088/0.9088 ok | pc history | stop ok
+   2026-09-28T13:44 side -1 stop gen 22845.76 live 22845.76 ok | 4h -1/-1 ok | pace 0.9791/0.9791 ok | pc history | stop ok
+   2026-09-28T14:14 side -1 stop gen 22844.68 live 22844.68 ok | 4h -1/-1 ok | pace 1.2568/1.2568 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 22640.57 live 22640.57 ok | 4h -1/-1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-29T13:44 side -1 stop gen 22656.20 live 22656.20 ok | 4h -1/-1 ok | pace 1.0284/1.0284 ok | pc history | stop ok
+BANKNIFTY  last 20 sessions: gen 36 entries, live shadow 36, common 36, only gen [], only live []
+   2026-09-03T09:44 side +1 stop gen 57624.59 live 57624.59 ok | 4h -1/-1 ok | pace 1.6934/1.6934 ok | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 57221.54 live 57221.54 ok | 4h +1/+1 ok | pace 1.6580/1.6580 ok | pc history | stop ok
+   2026-09-07T12:14 side -1 stop gen 57133.79 live 57133.79 ok | 4h +1/+1 ok | pace 1.0052/1.0052 ok | pc history | stop ok
+   2026-09-07T13:44 side -1 stop gen 57102.97 live 57102.97 ok | 4h -1/-1 ok | pace 0.9997/0.9997 ok | pc history | stop ok
+   2026-09-07T14:14 side -1 stop gen 57123.03 live 57123.03 ok | 4h -1/-1 ok | pace 1.0020/1.0020 ok | pc history | stop ok
+   2026-09-07T14:44 side -1 stop gen 57102.20 live 57102.21 ok | 4h -1/-1 ok | pace 1.2045/1.2045 ok | pc history | stop ok
+   2026-09-08T12:44 side -1 stop gen 56832.65 live 56832.65 ok | 4h -1/-1 ok | pace 0.9812/0.9812 ok | pc history | stop ok
+   2026-09-08T14:14 side -1 stop gen 56840.42 live 56840.42 ok | 4h -1/-1 ok | pace 1.2432/1.2432 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-10T09:44 side +1 stop gen 56405.56 live 56405.56 ok | 4h -1/-1 ok | pace 1.5229/1.5229 ok | pc history | stop ok
+   2026-09-10T10:44 side +1 stop gen 56453.21 live 56453.21 ok | 4h -1/-1 ok | pace 0.8523/0.8523 ok | pc history | stop ok
+   2026-09-10T11:14 side +1 stop gen 56451.26 live 56451.26 ok | 4h -1/-1 ok | pace 0.8626/0.8626 ok | pc history | stop ok
+   2026-09-10T11:44 side +1 stop gen 56407.34 live 56407.35 ok | 4h -1/-1 ok | pace 0.8791/0.8791 ok | pc history | stop ok
+   2026-09-10T12:44 side +1 stop gen 56434.31 live 56434.31 ok | 4h -1/-1 ok | pace 0.9973/0.9973 ok | pc history | stop ok
+   2026-09-15T09:44 side -1 stop gen 56527.65 live 56527.65 ok | 4h -1/-1 ok | pace 1.3051/1.3051 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-16T10:44 side +1 stop gen 56160.04 live 56160.04 ok | 4h -1/-1 ok | pace 1.0371/1.0371 ok | pc history | stop ok
+   2026-09-16T12:44 side +1 stop gen 56211.36 live 56211.36 ok | 4h -1/-1 ok | pace 0.6889/0.6889 ok | pc history | stop ok
+   2026-09-16T13:14 side +1 stop gen 56198.80 live 56198.80 ok | 4h -1/-1 ok | pace 0.8480/0.8480 ok | pc history | stop ok
+   2026-09-16T14:14 side +1 stop gen 56248.35 live 56248.35 ok | 4h -1/-1 ok | pace 0.8850/0.8850 ok | pc history | stop ok
+   2026-09-17T09:44 side +1 stop gen 56359.17 live 56359.17 ok | 4h +1/+1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-18T13:14 side +1 stop gen 56324.50 live 56324.50 ok | 4h -1/-1 ok | pace 1.1529/1.1529 ok | pc history | stop ok
+   2026-09-18T14:14 side +1 stop gen 56364.45 live 56364.46 ok | 4h +1/+1 ok | pace 1.2136/1.2136 ok | pc history | stop ok
+   2026-09-21T13:44 side +1 stop gen 56552.80 live 56552.80 ok | 4h +1/+1 ok | pace 0.9135/0.9135 ok | pc history | stop ok
+   2026-09-21T14:44 side +1 stop gen 56564.51 live 56564.51 ok | 4h +1/+1 ok | pace 1.0187/1.0187 ok | pc history | stop ok
+   2026-09-22T11:44 side -1 stop gen 56311.06 live 56311.06 ok | 4h +1/+1 ok | pace 0.9098/0.9098 ok | pc history | stop ok
+   2026-09-23T09:44 side +1 stop gen 56361.51 live 56361.51 ok | 4h -1/-1 ok | pace 1.2349/1.2349 ok | pc history | stop ok
+   2026-09-23T10:14 side +1 stop gen 56405.37 live 56405.37 ok | 4h -1/-1 ok | pace 0.9992/0.9992 ok | pc history | stop ok
+   2026-09-23T13:44 side +1 stop gen 56525.29 live 56525.29 ok | 4h +1/+1 ok | pace 0.9976/0.9976 ok | pc history | stop ok
+   2026-09-24T09:44 side -1 stop gen 55582.78 live 55582.78 ok | 4h +1/+1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-24T13:44 side -1 stop gen 55492.93 live 55492.93 ok | 4h -1/-1 ok | pace 1.4516/1.4516 ok | pc history | stop ok
+   2026-09-25T10:14 side +1 stop gen 55546.13 live 55546.13 ok | 4h -1/-1 ok | pace 1.1217/1.1217 ok | pc history | stop ok
+   2026-09-28T09:44 side -1 stop gen 54860.54 live 54860.54 ok | 4h -1/-1 ok | pace 1.5144/1.5144 ok | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 54643.98 live 54643.98 ok | 4h -1/-1 ok | pace 0.9668/0.9668 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 53991.85 live 53991.85 ok | 4h -1/-1 ok | pace 1.9759/1.9759 ok | pc history | stop ok
+   2026-09-29T10:44 side -1 stop gen 53996.19 live 53996.19 ok | 4h -1/-1 ok | pace 1.1218/1.1218 ok | pc history | stop ok
+   2026-09-30T09:44 side +1 stop gen 54521.74 live 54521.74 ok | 4h -1/-1 ok | pace 1.3303/1.3303 ok | pc history | stop ok
+   2026-09-30T14:44 side +1 stop gen 54615.62 live 54615.62 ok | 4h -1/-1 ok | pace 1.4458/1.4458 ok | pc history | gen stop 15:20 -> live squareoff 15:14
+SENSEX     last 20 sessions: gen 35 entries, live shadow 35, common 35, only gen [], only live []
+   2026-09-02T09:44 side -1 stop gen 76394.03 live 76394.03 ok | 4h -1/-1 ok | pace 1.5235/1.5235 ok | pc history | stop ok
+   2026-09-02T11:44 side -1 stop gen 76286.31 live 76286.31 ok | 4h -1/-1 ok | pace 0.6759/0.6759 ok | pc history | stop ok
+   2026-09-03T09:44 side +1 stop gen 76837.43 live 76837.43 ok | 4h -1/-1 ok | pace 1.5988/1.5988 ok | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 76362.30 live 76362.30 ok | 4h +1/+1 ok | pace 1.4912/1.4912 ok | pc history | gen stop 15:28 -> live squareoff 15:14
+   2026-09-08T09:44 side -1 stop gen 75775.76 live 75775.76 ok | 4h -1/-1 ok | pace 1.3701/1.3701 ok | pc history | stop ok
+   2026-09-08T10:14 side -1 stop gen 75877.72 live 75877.72 ok | 4h -1/-1 ok | pace 1.2471/1.2471 ok | pc history | stop ok
+   2026-09-08T11:14 side -1 stop gen 75760.30 live 75760.30 ok | 4h -1/-1 ok | pace 1.0476/1.0476 ok | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-09T10:14 side -1 stop gen 75033.94 live 75033.94 ok | 4h -1/-1 ok | pace 1.3724/1.3724 ok | pc history | stop ok
+   2026-09-09T10:44 side -1 stop gen 75058.30 live 75058.30 ok | 4h -1/-1 ok | pace 1.0696/1.0696 ok | pc history | stop ok
+   2026-09-09T12:14 side -1 stop gen 75049.22 live 75049.22 ok | 4h -1/-1 ok | pace 0.9549/0.9549 ok | pc history | stop ok
+   2026-09-09T14:44 side -1 stop gen 75024.07 live 75024.07 ok | 4h -1/-1 ok | pace 1.1608/1.1608 ok | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-15T13:14 side -1 stop gen 74642.33 live 74642.33 ok | 4h -1/-1 ok | pace 1.1340/1.1340 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-17T10:14 side +1 stop gen 74500.83 live 74500.83 ok | 4h -1/-1 ok | pace 1.2151/1.2151 ok | pc history | stop ok
+   2026-09-17T12:14 side +1 stop gen 74549.99 live 74549.99 ok | 4h -1/-1 ok | pace 1.0587/1.0587 ok | pc history | stop ok
+   2026-09-17T13:14 side +1 stop gen 74515.05 live 74515.05 ok | 4h -1/-1 ok | pace 0.8806/0.8806 ok | pc history | stop ok
+   2026-09-21T09:44 side +1 stop gen 74692.26 live 74692.26 ok | 4h -1/-1 ok | pace 1.5868/1.5868 ok | pc history | stop ok
+   2026-09-21T11:14 side +1 stop gen 74723.03 live 74723.03 ok | 4h -1/-1 ok | pace 0.8460/0.8460 ok | pc history | stop ok
+   2026-09-21T11:44 side +1 stop gen 74742.82 live 74742.82 ok | 4h -1/-1 ok | pace 0.7482/0.7482 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-22T12:44 side -1 stop gen 74637.91 live 74637.91 ok | 4h +1/+1 ok | pace 0.9168/0.9168 ok | pc history | stop ok
+   2026-09-23T11:14 side +1 stop gen 74841.45 live 74841.45 ok | 4h -1/-1 ok | pace 0.8550/0.8550 ok | pc history | stop ok
+   2026-09-23T11:44 side +1 stop gen 74857.16 live 74857.16 ok | 4h -1/-1 ok | pace 0.8419/0.8419 ok | pc history | stop ok
+   2026-09-23T12:14 side +1 stop gen 74882.63 live 74882.63 ok | 4h -1/-1 ok | pace 0.8712/0.8712 ok | pc history | stop ok
+   2026-09-24T12:44 side -1 stop gen 74028.77 live 74028.77 ok | 4h +1/+1 ok | pace 1.0617/1.0617 ok | pc history | stop ok
+   2026-09-24T13:14 side -1 stop gen 74044.20 live 74044.20 ok | 4h +1/+1 ok | pace 0.9211/0.9211 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-25T10:14 side +1 stop gen 73701.97 live 73701.97 ok | 4h -1/-1 ok | pace 0.9124/0.9124 ok | pc history | stop ok
+   2026-09-28T09:44 side -1 stop gen 73163.68 live 73163.68 ok | 4h -1/-1 ok | pace 1.6722/1.6722 ok | pc history | stop ok
+   2026-09-28T12:14 side -1 stop gen 72974.65 live 72974.65 ok | 4h -1/-1 ok | pace 0.9859/0.9859 ok | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 72972.24 live 72972.24 ok | 4h -1/-1 ok | pace 0.8773/0.8773 ok | pc history | stop ok
+   2026-09-28T13:44 side -1 stop gen 72961.27 live 72961.27 ok | 4h -1/-1 ok | pace 0.9053/0.9053 ok | pc history | stop ok
+   2026-09-28T14:14 side -1 stop gen 72958.33 live 72958.33 ok | 4h -1/-1 ok | pace 0.9688/0.9688 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 72290.05 live 72290.05 ok | 4h -1/-1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-29T10:44 side -1 stop gen 72272.91 live 72272.91 ok | 4h -1/-1 ok | pace 1.0462/1.0462 ok | pc history | stop ok
+   2026-09-29T13:44 side -1 stop gen 72348.75 live 72348.75 ok | 4h -1/-1 ok | pace 0.9568/0.9568 ok | pc history | stop ok
+   2026-09-30T10:14 side +1 stop gen 72757.88 live 72757.88 ok | 4h -1/-1 ok | pace 1.0820/1.0820 ok | pc history | stop ok
+   2026-09-30T12:44 side +1 stop gen 72810.50 live 72810.50 ok | 4h -1/-1 ok | pace 1.1012/1.1012 ok | pc history | stop ok
+
+ALL: common entries 98 (side+stop match 98), only gen 0, only live 0; gates 4h 98/98 pace 98/98; stops before 15:14 82/82 on the same bar; 16 gen exits at/after 15:14 (live square-off); 0 trades with gaps
+
+==================================================================
+store shape: earlier sessions CUT AT 15:14
+NIFTY      last 20 sessions: gen 27 entries, live shadow 27, common 27, only gen [], only live []
+   2026-09-04T11:44 side +1 stop gen 23966.12 live 23966.12 ok | 4h -1/-1 ok | pace 0.9488/0.9488 ok | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 23847.12 live 23847.12 ok | 4h +1/+1 ok | pace 1.3415/1.3415 ok | pc history | stop ok
+   2026-09-07T14:44 side -1 stop gen 23782.77 live 23782.77 ok | 4h -1/-1 ok | pace 0.9516/0.9516 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-08T09:44 side -1 stop gen 23685.23 live 23685.23 ok | 4h -1/-1 ok | pace 1.4727/1.4653 GATE MISMATCH | pc history | stop ok
+   2026-09-08T10:44 side -1 stop gen 23683.71 live 23683.71 ok | 4h -1/-1 ok | pace 1.2356/1.2180 GATE MISMATCH | pc history | stop ok
+   2026-09-08T11:14 side -1 stop gen 23687.30 live 23687.30 ok | 4h -1/-1 ok | pace 1.1031/1.0886 GATE MISMATCH | pc history | stop ok
+   2026-09-08T11:44 side -1 stop gen 23682.23 live 23682.23 ok | 4h -1/-1 ok | pace 1.0309/1.0265 GATE MISMATCH | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-15T10:44 side -1 stop gen 23362.77 live 23362.77 ok | 4h -1/-1 ok | pace 0.8952/0.8901 GATE MISMATCH | pc history | stop ok
+   2026-09-15T11:44 side -1 stop gen 23353.77 live 23353.77 ok | 4h -1/-1 ok | pace 0.8749/0.8749 ok | pc history | stop ok
+   2026-09-15T12:14 side -1 stop gen 23347.59 live 23347.59 ok | 4h -1/-1 ok | pace 0.8862/0.8837 GATE MISMATCH | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-17T10:14 side +1 stop gen 23272.69 live 23272.69 ok | 4h -1/-1 ok | pace 1.1955/1.1955 ok | pc history | stop ok
+   2026-09-17T12:14 side +1 stop gen 23284.06 live 23284.06 ok | 4h -1/-1 ok | pace 1.0640/1.0640 ok | pc history | stop ok
+   2026-09-21T09:44 side +1 stop gen 23380.36 live 23380.36 ok | 4h +1/+1 ok | pace 1.4167/1.4286 GATE MISMATCH | pc history | stop ok
+   2026-09-21T12:14 side +1 stop gen 23407.95 live 23407.95 ok | 4h +1/+1 ok | pace 1.0230/1.0230 ok | pc history | stop ok
+   2026-09-21T13:44 side +1 stop gen 23415.99 live 23415.99 ok | 4h +1/+1 ok | pace 0.9380/0.9380 ok | pc history | stop ok
+   2026-09-22T13:14 side -1 stop gen 23349.35 live 23349.35 ok | 4h +1/+1 ok | pace 1.0679/1.0679 ok | pc history | stop ok
+   2026-09-22T13:44 side -1 stop gen 23347.64 live 23347.64 ok | 4h +1/+1 ok | pace 0.9607/0.9607 ok | pc history | stop ok
+   2026-09-23T10:44 side +1 stop gen 23405.77 live 23405.77 ok | 4h +1/-1 GATE MISMATCH | pace 0.6414/0.6392 GATE MISMATCH | pc history | stop ok
+   2026-09-23T13:44 side +1 stop gen 23423.19 live 23423.19 ok | 4h +1/+1 ok | pace 1.0861/1.0861 ok | pc history | stop ok
+   2026-09-23T14:14 side +1 stop gen 23438.97 live 23438.97 ok | 4h +1/+1 ok | pace 0.8751/0.8751 ok | pc history | stop ok
+   2026-09-24T13:44 side -1 stop gen 23139.94 live 23139.94 ok | 4h -1/-1 ok | pace 1.6325/1.6325 ok | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-28T09:44 side -1 stop gen 22907.09 live 22907.09 ok | 4h -1/-1 ok | pace 1.4550/1.4385 GATE MISMATCH | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 22849.47 live 22849.47 ok | 4h -1/-1 ok | pace 0.9088/0.9088 ok | pc history | stop ok
+   2026-09-28T13:44 side -1 stop gen 22845.76 live 22845.76 ok | 4h -1/-1 ok | pace 0.9791/0.9791 ok | pc history | stop ok
+   2026-09-28T14:14 side -1 stop gen 22844.68 live 22844.68 ok | 4h -1/-1 ok | pace 1.2568/1.2568 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 22640.57 live 22640.57 ok | 4h -1/-1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-29T13:44 side -1 stop gen 22656.20 live 22656.20 ok | 4h -1/-1 ok | pace 1.0284/1.0284 ok | pc history | stop ok
+BANKNIFTY  last 20 sessions: gen 36 entries, live shadow 36, common 36, only gen [], only live []
+   2026-09-03T09:44 side +1 stop gen 57624.59 live 57624.59 ok | 4h -1/-1 ok | pace 1.7042/1.6934 GATE MISMATCH | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 57221.54 live 57221.54 ok | 4h +1/+1 ok | pace 1.6580/1.6580 ok | pc history | stop ok
+   2026-09-07T12:14 side -1 stop gen 57133.79 live 57133.79 ok | 4h +1/+1 ok | pace 1.0079/1.0052 GATE MISMATCH | pc history | stop ok
+   2026-09-07T13:44 side -1 stop gen 57102.97 live 57102.97 ok | 4h -1/-1 ok | pace 0.9997/0.9997 ok | pc history | stop ok
+   2026-09-07T14:14 side -1 stop gen 57123.03 live 57123.03 ok | 4h -1/-1 ok | pace 1.0020/1.0020 ok | pc history | stop ok
+   2026-09-07T14:44 side -1 stop gen 57102.20 live 57102.21 ok | 4h -1/-1 ok | pace 1.2045/1.2045 ok | pc history | stop ok
+   2026-09-08T12:44 side -1 stop gen 56832.65 live 56832.65 ok | 4h -1/-1 ok | pace 0.9812/0.9812 ok | pc history | stop ok
+   2026-09-08T14:14 side -1 stop gen 56840.42 live 56840.42 ok | 4h -1/-1 ok | pace 1.2432/1.2432 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-10T09:44 side +1 stop gen 56405.56 live 56405.56 ok | 4h -1/-1 ok | pace 1.5372/1.5229 GATE MISMATCH | pc history | stop ok
+   2026-09-10T10:44 side +1 stop gen 56453.21 live 56453.21 ok | 4h -1/-1 ok | pace 0.8541/0.8523 GATE MISMATCH | pc history | stop ok
+   2026-09-10T11:14 side +1 stop gen 56451.26 live 56451.26 ok | 4h -1/-1 ok | pace 0.8626/0.8626 ok | pc history | stop ok
+   2026-09-10T11:44 side +1 stop gen 56407.34 live 56407.35 ok | 4h -1/-1 ok | pace 0.8809/0.8791 GATE MISMATCH | pc history | stop ok
+   2026-09-10T12:44 side +1 stop gen 56434.31 live 56434.31 ok | 4h -1/-1 ok | pace 0.9973/0.9973 ok | pc history | stop ok
+   2026-09-15T09:44 side -1 stop gen 56527.65 live 56527.65 ok | 4h -1/-1 ok | pace 1.2928/1.3051 GATE MISMATCH | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-16T10:44 side +1 stop gen 56160.04 live 56160.04 ok | 4h -1/-1 ok | pace 1.0489/1.0371 GATE MISMATCH | pc history | stop ok
+   2026-09-16T12:44 side +1 stop gen 56211.36 live 56211.36 ok | 4h -1/-1 ok | pace 0.6889/0.6889 ok | pc history | stop ok
+   2026-09-16T13:14 side +1 stop gen 56198.80 live 56198.80 ok | 4h -1/-1 ok | pace 0.8480/0.8480 ok | pc history | stop ok
+   2026-09-16T14:14 side +1 stop gen 56248.35 live 56248.35 ok | 4h +1/-1 GATE MISMATCH | pace 0.8850/0.8850 ok | pc history | stop ok
+   2026-09-17T09:44 side +1 stop gen 56359.17 live 56359.17 ok | 4h -1/+1 GATE MISMATCH | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-18T13:14 side +1 stop gen 56324.50 live 56324.50 ok | 4h -1/-1 ok | pace 1.1529/1.1529 ok | pc history | stop ok
+   2026-09-18T14:14 side +1 stop gen 56364.45 live 56364.46 ok | 4h +1/+1 ok | pace 1.2136/1.2136 ok | pc history | stop ok
+   2026-09-21T13:44 side +1 stop gen 56552.80 live 56552.80 ok | 4h +1/+1 ok | pace 0.9135/0.9135 ok | pc history | stop ok
+   2026-09-21T14:44 side +1 stop gen 56564.51 live 56564.51 ok | 4h +1/+1 ok | pace 1.0187/1.0187 ok | pc history | stop ok
+   2026-09-22T11:44 side -1 stop gen 56311.06 live 56311.06 ok | 4h +1/+1 ok | pace 0.9109/0.9098 GATE MISMATCH | pc history | stop ok
+   2026-09-23T09:44 side +1 stop gen 56361.51 live 56361.51 ok | 4h -1/-1 ok | pace 1.2363/1.2349 GATE MISMATCH | pc history | stop ok
+   2026-09-23T10:14 side +1 stop gen 56405.37 live 56405.37 ok | 4h -1/-1 ok | pace 1.0027/0.9992 GATE MISMATCH | pc history | stop ok
+   2026-09-23T13:44 side +1 stop gen 56525.29 live 56525.29 ok | 4h +1/+1 ok | pace 0.9976/0.9976 ok | pc history | stop ok
+   2026-09-24T09:44 side -1 stop gen 55582.78 live 55582.78 ok | 4h +1/+1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-24T13:44 side -1 stop gen 55492.93 live 55492.93 ok | 4h -1/-1 ok | pace 1.4516/1.4516 ok | pc history | stop ok
+   2026-09-25T10:14 side +1 stop gen 55546.13 live 55546.13 ok | 4h -1/-1 ok | pace 1.1164/1.1217 GATE MISMATCH | pc history | stop ok
+   2026-09-28T09:44 side -1 stop gen 54860.54 live 54860.54 ok | 4h -1/-1 ok | pace 1.5175/1.5144 GATE MISMATCH | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 54643.98 live 54643.98 ok | 4h -1/-1 ok | pace 0.9668/0.9668 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 53991.85 live 53991.85 ok | 4h -1/-1 ok | pace 1.9671/1.9759 GATE MISMATCH | pc history | stop ok
+   2026-09-29T10:44 side -1 stop gen 53996.19 live 53996.19 ok | 4h -1/-1 ok | pace 1.1218/1.1218 ok | pc history | stop ok
+   2026-09-30T09:44 side +1 stop gen 54521.74 live 54521.74 ok | 4h -1/-1 ok | pace 1.3573/1.3303 GATE MISMATCH | pc history | stop ok
+   2026-09-30T14:44 side +1 stop gen 54615.62 live 54615.62 ok | 4h -1/-1 ok | pace 1.4458/1.4458 ok | pc history | gen stop 15:20 -> live squareoff 15:14
+SENSEX     last 20 sessions: gen 35 entries, live shadow 35, common 35, only gen [], only live []
+   2026-09-02T09:44 side -1 stop gen 76394.03 live 76394.03 ok | 4h -1/-1 ok | pace 1.5235/1.5235 ok | pc history | stop ok
+   2026-09-02T11:44 side -1 stop gen 76286.31 live 76286.31 ok | 4h -1/-1 ok | pace 0.6781/0.6759 GATE MISMATCH | pc history | stop ok
+   2026-09-03T09:44 side +1 stop gen 76837.43 live 76837.43 ok | 4h -1/-1 ok | pace 1.6061/1.5988 GATE MISMATCH | pc history | stop ok
+   2026-09-07T09:44 side -1 stop gen 76362.30 live 76362.30 ok | 4h +1/+1 ok | pace 1.4943/1.4912 GATE MISMATCH | pc history | gen stop 15:28 -> live squareoff 15:14
+   2026-09-08T09:44 side -1 stop gen 75775.76 live 75775.76 ok | 4h -1/-1 ok | pace 1.3701/1.3701 ok | pc history | stop ok
+   2026-09-08T10:14 side -1 stop gen 75877.72 live 75877.72 ok | 4h -1/-1 ok | pace 1.2554/1.2471 GATE MISMATCH | pc history | stop ok
+   2026-09-08T11:14 side -1 stop gen 75760.30 live 75760.30 ok | 4h -1/-1 ok | pace 1.0502/1.0476 GATE MISMATCH | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-09T10:14 side -1 stop gen 75033.94 live 75033.94 ok | 4h -1/-1 ok | pace 1.3724/1.3724 ok | pc history | stop ok
+   2026-09-09T10:44 side -1 stop gen 75058.30 live 75058.30 ok | 4h -1/-1 ok | pace 1.0696/1.0696 ok | pc history | stop ok
+   2026-09-09T12:14 side -1 stop gen 75049.22 live 75049.22 ok | 4h -1/-1 ok | pace 0.9471/0.9549 GATE MISMATCH | pc history | stop ok
+   2026-09-09T14:44 side -1 stop gen 75024.07 live 75024.07 ok | 4h -1/-1 ok | pace 1.1608/1.1608 ok | pc history | gen eod 15:28 -> live squareoff 15:14
+   2026-09-15T13:14 side -1 stop gen 74642.33 live 74642.33 ok | 4h -1/-1 ok | pace 1.1340/1.1340 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-17T10:14 side +1 stop gen 74500.83 live 74500.83 ok | 4h -1/-1 ok | pace 1.2200/1.2151 GATE MISMATCH | pc history | stop ok
+   2026-09-17T12:14 side +1 stop gen 74549.99 live 74549.99 ok | 4h -1/-1 ok | pace 1.0587/1.0587 ok | pc history | stop ok
+   2026-09-17T13:14 side +1 stop gen 74515.05 live 74515.05 ok | 4h -1/-1 ok | pace 0.8806/0.8806 ok | pc history | stop ok
+   2026-09-21T09:44 side +1 stop gen 74692.26 live 74692.26 ok | 4h +1/-1 GATE MISMATCH | pace 1.5868/1.5868 ok | pc history | stop ok
+   2026-09-21T11:14 side +1 stop gen 74723.03 live 74723.03 ok | 4h +1/-1 GATE MISMATCH | pace 0.8460/0.8460 ok | pc history | stop ok
+   2026-09-21T11:44 side +1 stop gen 74742.82 live 74742.82 ok | 4h +1/-1 GATE MISMATCH | pace 0.7498/0.7482 GATE MISMATCH | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-22T12:44 side -1 stop gen 74637.91 live 74637.91 ok | 4h +1/+1 ok | pace 0.9168/0.9168 ok | pc history | stop ok
+   2026-09-23T11:14 side +1 stop gen 74841.45 live 74841.45 ok | 4h +1/-1 GATE MISMATCH | pace 0.8550/0.8550 ok | pc history | stop ok
+   2026-09-23T11:44 side +1 stop gen 74857.16 live 74857.16 ok | 4h +1/-1 GATE MISMATCH | pace 0.8419/0.8419 ok | pc history | stop ok
+   2026-09-23T12:14 side +1 stop gen 74882.63 live 74882.63 ok | 4h +1/-1 GATE MISMATCH | pace 0.8728/0.8712 GATE MISMATCH | pc history | stop ok
+   2026-09-24T12:44 side -1 stop gen 74028.77 live 74028.77 ok | 4h -1/+1 GATE MISMATCH | pace 1.0617/1.0617 ok | pc history | stop ok
+   2026-09-24T13:14 side -1 stop gen 74044.20 live 74044.20 ok | 4h -1/+1 GATE MISMATCH | pace 0.9211/0.9211 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-25T10:14 side +1 stop gen 73701.97 live 73701.97 ok | 4h -1/-1 ok | pace 0.9229/0.9124 GATE MISMATCH | pc history | stop ok
+   2026-09-28T09:44 side -1 stop gen 73163.68 live 73163.68 ok | 4h -1/-1 ok | pace 1.6722/1.6722 ok | pc history | stop ok
+   2026-09-28T12:14 side -1 stop gen 72974.65 live 72974.65 ok | 4h -1/-1 ok | pace 0.9808/0.9859 GATE MISMATCH | pc history | stop ok
+   2026-09-28T12:44 side -1 stop gen 72972.24 live 72972.24 ok | 4h -1/-1 ok | pace 0.8773/0.8773 ok | pc history | stop ok
+   2026-09-28T13:44 side -1 stop gen 72961.27 live 72961.27 ok | 4h -1/-1 ok | pace 0.9053/0.9053 ok | pc history | stop ok
+   2026-09-28T14:14 side -1 stop gen 72958.33 live 72958.33 ok | 4h -1/-1 ok | pace 0.9688/0.9688 ok | pc history | gen eod 15:29 -> live squareoff 15:14
+   2026-09-29T09:44 side -1 stop gen 72290.05 live 72290.05 ok | 4h -1/-1 ok | pace 2.0000/2.0000 ok | pc history | stop ok
+   2026-09-29T10:44 side -1 stop gen 72272.91 live 72272.91 ok | 4h -1/-1 ok | pace 1.0555/1.0462 GATE MISMATCH | pc history | stop ok
+   2026-09-29T13:44 side -1 stop gen 72348.75 live 72348.75 ok | 4h -1/-1 ok | pace 0.9568/0.9568 ok | pc history | stop ok
+   2026-09-30T10:14 side +1 stop gen 72757.88 live 72757.88 ok | 4h -1/-1 ok | pace 1.0842/1.0820 GATE MISMATCH | pc history | stop ok
+   2026-09-30T12:44 side +1 stop gen 72810.50 live 72810.50 ok | 4h -1/-1 ok | pace 1.1012/1.1012 ok | pc history | stop ok
+
+ALL: common entries 98 (side+stop match 98), only gen 0, only live 0; gates 4h 87/98 pace 62/98; stops before 15:14 82/82 on the same bar; 16 gen exits at/after 15:14 (live square-off); 0 trades with gaps

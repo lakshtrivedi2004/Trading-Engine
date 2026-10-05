@@ -73,5 +73,18 @@
   "exit_slip_spreads": 1.0,
   "exit_slip_frac": 0.01,
   "exact_trade_costs": true,
-  "last_half_hour": "shadow"
+  "last_half_hour": "shadow",
+  "noise_breakout": "shadow",
+  "nb_indices": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "nb_vm": 1.0,
+  "nb_minr": 1.5,
+  "nb_grid_min": 30,
+  "nb_lo": "09:45",
+  "nb_hi": "14:45",
+  "nb_sigma_days": 14,
+  "nb_sigma_min_days": 10
 }
