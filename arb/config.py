@@ -873,6 +873,20 @@ class IntradayLimits:
     # the journal books), not the arbitrage scanner's worst-case bound. See
     # IntradayEngine._round_trip_points.
     exact_trade_costs: bool = False
+    # Last-half-hour momentum (Gao et al. 2018; Baltussen et al. 2021), owner's
+    # momentum request of 5 Oct 2026. At the 14:59 close, if the index has moved
+    # lhm_adr_frac x ADR from the previous close and the 4-hour trend agrees,
+    # buy in that direction with a stop lhm_stop_atr ATRs away, out at the
+    # square-off. A year of NIFTY (research_out/momentum/l1_feasible_result.txt):
+    # 84 trades, +26,040 / +13,007, t 2.4 - after ~80 variants, so unproven.
+    # "off" | "shadow" (log what it would have done, send nothing).
+    last_half_hour: str = "off"
+    lhm_indices: tuple = ("NIFTY",)
+    lhm_entry_at: str = "15:00"
+    lhm_adr_frac: float = 0.5
+    lhm_adr_days: int = 10
+    lhm_stop_atr: float = 1.5
+    lhm_risk_pct: float = 4.0
     exit_slip_spreads: float = 1.0
     exit_slip_frac: float = 0.01
     # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is

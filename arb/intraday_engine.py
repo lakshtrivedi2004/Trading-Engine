@@ -1216,7 +1216,125 @@ class IntradayEngine:
         return bool(m) and side == self._loss_side and \
             time.time() - self._loss_side_ts < 60.0 * m
 
+    # ── last-half-hour momentum, shadow mode ────────────────────────────────
+    def _lhm_signal(self, und, rows):
+        """(side, close, stop, move, adr) when the 14:59 bar has moved
+        lhm_adr_frac x ADR from the previous close, else None. `rows` are
+        completed bars ending at the decision bar."""
+        L = self.L
+        if not rows:
+            return None
+        day = rows[-1][0][:10]
+        prev = [r for r in rows if r[0][:10] < day]
+        if not prev:
+            return None
+        days = {}
+        for r in prev:
+            d = days.setdefault(r[0][:10], [r[2], r[3]])
+            d[0], d[1] = max(d[0], r[2]), min(d[1], r[3])
+        keys = sorted(days)[-int(L.lhm_adr_days):]
+        if len(keys) < 3:
+            return None
+        adr = sum(days[k][0] - days[k][1] for k in keys) / len(keys)
+        close, pc = rows[-1][4], prev[-1][4]
+        move = close - pc
+        if adr <= 0 or abs(move) < float(L.lhm_adr_frac) * adr:
+            return None
+        side = 1 if move > 0 else -1
+        a = atr(rows, period=int(L.atr_period))
+        if a <= 0:
+            return None
+        return side, close, close - side * float(L.lhm_stop_atr) * a, move, adr
+
+    def _shadow_lhm(self):
+        """last_half_hour = "shadow": at lhm_entry_at, note the trade the rule
+        would take - contract, premium, index stop - and follow it to the
+        square-off on live quotes. No order is ever sent. Forward evidence
+        before any money (owner's momentum request, 5 Oct 2026)."""
+        L = self.L
+        if str(getattr(L, "last_half_hour", "off")) != "shadow":
+            return
+        now = now_ist()
+        if not hasattr(self, "_lhm"):
+            self._lhm = {}
+        hh, mm = (int(x) for x in str(L.lhm_entry_at).split(":"))
+        at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        due = 0.0 <= (now - at).total_seconds() <= float(getattr(L, "entry_window_sec", 15.0))
+        for und in getattr(L, "lhm_indices", ()) or ():
+            key = (now.strftime("%Y-%m-%d"), und)
+            sh = self._lhm.get(key)
+            if sh is None and due:
+                self._lhm[key] = self._lhm_open(und) or {"none": True}
+            elif sh and not sh.get("none") and not sh.get("done"):
+                self._lhm_follow(sh)
+
+    def _lhm_open(self, und):
+        L = self.L
+        b = self._binding_for(und)
+        if b is None or not self.candles:
+            return None
+        t0 = time.time()
+        rows, wait = self._closed_rows(und, self.candles.get(und, limit=3000), t0=t0)
+        sig = self._lhm_signal(und, rows) if not wait else None
+        if sig is None:
+            self.log(f"[shadow] last_half_hour {und}: no signal")
+            return None
+        side, close, stop, move, adr = sig
+        tr = trend_4h(self.candles.get(und, limit=3000), int(getattr(L, "trend_4h_bars", 5) or 5))
+        if tr != side:
+            self.log(f"[shadow] last_half_hour {und}: move {move:+.1f} ({move / adr:+.2f} ADR) "
+                     f"against the 4-hour trend - no trade")
+            return None
+        spot = self._spot(und) or close
+        cv = b.view(self.feed.store, time.perf_counter_ns(), time.time())
+        cap_inr = self.capital.capital * float(L.lhm_risk_pct) / 100.0
+        idx_risk = abs(close - stop)
+        lot = max(cv.lot_size, 1)
+        cand = self.selector.select(
+            cv, spot, side, self.capital.capital - self.book.deployed(),
+            max_age_ms=400.0, min_depth_mult=1.0, max_delta=cap_inr / (idx_risk * lot),
+            max_delta_fn=(lambda px, spr: (cap_inr / lot - self._extra_risk_points(px, spr, lot)) / idx_risk)
+            if self._costs_inside() else None)
+        if cand is None:
+            self.log(f"[shadow] last_half_hour {und}: signal {('CE' if side > 0 else 'PE')} but "
+                     f"no contract ({self.selector.last_reject})")
+            return None
+        sh = {"und": und, "side": side, "symbol": cand.symbol, "token": str(cand.token),
+              "lot": cand.lot_size, "entry": cand.ask, "index_entry": spot, "index_stop": stop,
+              "opened": now_ist().isoformat(), "move_adr": round(move / adr, 2)}
+        self.log(f"[shadow] last_half_hour WOULD BUY {cand.symbol} @ {cand.ask:.2f} x{cand.lot_size} "
+                 f"| {und} {move:+.1f} from prev close ({move / adr:+.2f} ADR) | index stop "
+                 f"{stop:.1f} | NO ORDER SENT")
+        return sh
+
+    def _lhm_follow(self, sh):
+        L = self.L
+        slot = self.feed.store.slot_of_token.get(sh["token"])
+        bid = float(self.feed.store.bid[slot]) if slot is not None else 0.0
+        idx = self._spot(sh["und"])
+        hit = idx > 0 and (idx - sh["index_stop"]) * sh["side"] <= 0
+        mins = self.book.time_to_close(self.cfg.session_end)
+        if not (hit or mins <= float(L.squareoff_minutes)) or bid <= 0:
+            return
+        q = sh["lot"]
+        cost = leg_cost(sh["entry"], q, "BUY", "OPT", self.cm) + leg_cost(bid, q, "SELL", "OPT", self.cm)
+        net = (bid - sh["entry"]) * q - cost
+        sh.update(done=True, exit=bid, why="index_stop" if hit else "squareoff", net=round(net, 2))
+        self.log(f"[shadow] last_half_hour {sh['symbol']} would EXIT @ {bid:.2f} ({sh['why']}) "
+                 f"net Rs {net:+,.0f} | NO ORDER SENT")
+        jdir = getattr(self.journal, "dir", None)
+        if jdir:
+            try:
+                with open(os.path.join(jdir, f"shadow_{sh['opened'][:10]}.jsonl"), "a") as fh:
+                    fh.write(json.dumps(dict(sh, playbook="last_half_hour")) + "\n")
+            except OSError as e:
+                self.log(f"[shadow] journal write failed: {e}")
+
     def hunt(self):
+        try:
+            self._shadow_lhm()                  # never sends an order
+        except Exception as e:
+            self.log(f"[shadow] last_half_hour error: {e!r}")
         # The stock scan runs on its own clock, whatever the gates say: the
         # dashboard should show what is in play even while a position is open.
         desk = self.stocks

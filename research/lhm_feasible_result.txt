@@ -1,0 +1,9 @@
+  entry 14:15, exit 15:13, all 3 +4h       n=115 win= 10% IN  -19,820 OUT     -500 yr  -20,320 t=-1.82 dd 24,209
+  entry 14:15, exit 15:13, NIFTY only +4h  n= 81 win= 15% IN  -10,864 OUT   +9,607 yr   -1,257 t=-0.11 dd 11,662
+  entry 14:30, exit 15:13, all 3 +4h       n=113 win= 12% IN  -13,374 OUT   -4,889 yr  -18,263 t=-1.52 dd 19,432
+  entry 14:30, exit 15:13, NIFTY only +4h  n= 80 win= 12% IN   -8,386 OUT   -2,047 yr  -10,433 t=-0.98 dd 12,299
+  entry 14:45, exit 15:13, all 3 +4h       n=112 win= 21% IN   +9,109 OUT   +4,282 yr  +13,391 t=+0.73 dd 14,201
+  entry 14:45, exit 15:13, NIFTY only +4h  n= 86 win= 23% IN  +14,077 OUT   +6,642 yr  +20,719 t=+1.15 dd  9,830
+  entry 15:00, exit 15:13, all 3 +4h       n=109 win= 38% IN  +18,570 OUT   +7,232 yr  +25,802 t=+1.55 dd  6,827
+  entry 15:00, exit 15:13, NIFTY only +4h  n= 84 win= 45% IN  +26,040 OUT  +13,007 yr  +39,047 t=+2.38 dd  2,686
+  reference: entry 15:00, exit 15:28 (screen) n= 84 win= 36% IN  +25,820 OUT  +12,930 yr  +38,750 t=+2.42 dd  3,717

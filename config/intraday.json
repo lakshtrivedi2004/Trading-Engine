@@ -72,5 +72,6 @@
   "risk_includes_costs": true,
   "exit_slip_spreads": 1.0,
   "exit_slip_frac": 0.01,
-  "exact_trade_costs": true
+  "exact_trade_costs": true,
+  "last_half_hour": "shadow"
 }

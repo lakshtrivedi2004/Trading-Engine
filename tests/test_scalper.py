@@ -854,6 +854,74 @@ check("costs / risk is measured against the stop plus its costs, as plan_trade m
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+section("8f. last_half_hour in shadow mode: notes the trade, never sends one")
+
+import arb.positions as _pos_mod
+from arb.intraday_engine import IntradayEngine as _IEng
+
+
+def _lhm_rows():
+    out = []
+    for d, base in (("2026-09-28", 23800.0), ("2026-09-29", 23870.0), ("2026-09-30", 23940.0)):
+        t0 = datetime.fromisoformat(f"{d}T09:15:00+05:30")
+        for i in range(375):
+            px = base + 60.0 * i / 374
+            out.append([(t0 + timedelta(minutes=i)).isoformat(), px, px + 20.0, px - 20.0, px, 0.0])
+    t0 = datetime.fromisoformat("2026-10-01T09:15:00+05:30")
+    for i in range(345):                           # 09:15 .. 14:59
+        px = 24000.0 + 100.0 * i / 344
+        out.append([(t0 + timedelta(minutes=i)).isoformat(), px, px + 3.0, px - 3.0, px, 0.0])
+    return out
+
+
+class _LhmJournal(_Journal):
+    def __init__(self, d):
+        super().__init__()
+        self.dir = d
+
+
+_jd = tempfile.mkdtemp(prefix="lhm_shadow_")
+_rows_l = _lhm_rows()
+_real_t, _real_ie2, _real_pos = time.time, ie.now_ist, _pos_mod.now_ist
+
+
+def _at(hh, mm, ss):
+    dt = datetime(2026, 10, 1, hh, mm, ss, tzinfo=IST)
+    time.time = lambda: dt.timestamp()
+    ie.now_ist = _pos_mod.now_ist = rg.now_ist = lambda: dt
+
+
+try:
+    for mode in ("off", "shadow"):
+        lg = []
+        el = _IEng(_Feed(24100.0), [_Binding()], _Cfg(), CostModel(),
+                   IntradayLimits(last_half_hour=mode, max_risk_pct_per_trade=25.0),
+                   PaperBroker(CostModel()), _LhmJournal(_jd), _Cap(), _Candles(_rows_l),
+                   log=lg.append)
+        el.book.time_to_close = lambda *_: 15.0
+        _at(15, 0, 2)
+        el._shadow_lhm()
+        if mode == "off":
+            check("last_half_hour off: nothing noted", not any("[shadow]" in x for x in lg))
+            continue
+        would = [x for x in lg if "WOULD BUY" in x]
+        check("shadow: at 15:00 a 0.5-ADR move with the 4h trend is noted as a CE it would buy",
+              len(would) == 1 and "CE" in would[0] and "NO ORDER SENT" in would[0], str(lg[-2:]))
+        sh = next(iter(el._lhm.values()))
+        el.feed.store.slot_of_token = {sh.get("token", ""): 0}
+        el.feed.store.bid = [sh.get("entry", 0.0) + 5.0]
+        el.book.time_to_close = lambda *_: 0.5
+        _at(15, 14, 30)
+        el._shadow_lhm()
+        ex = [x for x in lg if "would EXIT" in x]
+        check("shadow: at the square-off its exit is noted with a net, and journalled",
+              len(ex) == 1 and os.path.exists(os.path.join(_jd, "shadow_2026-10-01.jsonl")), str(ex))
+        check("shadow: no order was ever placed and no position opened",
+              el.book.count() == 0 and el.trades_today == 0)
+finally:
+    time.time, ie.now_ist, _pos_mod.now_ist, rg.now_ist = _real_t, _real_ie2, _real_pos, _real_rg
+
+# ═════════════════════════════════════════════════════════════════════════════
 section("9. Trailing on the index: the owner's 1:1 -> last opposite swing rule")
 
 from arb import trailing as tr
