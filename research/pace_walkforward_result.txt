@@ -1,0 +1,223 @@
+note: config/intraday.json has changed since the cache (378066f05af5) was built; using the cache (rerun with --regen to rebuild)
+
+data 2025-09-22 .. 2026-09-30 (254 trading days), split 2026-05-25; raw candidates 2327, priced + 4h trend 778; capital Rs 13,467; playbooks ['ob_fvg_retest']
+config at cache time 378066f05af5: atr_by_index NIFTY (1.3, 1.5), BANKNIFTY (1.5, 1.5), SENSEX (1.2, 1.2); live halt 20.200 (bt units)
+candidates with no ar (gate passes them at any threshold): 0
+
+FIXED live, whole year             n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+
+training rule R1: a threshold needs >= 5 training trades of its own (else not eligible; none -> live)
+training rule R2: >= 5 gate-off trades in the window (else live); any threshold eligible, 0 trades = 0
+
+=== each variant on ITS OWN out-of-sample days vs FIXED live on the same days ===
+    (BETTER BOTH = beats fixed in the in-sample AND the held-out half of those days)
+
+R1 weekly W=40: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=206 win= 40% year Rs  -5,257 (IN  -4,649 / OUT    -608) avg   -26 worst   -822 maxDD 12,245
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R1 weekly W=40 plateau: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=196 win= 40% year Rs  -4,027 (IN  -2,040 / OUT  -1,987) avg   -21 worst   -822 maxDD 11,883
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R1 weekly W=60: trades from 2025-12-22 (192 days, 41 rebalances)
+  walk-forward                       n=176 win= 41% year Rs  -2,912 (IN  -1,125 / OUT  -1,787) avg   -17 worst   -822 maxDD 13,825
+  FIXED live, same days              n= 65 win= 55% year Rs  +9,962 (IN  +1,924 / OUT  +8,039) avg  +153 worst   -742 maxDD  4,058
+R1 weekly W=60 plateau: trades from 2025-12-22 (192 days, 41 rebalances)
+  walk-forward                       n=175 win= 41% year Rs  -6,019 (IN  -1,151 / OUT  -4,868) avg   -34 worst   -822 maxDD 13,804
+  FIXED live, same days              n= 65 win= 55% year Rs  +9,962 (IN  +1,924 / OUT  +8,039) avg  +153 worst   -742 maxDD  4,058
+R1 weekly W=120: trades from 2026-03-23 (130 days, 28 rebalances)
+  walk-forward                       n= 88 win= 41% year Rs  -5,326 (IN  -5,124 / OUT    -202) avg   -61 worst   -822 maxDD  9,484
+  FIXED live, same days              n= 36 win= 53% year Rs  +6,655 (IN  -1,384 / OUT  +8,039) avg  +185 worst   -742 maxDD  4,049
+R1 weekly W=120 plateau: trades from 2026-03-23 (130 days, 28 rebalances)
+  walk-forward                       n= 78 win= 40% year Rs  -5,495 (IN  -5,403 / OUT     -92) avg   -70 worst   -822 maxDD 10,030
+  FIXED live, same days              n= 36 win= 53% year Rs  +6,655 (IN  -1,384 / OUT  +8,039) avg  +185 worst   -742 maxDD  4,049
+R1 weekly W=all: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=152 win= 43% year Rs    -183 (IN  -4,558 / OUT  +4,375) avg    -1 worst   -822 maxDD  8,590
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R1 weekly W=all plateau: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=146 win= 43% year Rs  -1,405 (IN  -3,015 / OUT  +1,610) avg   -10 worst   -822 maxDD  5,400
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R1 monthly W=40: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=206 win= 39% year Rs -10,170 (IN  -4,478 / OUT  -5,692) avg   -49 worst   -822 maxDD 16,646
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R1 monthly W=40 plateau: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=197 win= 40% year Rs  -5,645 (IN     +38 / OUT  -5,683) avg   -29 worst   -822 maxDD 14,757
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R1 monthly W=60: trades from 2026-01-01 (185 days, 9 rebalances)
+  walk-forward                       n=161 win= 40% year Rs  -3,364 (IN  -2,655 / OUT    -709) avg   -21 worst   -822 maxDD 12,366
+  FIXED live, same days              n= 63 win= 54% year Rs  +8,909 (IN    +870 / OUT  +8,039) avg  +141 worst   -742 maxDD  4,058
+R1 monthly W=60 plateau: trades from 2026-01-01 (185 days, 9 rebalances)
+  walk-forward                       n=170 win= 40% year Rs  -9,471 (IN  -5,379 / OUT  -4,092) avg   -56 worst   -822 maxDD 13,032
+  FIXED live, same days              n= 63 win= 54% year Rs  +8,909 (IN    +870 / OUT  +8,039) avg  +141 worst   -742 maxDD  4,058
+R1 monthly W=120: trades from 2026-04-01 (125 days, 6 rebalances)
+  walk-forward                       n= 80 win= 36% year Rs  -7,682 (IN  -5,337 / OUT  -2,345) avg   -96 worst   -822 maxDD  9,243
+  FIXED live, same days              n= 35 win= 51% year Rs  +6,089 (IN  -1,949 / OUT  +8,039) avg  +174 worst   -742 maxDD  4,049
+R1 monthly W=120 plateau: trades from 2026-04-01 (125 days, 6 rebalances)
+  walk-forward                       n= 73 win= 36% year Rs  -7,810 (IN  -6,232 / OUT  -1,578) avg  -107 worst   -822 maxDD  9,566
+  FIXED live, same days              n= 35 win= 51% year Rs  +6,089 (IN  -1,949 / OUT  +8,039) avg  +174 worst   -742 maxDD  4,049
+R1 monthly W=all: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=143 win= 44% year Rs  +1,600 (IN  -2,118 / OUT  +3,718) avg   +11 worst   -822 maxDD  8,060
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R1 monthly W=all plateau: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=142 win= 44% year Rs    +512 (IN  -1,098 / OUT  +1,610) avg    +4 worst   -822 maxDD  5,957
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R2 weekly W=40: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=137 win= 40% year Rs  -7,393 (IN  -8,555 / OUT  +1,162) avg   -54 worst   -822 maxDD 12,719
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R2 weekly W=40 plateau: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=111 win= 41% year Rs  -5,340 (IN  -7,932 / OUT  +2,592) avg   -48 worst   -822 maxDD 10,102
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R2 weekly W=60: trades from 2025-12-22 (192 days, 41 rebalances)
+  walk-forward                       n=120 win= 45% year Rs  +1,418 (IN  -2,436 / OUT  +3,854) avg   +12 worst   -822 maxDD  9,889
+  FIXED live, same days              n= 65 win= 55% year Rs  +9,962 (IN  +1,924 / OUT  +8,039) avg  +153 worst   -742 maxDD  4,058
+R2 weekly W=60 plateau: trades from 2025-12-22 (192 days, 41 rebalances)
+  walk-forward                       n=106 win= 45% year Rs    +118 (IN  -3,493 / OUT  +3,611) avg    +1 worst   -822 maxDD  9,539
+  FIXED live, same days              n= 65 win= 55% year Rs  +9,962 (IN  +1,924 / OUT  +8,039) avg  +153 worst   -742 maxDD  4,058
+R2 weekly W=120: trades from 2026-03-23 (130 days, 28 rebalances)
+  walk-forward                       n= 64 win= 42% year Rs    -793 (IN  -5,936 / OUT  +5,143) avg   -12 worst   -822 maxDD 11,192
+  FIXED live, same days              n= 36 win= 53% year Rs  +6,655 (IN  -1,384 / OUT  +8,039) avg  +185 worst   -742 maxDD  4,049
+R2 weekly W=120 plateau: trades from 2026-03-23 (130 days, 28 rebalances)
+  walk-forward                       n= 56 win= 46% year Rs  +1,904 (IN  -4,065 / OUT  +5,969) avg   +34 worst   -822 maxDD  6,895
+  FIXED live, same days              n= 36 win= 53% year Rs  +6,655 (IN  -1,384 / OUT  +8,039) avg  +185 worst   -742 maxDD  4,049
+R2 weekly W=all: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=111 win= 45% year Rs    -360 (IN  -2,133 / OUT  +1,773) avg    -3 worst   -822 maxDD  6,094
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R2 weekly W=all plateau: trades from 2025-11-24 (212 days, 45 rebalances)
+  walk-forward                       n=101 win= 43% year Rs  -3,607 (IN  -6,379 / OUT  +2,772) avg   -36 worst   -822 maxDD  9,134
+  FIXED live, same days              n= 71 win= 54% year Rs  +9,024 (IN    +985 / OUT  +8,039) avg  +127 worst   -742 maxDD  4,058
+R2 monthly W=40: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=110 win= 43% year Rs    +793 (IN  -4,179 / OUT  +4,971) avg    +7 worst   -822 maxDD  8,943
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R2 monthly W=40 plateau: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n= 99 win= 43% year Rs     +11 (IN  -5,324 / OUT  +5,335) avg    +0 worst   -822 maxDD  6,785
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R2 monthly W=60: trades from 2026-01-01 (185 days, 9 rebalances)
+  walk-forward                       n=100 win= 42% year Rs    -570 (IN  -5,547 / OUT  +4,977) avg    -6 worst   -822 maxDD  8,775
+  FIXED live, same days              n= 63 win= 54% year Rs  +8,909 (IN    +870 / OUT  +8,039) avg  +141 worst   -742 maxDD  4,058
+R2 monthly W=60 plateau: trades from 2026-01-01 (185 days, 9 rebalances)
+  walk-forward                       n=100 win= 43% year Rs  +1,152 (IN  -5,447 / OUT  +6,600) avg   +12 worst   -822 maxDD  8,608
+  FIXED live, same days              n= 63 win= 54% year Rs  +8,909 (IN    +870 / OUT  +8,039) avg  +141 worst   -742 maxDD  4,058
+R2 monthly W=120: trades from 2026-04-01 (125 days, 6 rebalances)
+  walk-forward                       n= 61 win= 41% year Rs  -1,051 (IN  -5,642 / OUT  +4,591) avg   -17 worst   -822 maxDD  9,548
+  FIXED live, same days              n= 35 win= 51% year Rs  +6,089 (IN  -1,949 / OUT  +8,039) avg  +174 worst   -742 maxDD  4,049
+R2 monthly W=120 plateau: trades from 2026-04-01 (125 days, 6 rebalances)
+  walk-forward                       n= 56 win= 41% year Rs    -460 (IN  -6,232 / OUT  +5,772) avg    -8 worst   -822 maxDD  8,806
+  FIXED live, same days              n= 35 win= 51% year Rs  +6,089 (IN  -1,949 / OUT  +8,039) avg  +174 worst   -742 maxDD  4,049
+R2 monthly W=all: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n=113 win= 47% year Rs  +5,060 (IN  +1,042 / OUT  +4,017) avg   +45 worst   -822 maxDD  6,094
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+R2 monthly W=all plateau: trades from 2025-12-01 (207 days, 10 rebalances)
+  walk-forward                       n= 96 win= 44% year Rs    +777 (IN  -2,071 / OUT  +2,848) avg    +8 worst   -822 maxDD  6,569
+  FIXED live, same days              n= 70 win= 54% year Rs  +9,688 (IN  +1,649 / OUT  +8,039) avg  +138 worst   -742 maxDD  4,058
+
+=== COMMON window 2026-03-17 .. 2026-09-30 (134 days), all variants ===
+
+  FIXED live                         n= 38 win= 50% year Rs  +6,081 (IN  -1,958 / OUT  +8,039) avg  +160 worst   -742 maxDD  4,058
+  R1 weekly W=40                     n=124 win= 40% year Rs  -4,204 (IN  -3,597 / OUT    -608) avg   -34 worst   -822 maxDD 12,245
+  R1 weekly W=40 plateau             n=111 win= 38% year Rs  -3,971 (IN  -1,983 / OUT  -1,987) avg   -36 worst   -822 maxDD 11,883
+  R1 weekly W=60                     n=113 win= 38% year Rs  -6,452 (IN  -4,666 / OUT  -1,787) avg   -57 worst   -822 maxDD 13,825
+  R1 weekly W=60 plateau             n=109 win= 36% year Rs  -8,942 (IN  -4,074 / OUT  -4,868) avg   -82 worst   -822 maxDD 13,804
+  R1 weekly W=120                    n= 88 win= 41% year Rs  -5,326 (IN  -5,124 / OUT    -202) avg   -61 worst   -822 maxDD  9,484
+  R1 weekly W=120 plateau            n= 78 win= 40% year Rs  -5,495 (IN  -5,403 / OUT     -92) avg   -70 worst   -822 maxDD 10,030
+  R1 weekly W=all                    n= 79 win= 41% year Rs  -1,424 (IN  -5,799 / OUT  +4,375) avg   -18 worst   -822 maxDD  8,590
+  R1 weekly W=all plateau            n= 70 win= 41% year Rs  -1,564 (IN  -3,174 / OUT  +1,610) avg   -22 worst   -822 maxDD  5,360
+  R1 monthly W=40                    n=129 win= 36% year Rs  -9,813 (IN  -4,121 / OUT  -5,692) avg   -76 worst   -822 maxDD 16,646
+  R1 monthly W=40 plateau            n=116 win= 35% year Rs  -7,526 (IN  -1,843 / OUT  -5,683) avg   -65 worst   -822 maxDD 14,757
+  R1 monthly W=60                    n=110 win= 38% year Rs  -4,201 (IN  -3,492 / OUT    -709) avg   -38 worst   -822 maxDD 12,366
+  R1 monthly W=60 plateau            n=108 win= 37% year Rs -10,376 (IN  -6,284 / OUT  -4,092) avg   -96 worst   -822 maxDD 13,032
+  R1 monthly W=120                   n= 80 win= 36% year Rs  -7,682 (IN  -5,337 / OUT  -2,345) avg   -96 worst   -822 maxDD  9,243
+  R1 monthly W=120 plateau           n= 73 win= 36% year Rs  -7,810 (IN  -6,232 / OUT  -1,578) avg  -107 worst   -822 maxDD  9,566
+  R1 monthly W=all                   n= 78 win= 40% year Rs  -1,359 (IN  -5,077 / OUT  +3,718) avg   -17 worst   -822 maxDD  7,868
+  R1 monthly W=all plateau           n= 71 win= 41% year Rs  -2,121 (IN  -3,731 / OUT  +1,610) avg   -30 worst   -822 maxDD  5,917
+  R2 weekly W=40                     n= 77 win= 39% year Rs  -3,209 (IN  -4,371 / OUT  +1,162) avg   -42 worst   -822 maxDD 11,914
+  R2 weekly W=40 plateau             n= 58 win= 38% year Rs  -1,439 (IN  -4,031 / OUT  +2,592) avg   -25 worst   -822 maxDD  8,353
+  R2 weekly W=60                     n= 72 win= 40% year Rs  +1,316 (IN  -2,538 / OUT  +3,854) avg   +18 worst   -822 maxDD  9,889
+  R2 weekly W=60 plateau             n= 62 win= 40% year Rs  -1,271 (IN  -4,882 / OUT  +3,611) avg   -20 worst   -822 maxDD  9,539
+  R2 weekly W=120                    n= 64 win= 42% year Rs    -793 (IN  -5,936 / OUT  +5,143) avg   -12 worst   -822 maxDD 11,192
+  R2 weekly W=120 plateau            n= 56 win= 46% year Rs  +1,904 (IN  -4,065 / OUT  +5,969) avg   +34 worst   -822 maxDD  6,895
+  R2 weekly W=all                    n= 63 win= 41% year Rs  -1,253 (IN  -3,026 / OUT  +1,773) avg   -20 worst   -822 maxDD  6,094
+  R2 weekly W=all plateau            n= 48 win= 42% year Rs    -384 (IN  -3,156 / OUT  +2,772) avg    -8 worst   -822 maxDD  6,048
+  R2 monthly W=40                    n= 59 win= 42% year Rs  +1,579 (IN  -3,392 / OUT  +4,971) avg   +27 worst   -822 maxDD  8,943
+  R2 monthly W=40 plateau            n= 60 win= 42% year Rs  +1,023 (IN  -4,312 / OUT  +5,335) avg   +17 worst   -822 maxDD  6,785
+  R2 monthly W=60                    n= 64 win= 41% year Rs    +192 (IN  -4,785 / OUT  +4,977) avg    +3 worst   -822 maxDD  8,775
+  R2 monthly W=60 plateau            n= 64 win= 42% year Rs  +1,128 (IN  -5,472 / OUT  +6,600) avg   +18 worst   -822 maxDD  8,608
+  R2 monthly W=120                   n= 61 win= 41% year Rs  -1,051 (IN  -5,642 / OUT  +4,591) avg   -17 worst   -822 maxDD  9,548
+  R2 monthly W=120 plateau           n= 56 win= 41% year Rs    -460 (IN  -6,232 / OUT  +5,772) avg    -8 worst   -822 maxDD  8,806
+  R2 monthly W=all                   n= 70 win= 43% year Rs  +1,499 (IN  -2,519 / OUT  +4,017) avg   +21 worst   -822 maxDD  6,094
+  R2 monthly W=all plateau           n= 47 win= 40% year Rs    -358 (IN  -3,206 / OUT  +2,848) avg    -8 worst   -822 maxDD  6,529
+
+=== chosen thresholds over time (date:value at each change; 0 = gate off) ===
+  best variant on the common window by total P&L: R2 weekly W=120 plateau
+
+  R2 weekly W=120 plateau: 28 rebalances
+    NIFTY     <12:15  changes  3/27  most often 0 (16/28), live 1.3  | 26-03-23:1.8 26-03-30:0 26-07-20:1.3 26-09-07:1.4
+    NIFTY     >=12:15 changes  8/27  most often 1.4 (16/28), live 1.5  | 26-03-23:1.6 26-04-13:1.5 26-04-20:0 26-05-11:1.5 26-06-01:1.4 26-08-24:0 26-08-31:1.4 26-09-15:0 26-09-21:1.4
+    BANKNIFTY <12:15  changes  5/27  most often 1.2 (13/28), live 1.5  | 26-03-23:1.2 26-05-11:1.8 26-05-18:1.2 26-06-29:1.8 26-07-13:1.6 26-08-24:1.5
+    BANKNIFTY >=12:15 changes  3/27  most often 1.5 (26/28), live 1.5  | 26-03-23:1.8 26-03-30:1.5 26-09-21:1.6 26-09-28:1.5
+    SENSEX    <12:15  changes  9/27  most often 1.2 (16/28), live 1.2  | 26-03-23:1.2 26-05-04:1.3 26-06-08:1.2 26-06-22:1.3 26-07-06:1.2 26-08-10:1.3 26-08-17:1.2 26-08-24:1.1 26-09-07:1.2 26-09-21:1.1
+    SENSEX    >=12:15 changes  4/27  most often 1.8 (16/28), live 1.2  | 26-03-23:1.1 26-04-13:1.3 26-06-08:1.8 26-06-15:1.2 26-06-22:1.8
+
+  R1 weekly W=60: 41 rebalances
+    NIFTY     <12:15  changes  9/40  most often 0 (26/41), live 1.3  | 25-12-22:0 26-01-05:1 26-01-19:0 26-01-27:1 26-02-16:0 26-07-06:1.1 26-08-03:1 26-09-07:0 26-09-15:1.3 26-09-21:0
+    NIFTY     >=12:15 changes  8/40  most often 0 (26/41), live 1.5  | 25-12-22:1.1 26-01-19:1 26-01-27:0 26-06-22:1.1 26-07-06:1.2 26-07-27:1.1 26-08-17:0 26-09-07:1.5 26-09-21:0
+    BANKNIFTY <12:15  changes  5/40  most often 0 (17/41), live 1.5  | 25-12-22:1.1 26-02-02:1.2 26-02-16:1.1 26-03-30:0 26-07-27:1 26-09-15:1.2
+    BANKNIFTY >=12:15 changes 10/40  most often 1.1 (21/41), live 1.5  | 25-12-22:1.2 26-01-27:1.1 26-03-09:1.2 26-03-23:0 26-03-30:1.1 26-04-20:1 26-04-27:0 26-05-25:1 26-06-29:1.1 26-09-21:1 26-09-28:1.2
+    SENSEX    <12:15  changes 11/40  most often 1.2 (14/41), live 1.2  | 25-12-22:1.2 26-01-05:1 26-01-12:1.2 26-01-19:1 26-01-27:1.2 26-02-02:1.3 26-04-13:1.2 26-05-25:1 26-06-01:1.2 26-06-08:1.1 26-08-31:1.2 26-09-21:1
+    SENSEX    >=12:15 changes  8/40  most often 1.2 (33/41), live 1.2  | 25-12-22:1.2 26-04-27:1.3 26-05-11:1.2 26-06-08:0 26-06-29:1.4 26-07-06:1.3 26-07-13:1.2 26-07-27:1.1 26-08-03:1.2
+
+  R2 weekly W=60: 41 rebalances
+    NIFTY     <12:15  changes  9/40  most often 0 (17/41), live 1.3  | 25-12-22:1.8 26-01-12:1 26-01-19:0 26-01-27:1 26-02-16:0 26-05-25:1.3 26-06-22:0 26-07-06:1.3 26-08-10:1 26-09-07:1.3
+    NIFTY     >=12:15 changes 10/40  most often 0 (18/41), live 1.5  | 25-12-22:1.5 26-02-02:0 26-02-09:1.5 26-02-16:0 26-02-23:1.5 26-03-16:0 26-06-22:1.3 26-08-31:0 26-09-07:1.5 26-09-21:0 26-09-28:1.5
+    BANKNIFTY <12:15  changes  3/40  most often 1.5 (18/41), live 1.5  | 25-12-22:1.1 26-02-02:1.2 26-03-30:0 26-06-01:1.5
+    BANKNIFTY >=12:15 changes  5/40  most often 1.5 (25/41), live 1.5  | 25-12-22:1.2 26-01-19:1.3 26-01-27:1.1 26-02-16:1.5 26-06-29:1.1 26-08-24:1.5
+    SENSEX    <12:15  changes 13/40  most often 1.2 (13/41), live 1.2  | 25-12-22:1.2 26-01-05:1 26-01-12:1.2 26-01-19:1 26-01-27:1.2 26-02-02:1.3 26-04-13:1.2 26-05-25:1 26-06-01:1.8 26-06-08:1.1 26-06-15:1.8 26-06-22:1.1 26-08-31:1.2 26-09-21:1
+    SENSEX    >=12:15 changes  3/40  most often 1.6 (20/41), live 1.2  | 25-12-22:1.2 26-04-27:1.3 26-05-11:1.6 26-09-28:1.2
+
+  stability (changes / rebalances, summed over 3 indices x 2 halves):
+    R1 weekly  W=40   argmax   65/264 ( 25%)
+    R1 weekly  W=40   plateau  68/264 ( 26%)
+    R1 weekly  W=60   argmax   51/240 ( 21%)
+    R1 weekly  W=60   plateau  62/240 ( 26%)
+    R1 weekly  W=120  argmax   24/162 ( 15%)
+    R1 weekly  W=120  plateau  32/162 ( 20%)
+    R1 weekly  W=all  argmax   12/264 (  5%)
+    R1 weekly  W=all  plateau  19/264 (  7%)
+    R1 monthly W=40   argmax   36/ 54 ( 67%)
+    R1 monthly W=40   plateau  33/ 54 ( 61%)
+    R1 monthly W=60   argmax   21/ 48 ( 44%)
+    R1 monthly W=60   plateau  23/ 48 ( 48%)
+    R1 monthly W=120  argmax   12/ 30 ( 40%)
+    R1 monthly W=120  plateau  16/ 30 ( 53%)
+    R1 monthly W=all  argmax    7/ 54 ( 13%)
+    R1 monthly W=all  plateau   8/ 54 ( 15%)
+    R2 weekly  W=40   argmax   61/264 ( 23%)
+    R2 weekly  W=40   plateau  75/264 ( 28%)
+    R2 weekly  W=60   argmax   43/240 ( 18%)
+    R2 weekly  W=60   plateau  50/240 ( 21%)
+    R2 weekly  W=120  argmax   19/162 ( 12%)
+    R2 weekly  W=120  plateau  32/162 ( 20%)
+    R2 weekly  W=all  argmax   13/264 (  5%)
+    R2 weekly  W=all  plateau  29/264 ( 11%)
+    R2 monthly W=40   argmax   28/ 54 ( 52%)
+    R2 monthly W=40   plateau  28/ 54 ( 52%)
+    R2 monthly W=60   argmax   23/ 48 ( 48%)
+    R2 monthly W=60   plateau  21/ 48 ( 44%)
+    R2 monthly W=120  argmax   10/ 30 ( 33%)
+    R2 monthly W=120  plateau  11/ 30 ( 37%)
+    R2 monthly W=all  argmax    3/ 54 (  6%)
+    R2 monthly W=all  plateau  17/ 54 ( 31%)
+
+=== IN-SAMPLE: best FIXED threshold on the last 60 trading days alone (2026-07-08 .. 2026-09-30) ===
+    per index and half, run() on that index/half only: P&L (trades) for each grid value
+
+  NIFTY     <12:15  live 1.3 -> R1 0 R2 1.3 | 0:-1987(5)  1:-675(1)  1.1:-675(1)  1.2:-675(1)  1.3:+0(0)  1.4:+0(0)  1.5:+0(0)  1.6:+0(0)  1.8:+0(0)
+  NIFTY     >=12:15 live 1.5 -> R1 0 R2 1.5 | 0:-29(5)  1:-271(3)  1.1:-1007(2)  1.2:-613(1)  1.3:+0(0)  1.4:+0(0)  1.5:+0(0)  1.6:+0(0)  1.8:+0(0)
+  BANKNIFTY <12:15  live 1.5 -> R1 1.2 R2 1.5 | 0:-2952(22)  1:-422(11)  1.1:+521(6)  1.2:+521(6)  1.3:+1647(4)  1.4:+2292(3)  1.5:+2862(2)  1.6:+2862(2)  1.8:+0(0)
+  BANKNIFTY >=12:15 live 1.5 -> R1 1.2 R2 1.5 | 0:-6404(22)  1:-3902(13)  1.1:-1465(6)  1.2:-822(5)  1.3:+212(3)  1.4:+212(3)  1.5:+828(2)  1.6:+144(1)  1.8:+144(1)
+  SENSEX    <12:15  live 1.2 -> R1 1 R2 1 | 0:+1843(23)  1:+3895(13)  1.1:+3375(10)  1.2:+3375(10)  1.3:+3054(5)  1.4:+3111(4)  1.5:+3111(4)  1.6:+3111(4)  1.8:+518(1)
+  SENSEX    >=12:15 live 1.2 -> R1 1.2 R2 1.2 | 0:-1353(21)  1:-367(15)  1.1:+2448(10)  1.2:+2681(7)  1.3:-510(5)  1.4:+202(3)  1.5:+202(3)  1.6:+900(2)  1.8:+900(2)
+
+  FIXED live, last 60 days           n= 20 win= 65% year Rs  +9,105 (IN      +0 / OUT  +9,105) avg  +455 worst   -703 maxDD    724
+  best-of-last-60 R1 (IN-SAMPLE)     n= 36 win= 50% year Rs  +5,648 (IN      +0 / OUT  +5,648) avg  +157 worst   -703 maxDD  3,803
+    thresholds: NIFTY 0/0, BANKNIFTY 1.2/1.2, SENSEX 1/1.2
+  best-of-last-60 R2 (IN-SAMPLE)     n= 23 win= 65% year Rs  +9,625 (IN      +0 / OUT  +9,625) avg  +418 worst   -703 maxDD  1,409
+    thresholds: NIFTY 1.3/1.5, BANKNIFTY 1.5/1.5, SENSEX 1/1.2
