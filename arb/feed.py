@@ -196,6 +196,8 @@ class MarketFeed:
         self.max_retry_delay = 60.0
         self.relogin_every_sec = 600.0  # never re-login more often than this
         self._last_relogin = 0.0
+        self._relogin_ok = True
+        self.relogin_retry_sec = 60.0   # after a FAILED login
         self._slot_cache = self.store.slot_of_token
         # Which chain (expiry) each slot belongs to, and a monotonic per-chain
         # tick counter. A tick touches exactly one expiry, so the scanner can skip
@@ -340,8 +342,12 @@ class MarketFeed:
         self.reconnects += 1
         self.last_reconnect_at = time.time()
         delay = min(2.0 * self._consecutive_failures + 1.0, float(self.max_retry_delay))
+        # The ration applies after a login that WORKED. A failed one (DNS down,
+        # 5 Oct 2026 12:24) is retried after relogin_retry_sec: rationing it for
+        # ten minutes left the feed reconnecting on dead tokens until a restart.
+        gap = float(self.relogin_every_sec) if self._relogin_ok else float(self.relogin_retry_sec)
         if self._consecutive_failures and self._consecutive_failures % 3 == 0 \
-                and time.time() - self._last_relogin >= float(self.relogin_every_sec):
+                and time.time() - self._last_relogin >= gap:
             # Three straight failures usually mean the tokens are dead, not the
             # network. A fresh login renews jwt and feed token together - but
             # at most once per relogin_every_sec, or a quiet holiday logs in
@@ -349,9 +355,12 @@ class MarketFeed:
             self._last_relogin = time.time()
             try:
                 self.session.login()
+                self._relogin_ok = True
                 self.log("[feed] re-login ok; reconnecting with fresh tokens")
             except Exception as e:
-                self.log(f"[feed] re-login failed: {type(e).__name__}")
+                self._relogin_ok = False
+                self.log(f"[feed] re-login failed: {type(e).__name__}; retry in "
+                         f"{self.relogin_retry_sec:.0f}s")
         self.log(f"[feed] reconnecting in {delay:.0f}s (reconnect #{self.reconnects})")
         self._stopping.wait(delay)
 

@@ -228,6 +228,27 @@ check("an open socket that never ticks counts as a failure: failures escalate",
 check("...and re-login is rationed (at most once per relogin_every_sec)",
       len(relogins) <= 1, f"{len(relogins)} re-logins in {len(FakeWS.made)} sockets")
 
+# 5 Oct 2026: a FAILED re-login is retried soon, not rationed for ten minutes.
+tries = []
+
+
+def bad_login():
+    tries.append(time.time())
+    raise ConnectionError("Temporary failure in name resolution")
+
+
+sess3 = SimpleNamespace(jwt="j", feed_token="f", login=bad_login,
+                        creds=SimpleNamespace(api_key="k", client_id="c"))
+FakeWS.made, FakeWS.plan, logs[:] = [], ["silent"] * 40, []
+mf = F.MarketFeed(sess3, 4, log=logs.append, stale_sec=0.5)
+mf.max_retry_delay, mf.relogin_retry_sec = 1.0, 0.5
+mf.register("1")
+mf.start()
+until(lambda: len(tries) >= 2, 25.0)
+mf.stop()
+check("a failed re-login is tried again after relogin_retry_sec, not after ten minutes",
+      len(tries) >= 2, f"{len(tries)} login attempts")
+
 # Review F-L2: a raising log must not kill the watchdog or the reconnect loop.
 boom = {"n": 0}
 
