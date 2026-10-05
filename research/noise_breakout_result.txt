@@ -1,0 +1,26 @@
+capital 13,467 risk 6.0%  costs inside, exact costs, F4 30 min, live halt; vm 1.0, exit noise, 4h trend + live pace gate
+
+sigma 14d 09:45-14:45 minr 1.0  n= 67 win= 16% IN   +8,529 OUT  +13,454 yr  +21,983 dd  7,515 m+  58% | NI +6,360 BA -1,926 SE+17,548 | {'stop': 36, 'prem_trail': 22, 'eod': 7, 'prem_stop': 2}
+sigma 14d 09:45-14:45 minr 1.5  n= 65 win= 18% IN   +9,385 OUT  +14,108 yr  +23,493 dd  6,548 m+  67% | NI +7,194 BA   -301 SE+16,600 | {'stop': 42, 'prem_trail': 16, 'eod': 7}
+sigma 14d 09:45-14:45 minr 2.0  n= 58 win= 16% IN   +5,395 OUT  +14,168 yr  +19,563 dd  6,487 m+  55% | NI +6,463 BA -1,776 SE+14,876 | {'stop': 39, 'prem_trail': 11, 'eod': 8}
+sigma 14d 10:15-14:15 minr 1.0  n= 34 win= 26% IN  +11,531 OUT   +5,524 yr  +17,055 dd  3,295 m+  36% | NI+12,022 BA     +0 SE +5,033 | {'stop': 19, 'prem_trail': 9, 'eod': 5, 'prem_stop': 1}
+sigma 14d 10:15-14:15 minr 1.5  n= 33 win= 30% IN  +11,539 OUT   +6,372 yr  +17,910 dd  2,174 m+  36% | NI+11,896 BA     +0 SE +6,014 | {'stop': 19, 'prem_trail': 9, 'eod': 5}
+sigma 14d 10:15-14:15 minr 2.0  n= 31 win= 32% IN  +10,233 OUT   +6,071 yr  +16,304 dd  2,351 m+  50% | NI+10,161 BA     +0 SE +6,143 | {'stop': 20, 'prem_trail': 6, 'eod': 5}
+sigma  8d 09:45-14:45 minr 1.0  n= 62 win= 16% IN  +18,665 OUT   -3,635 yr  +15,030 dd  7,815 m+  38% | NI +1,695 BA -2,545 SE+15,880 | {'prem_trail': 22, 'stop': 32, 'eod': 6, 'prem_stop': 2}
+sigma  8d 09:45-14:45 minr 1.5  n= 62 win= 18% IN  +19,072 OUT   -5,828 yr  +13,243 dd  9,812 m+  38% | NI   -989 BA   -972 SE+15,205 | {'prem_trail': 17, 'stop': 39, 'eod': 6}
+sigma  8d 09:45-14:45 minr 2.0  n= 55 win= 15% IN  +14,888 OUT   -5,157 yr   +9,730 dd  9,208 m+  38% | NI -1,656 BA -1,771 SE+13,158 | {'prem_trail': 12, 'stop': 36, 'eod': 7}
+sigma  8d 10:15-14:15 minr 1.0  n= 30 win= 30% IN  +20,146 OUT   +1,833 yr  +21,979 dd  3,016 m+  55% | NI +7,136 BA     +0 SE+14,844 | {'prem_trail': 8, 'stop': 16, 'eod': 5, 'prem_stop': 1}
+sigma  8d 10:15-14:15 minr 1.5  n= 31 win= 29% IN  +19,217 OUT   +1,577 yr  +20,795 dd  3,115 m+  50% | NI +6,202 BA     +0 SE+14,593 | {'prem_trail': 9, 'stop': 17, 'eod': 5}
+sigma  8d 10:15-14:15 minr 2.0  n= 30 win= 30% IN  +18,004 OUT     +761 yr  +18,765 dd  3,370 m+  50% | NI +4,223 BA     +0 SE+14,542 | {'prem_trail': 8, 'stop': 17, 'eod': 5}
+sigma  5d 09:45-14:45 minr 1.0  n= 66 win= 12% IN  +10,046 OUT   -8,287 yr   +1,759 dd 10,365 m+  38% | NI -1,266 BA -1,676 SE +4,701 | {'stop': 37, 'eod': 5, 'prem_trail': 22, 'prem_stop': 2}
+sigma  5d 09:45-14:45 minr 1.5  n= 68 win= 18% IN  +10,356 OUT   -9,119 yr   +1,237 dd 11,479 m+  38% | NI -3,797 BA    -13 SE +5,046 | {'stop': 42, 'eod': 5, 'prem_trail': 21}
+sigma  5d 09:45-14:45 minr 2.0  n= 61 win= 16% IN  +14,871 OUT   -9,813 yr   +5,058 dd 11,847 m+  31% | NI -4,240 BA -2,096 SE+11,394 | {'stop': 40, 'prem_trail': 15, 'eod': 6}
+sigma  5d 10:15-14:15 minr 1.0  n= 36 win= 25% IN  +12,706 OUT   -3,452 yr   +9,254 dd  5,796 m+  42% | NI +7,243 BA    -49 SE +2,060 | {'stop': 23, 'eod': 4, 'prem_trail': 8, 'prem_stop': 1}
+sigma  5d 10:15-14:15 minr 1.5  n= 36 win= 31% IN  +12,571 OUT   -2,144 yr  +10,427 dd  4,017 m+  38% | NI +6,899 BA    -56 SE +3,584 | {'stop': 21, 'eod': 4, 'prem_trail': 11}
+sigma  5d 10:15-14:15 minr 2.0  n= 33 win= 30% IN   +9,752 OUT   -2,570 yr   +7,182 dd  3,910 m+  33% | NI +4,743 BA     +0 SE +2,438 | {'stop': 21, 'prem_trail': 9, 'eod': 3}
+sigma  4d 09:45-14:45 minr 1.0  n= 64 win= 14% IN   +3,559 OUT   -8,706 yr   -5,147 dd  9,928 m+  31% | NI -8,799 BA -2,088 SE +5,739 | {'stop': 37, 'eod': 5, 'prem_trail': 19, 'prem_stop': 3}
+sigma  4d 09:45-14:45 minr 1.5  n= 65 win= 17% IN   +3,622 OUT   -9,896 yr   -6,274 dd 11,464 m+  31% | NI -9,312 BA   -505 SE +3,544 | {'stop': 42, 'eod': 5, 'prem_trail': 17, 'prem_stop': 1}
+sigma  4d 09:45-14:45 minr 2.0  n= 60 win= 13% IN   +8,976 OUT   -9,672 yr     -696 dd 10,775 m+  23% | NI -8,619 BA -1,390 SE +9,314 | {'stop': 36, 'prem_trail': 17, 'eod': 6, 'prem_stop': 1}
+sigma  4d 10:15-14:15 minr 1.0  n= 32 win= 28% IN   +5,671 OUT   -3,005 yr   +2,665 dd  4,257 m+  36% | NI -1,854 BA     +0 SE +4,519 | {'stop': 21, 'eod': 4, 'prem_trail': 6, 'prem_stop': 1}
+sigma  4d 10:15-14:15 minr 1.5  n= 32 win= 34% IN   +5,227 OUT   -2,116 yr   +3,110 dd  3,223 m+  36% | NI   -988 BA     +0 SE +4,098 | {'stop': 22, 'eod': 4, 'prem_trail': 6}
+sigma  4d 10:15-14:15 minr 2.0  n= 30 win= 30% IN   +3,125 OUT   -2,049 yr   +1,076 dd  3,330 m+  30% | NI -1,373 BA     +0 SE +2,449 | {'stop': 20, 'prem_trail': 7, 'eod': 3}

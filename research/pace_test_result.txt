@@ -1,0 +1,13 @@
+no pace gate                       n=420 win= 36% year Rs -32,025 (IN -23,096 / OUT  -8,929) avg   -76 worst   -822 maxDD 37,312
+1.0x all                           n=277 win= 38% year Rs -20,575 (IN -16,671 / OUT  -3,905) avg   -74 worst   -822 maxDD 24,787  BETTER BOTH
+1.15x all                          n=156 win= 42% year Rs  -4,450 (IN  -6,989 / OUT  +2,539) avg   -29 worst   -742 maxDD  9,736  BETTER BOTH
+1.2x all                           n=128 win= 44% year Rs    -689 (IN  -3,839 / OUT  +3,150) avg    -5 worst   -742 maxDD  6,854  BETTER BOTH
+current (N 1.3/1.5, BN 1.5, SX 1.2) n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058  BETTER BOTH
+1.5x all                           n= 35 win= 49% year Rs    +685 (IN  -4,254 / OUT  +4,939) avg   +20 worst   -742 maxDD  6,323  BETTER BOTH
+  only trades with pace 0-1.0x     n=209 win= 32% year Rs -18,546 (IN -12,223 / OUT  -6,323) avg   -89 worst   -740 maxDD 19,330
+  only trades with pace 1.0-1.2x   n=173 win= 32% year Rs -25,455 (IN -16,137 / OUT  -9,318) avg  -147 worst   -822 maxDD 27,211
+  only trades with pace 1.2-1.5x   n= 99 win= 42% year Rs  -1,318 (IN    -522 / OUT    -796) avg   -13 worst   -737 maxDD  7,548
+  only trades with pace 1.5-9x     n= 35 win= 49% year Rs    +685 (IN  -4,254 / OUT  +4,939) avg   +20 worst   -742 maxDD  6,323
+NIFTY: gate open median 40 min/day of 330; never open on 0/253 days
+BANKNIFTY: gate open median 20 min/day of 330; never open on 0/253 days
+SENSEX: gate open median 85 min/day of 330; never open on 0/253 days
