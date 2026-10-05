@@ -32,7 +32,8 @@
       "spot_exchange_type": 1,
       "segment": "NFO",
       "option_exchange_type": 2,
-      "num_expiries": 2
+      "num_expiries": 2,
+      "enabled": false
     },
     {
       "name": "MIDCPNIFTY",
@@ -41,7 +42,8 @@
       "spot_exchange_type": 1,
       "segment": "NFO",
       "option_exchange_type": 2,
-      "num_expiries": 2
+      "num_expiries": 2,
+      "enabled": false
     }
   ],
   "num_strikes_each_side": 10,
