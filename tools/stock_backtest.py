@@ -55,7 +55,8 @@ def cost(price, qty):
 
 
 def size(price, risk, capital):
-    cap = capital * L.max_risk_pct_per_trade / 100.0
+    from arb.config import stock_risk_pct
+    cap = capital * stock_risk_pct(L) / 100.0
     by_risk = int(cap // max(risk, 1e-9))
     by_cash = int(capital * float(getattr(L, "stocks_leverage", 5.0)) // price)
     return max(0, min(by_risk, by_cash))

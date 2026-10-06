@@ -34,6 +34,7 @@ from arb.playbooks import unknown as unknown_playbooks
 from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direction,
                         session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
+from arb.config import stock_risk_pct
 from arb.smc import BEAR, BULL, RANGE, analyse
 from arb.costs import leg_cost, per_unit_cost_points
 from arb import optionflow, trailing
@@ -2358,7 +2359,7 @@ class IntradayEngine:
         """
         L = self.L
         store = self.feed.store
-        cap_inr = self.capital.capital * L.max_risk_pct_per_trade / 100.0
+        cap_inr = self.capital.capital * stock_risk_pct(L) / 100.0
         for pick in list(self.stocks.active):
             sym = pick.symbol
             info = self.stocks.universe.get(sym) or {}

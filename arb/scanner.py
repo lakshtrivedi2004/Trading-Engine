@@ -182,7 +182,8 @@ def scan_cost_ratio(bid, ask, atr_1m, capital, L, cm):
     stop = max(float(getattr(L, "min_stop_atr", 1.0)),
                float(getattr(L, "stocks_scan_stop_atr", 2.0))) * atr_1m
     px = (bid + ask) / 2.0
-    cap_inr = capital * float(L.max_risk_pct_per_trade) / 100.0
+    from arb.config import stock_risk_pct
+    cap_inr = capital * stock_risk_pct(L) / 100.0
     lev = float(getattr(L, "stocks_leverage", 5.0))
     qty = min(int(cap_inr // stop), int(capital * lev // px))
     if qty <= 0:

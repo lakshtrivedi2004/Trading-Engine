@@ -342,7 +342,8 @@ def _stock_rows(e, now):
     if desk is None:
         return []
     store = e.feed.store
-    cap_inr = e.capital.capital * L.max_risk_pct_per_trade / 100.0
+    from arb.config import stock_risk_pct
+    cap_inr = e.capital.capital * stock_risk_pct(L) / 100.0
     free = e.capital.capital - e.book.deployed()
     na = _cell("n/a", None, "options only")
     out = []

@@ -31,6 +31,7 @@
   "extend_giveback_r": 0.25,
   "stocks_enabled": true,
   "stocks_top_k": 5,
+  "stocks_max_risk_pct": 8.0,
   "capital_ceiling": 13466.9,
   "atr_by_index": {
     "NIFTY": [
