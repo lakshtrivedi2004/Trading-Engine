@@ -1,0 +1,37 @@
+capital Rs 10,673, risk cap 8%, daily halt 15%
+
+sessions 254; candidates after gates: OB 129, LHM 74, NB 100, grind w>=0 779, grind w>=0.15 622, grind w>=0.3 477
+
+OB alone (live today)              n= 87 win= 54% year Rs +10,680 (IN  +3,182 / OUT  +7,499) avg  +123 worst   -845 maxDD  3,688 | 0.34/session {'OB': 87}
+LHM alone                          n= 74 win= 45% year Rs +36,343 (IN +22,688 / OUT +13,656) avg  +491 worst   -765 maxDD  2,724 | 0.29/session {'LHM': 74}
+NB alone                           n= 64 win= 19% year Rs +22,027 (IN  +8,311 / OUT +13,715) avg  +344 worst   -761 maxDD  6,007 | 0.25/session {'NB': 64}
+OB + LHM                           n=159 win= 50% year Rs +48,248 (IN +27,094 / OUT +21,154) avg  +303 worst   -845 maxDD  3,649 | 0.63/session {'OB': 87, 'LHM': 72}
+OB + NB                            n=142 win= 40% year Rs +22,935 (IN  +4,174 / OUT +18,761) avg  +162 worst   -845 maxDD  7,521 | 0.56/session {'OB': 82, 'NB': 60}
+LHM + NB                           n=126 win= 29% year Rs +36,697 (IN +24,093 / OUT +12,603) avg  +291 worst   -765 maxDD  7,064 | 0.50/session {'NB': 64, 'LHM': 62}
+OB + LHM + NB (all three)          n=204 win= 41% year Rs +40,690 (IN +22,430 / OUT +18,259) avg  +199 worst   -845 maxDD  6,635 | 0.80/session {'OB': 82, 'LHM': 62, 'NB': 60}
+
+-- slow grind: refused retest setups taken when the day moves with them --
+grind alone, day move >= 0 ADR     n=415 win= 33% year Rs -53,522 (IN -35,718 / OUT -17,804) avg  -129 worst   -907 maxDD 55,430 | 1.63/session {'G0': 415}
+OB + grind 0                       n=480 win= 36% year Rs -43,450 (IN -33,104 / OUT -10,347) avg   -91 worst   -907 maxDD 49,988 | 1.89/session {'G0': 404, 'OB': 76}
+all three + grind 0                n=572 win= 34% year Rs -19,937 (IN -20,397 / OUT    +460) avg   -35 worst   -907 maxDD 27,113 | 2.25/session {'G0': 386, 'OB': 72, 'LHM': 56, 'NB': 58}
+grind alone, day move >= 0.15 ADR  n=332 win= 35% year Rs -36,807 (IN -24,316 / OUT -12,491) avg  -111 worst   -907 maxDD 39,690 | 1.31/session {'G0.15': 332}
+OB + grind 0.15                    n=408 win= 38% year Rs -27,234 (IN -22,154 / OUT  -5,080) avg   -67 worst   -907 maxDD 33,798 | 1.61/session {'G0.15': 328, 'OB': 80}
+all three + grind 0.15             n=501 win= 36% year Rs  -4,451 (IN  -9,447 / OUT  +4,996) avg    -9 worst   -907 maxDD 21,595 | 1.97/session {'G0.15': 310, 'OB': 76, 'LHM': 56, 'NB': 59}
+grind alone, day move >= 0.3 ADR   n=255 win= 35% year Rs -32,646 (IN -28,495 / OUT  -4,151) avg  -128 worst   -907 maxDD 36,122 | 1.00/session {'G0.3': 255}
+OB + grind 0.3                     n=333 win= 40% year Rs -22,669 (IN -24,410 / OUT  +1,742) avg   -68 worst   -907 maxDD 31,596 | 1.31/session {'G0.3': 250, 'OB': 83}
+all three + grind 0.3              n=428 win= 36% year Rs    +123 (IN -11,021 / OUT +11,144) avg    +0 worst   -907 maxDD 24,494 | 1.69/session {'G0.3': 234, 'OB': 79, 'LHM': 56, 'NB': 59}
+
+all three, per month:
+  2025-09  n=  2  Rs     -744
+  2025-10  n= 26  Rs     +428
+  2025-11  n= 13  Rs     +893
+  2025-12  n= 19  Rs     -471
+  2026-01  n= 21  Rs   +2,206
+  2026-02  n= 13  Rs   +7,288
+  2026-03  n= 20  Rs   +5,444
+  2026-04  n=  6  Rs   +3,036
+  2026-05  n= 11  Rs  +14,869
+  2026-06  n= 16  Rs   +5,550
+  2026-07  n= 17  Rs   +1,322
+  2026-08  n= 17  Rs     +717
+  2026-09  n= 23  Rs     +150
