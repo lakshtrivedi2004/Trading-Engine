@@ -75,6 +75,10 @@ class StockDesk:
         self.last_spikes = []       # [(symbol, ratio, move)] of the last scan, for the log/page
         # NSE's live top gainers / losers (F&O), refreshed in the background.
         self.movers = {}            # symbol -> (list, % change, rank)
+        # NSE option chains of the active stocks (stocks_options on/shadow):
+        # symbol -> (fetched_at, chain), refreshed on a background thread.
+        self.chains = {}
+        self._chains_busy = False
         self._movers_at = 0.0
         self._movers_busy = False
 
@@ -204,6 +208,10 @@ class StockDesk:
             self._snap()
         except Exception:
             pass
+        try:
+            self.refresh_chains()
+        except Exception:
+            pass
         n = now or now_ist()
         hh, mm = (int(x) for x in str(self.L.stocks_pick_at).split(":"))
         if n.hour * 60 + n.minute < hh * 60 + mm:
@@ -298,6 +306,34 @@ class StockDesk:
 
         self._movers_busy = True
         threading.Thread(target=work, name="nse-movers", daemon=True).start()
+
+    CHAIN_TTL = 180.0
+
+    def refresh_chains(self):
+        """Keep the NSE option chain of every active stock at most CHAIN_TTL old,
+        one background thread at a time (NSE is paced by arb/nse.py). Only when
+        stocks_options is on or shadow."""
+        if str(getattr(self.L, "stocks_options", "off")) not in ("on", "shadow") \
+                or self.nse is None or self._chains_busy or not hasattr(self.nse, "option_chain"):
+            return
+        t = time.time()
+        want = [r.symbol for r in list(self.active)
+                if t - self.chains.get(r.symbol, (0.0, None))[0] > self.CHAIN_TTL]
+        if not want:
+            return
+
+        def work():
+            try:
+                for sym in want:
+                    try:
+                        self.chains[sym] = (time.time(), self.nse.option_chain(sym) or {})
+                    except Exception:
+                        self.chains[sym] = (time.time(), {})
+            finally:
+                self._chains_busy = False
+
+        self._chains_busy = True
+        threading.Thread(target=work, name="nse-chains", daemon=True).start()
 
     def spike_tick(self, now=None, cost_ratio=None):
         """Once a minute (just after the bar closes): every subscribed stock's

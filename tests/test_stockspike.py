@@ -255,6 +255,41 @@ f6(e, "QQQ", {"lot": 500}, +1, 500.0, 2.0, "")
 check("off: nothing at all", len(logs) == before and "QQQ" not in e._sso_chain)
 check("the code default is off", IntradayLimits().stocks_options == "off")
 
+# ═════════════════════════════════════════════════════════════════════════════
+section("7. The constraints page shows each stock's option chain; the desk keeps it fresh")
+import arb.constraints as cons
+L7 = IntradayLimits()
+L7.stocks_options = "shadow"
+calls7 = []
+nse7 = SimpleNamespace(option_chain=lambda sym: calls7.append(sym) or ch, last_error="")
+d7 = sd.StockDesk({"ABC": {"lot": 500}}, {"ABC": 0}, Candles({}), L7, nse=nse7, log=lambda *_: None)
+d7.active = [SimpleNamespace(symbol="ABC")]
+d7.refresh_chains()
+for _ in range(100):
+    if not d7._chains_busy:
+        break
+    time.sleep(0.02)
+check("the desk fetched the active stock's chain off-thread", calls7 == ["ABC"] and d7.chains["ABC"][1] == ch)
+d7.refresh_chains()
+check("...and not again inside 3 minutes", calls7 == ["ABC"])
+e7 = SimpleNamespace(L=L7, stocks=d7, capital=SimpleNamespace(capital=10_000.0),
+                     book=SimpleNamespace(deployed=lambda: 0.0), cm=CM, stock_structures={},
+                     verdicts={}, evaluated_at={}, verdict_at={})
+rows7 = cons._stock_option_rows(e7, time.time())
+names = [r["instrument"]["v"] for r in rows7]
+check("ATM and one strike either side, calls and puts: 6 rows",
+      names == ["ABC 490 CE", "ABC 500 CE", "ABC 510 CE", "ABC 490 PE", "ABC 500 PE", "ABC 510 PE"], str(names))
+atm_ce = rows7[1]
+check("ATM call: quote, lot cost against free capital, delta from the chain",
+      atm_ce["quote"]["v"].startswith("10.95") and atm_ce["lot"]["ok"] is True
+      and 0.4 < float(atm_ce["delta"]["v"]) < 0.65, f"{atm_ce['quote']['v']} {atm_ce['lot']['v']} {atm_ce['delta']['v']}")
+check("no setup on the stock yet: risk is '—' with the reason", atm_ce["risk"]["v"] == "—")
+e7.capital = SimpleNamespace(capital=3_000.0)
+rows7b = cons._stock_option_rows(e7, time.time())
+check("a lot above free capital is marked failing", rows7b[1]["lot"]["ok"] is False, rows7b[1]["lot"]["v"])
+L7.stocks_options = "off"
+check("stocks_options off: no option rows", cons._stock_option_rows(e7, time.time()) == [])
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

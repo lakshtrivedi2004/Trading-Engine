@@ -2470,7 +2470,7 @@ class IntradayEngine:
             self._sso_chain, self._sso_last, self._sso_busy = {}, {}, False
         if now - self._sso_last.get(sym, -1e9) < 600:
             return
-        got = self._sso_chain.get(sym)
+        got = (getattr(self.stocks, "chains", None) or {}).get(sym) or self._sso_chain.get(sym)
         if got is None or now - got[0] > 180:
             if not self._sso_busy:
                 self._sso_busy = True

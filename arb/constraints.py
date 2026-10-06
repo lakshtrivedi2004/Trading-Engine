@@ -403,6 +403,99 @@ def _stock_rows(e, now):
     return out
 
 
+def _stock_option_rows(e, now):
+    """The stock's own option chain (NSE, refreshed by the desk), for every stock
+    in play: ATM and one strike either side, calls and puts. Shadow only - the
+    engine logs what it would buy (stocks_options) but never orders one."""
+    L = e.L
+    desk = e.stocks
+    mode = str(getattr(L, "stocks_options", "off"))
+    if desk is None or mode not in ("on", "shadow"):
+        return []
+    from arb.config import stock_risk_pct
+    from arb.costs import leg_cost
+    from arb.intraday import chain_delta
+    cap_inr = e.capital.capital * stock_risk_pct(L) / 100.0
+    free = e.capital.capital - e.book.deployed()
+    na = _cell("n/a", None, "not an option check")
+    out = []
+    for pick in list(desk.active):
+        sym = pick.symbol
+        got = (getattr(desk, "chains", None) or {}).get(sym)
+        info = desk.universe.get(sym) or {}
+        lot = int(info.get("lot") or 0)
+        grp = f"Stock options ({mode}, NSE chain)"
+        if not got or not got[1]:
+            out.append({"instrument": _cell(f"{sym} options", None,
+                                            "chain not loaded yet" if not got else "NSE did not answer"),
+                        "group": grp, "evaluated": _cell(_ago(got[0], now) if got else "—")})
+            continue
+        ts, chain = got
+        rows = sorted(chain.get("rows") or [], key=lambda r: float(r.get("strikePrice") or 0))
+        und = float(chain.get("underlying") or 0.0)
+        if not rows or und <= 0:
+            continue
+        strikes = [float(r["strikePrice"]) for r in rows]
+        atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - und))
+        # The stock's own stop, once the engine has a setup on it.
+        v, setup, conf, when = _judgement(e, sym, now)
+        side = v.side if v is not None else 0
+        risk_pts = 0.0
+        st = e.stock_structures.get(sym)
+        if side and st is not None:
+            lead = v.setups[0] if v.setups else None
+            inv = structural_invalidation(st, side, lead.invalidation if lead else None)
+            ref = st.closes[-1] if st.closes else und
+            risk_pts = abs(ref - inv) if inv else 0.0
+        for opt in ("CE", "PE"):
+            mids = []
+            for r in rows:
+                leg = r.get(opt) or {}
+                b, a = float(leg.get("buyPrice1") or 0), float(leg.get("sellPrice1") or 0)
+                mids.append((b + a) / 2 if b > 0 and a > 0 else float(leg.get("lastPrice") or 0))
+            for i in (atm - 1, atm, atm + 1):
+                if not 0 <= i < len(rows):
+                    continue
+                leg = rows[i].get(opt) or {}
+                bid, ask = float(leg.get("buyPrice1") or 0), float(leg.get("sellPrice1") or 0)
+                off = i - atm
+                wanted = (opt == "CE" and side > 0) or (opt == "PE" and side < 0)
+                row = {"instrument": _cell(f"{sym} {strikes[i]:g} {opt}", None,
+                                           f"{'ATM' if off == 0 else f'ATM{off:+d}'} · {chain.get('expiry', '')}"
+                                           f" · spot ₹{und:,.1f}" + (" · the setup's side" if wanted else "")),
+                       "group": grp, "evaluated": _cell(_ago(ts, now)),
+                       "pace": na, "bars": na, "setup": setup, "conf": conf, "zone": na, "uses": na,
+                       "stop": na, "cooldown": na}
+                d = chain_delta(mids, strikes, i, opt)
+                row["delta"] = _cell(f"{d:.2f}", d >= L.min_delta)
+                row["spread"] = _cell(f"₹{ask - bid:.2f}" if bid > 0 and ask > 0 else "no quote",
+                                      (ask - bid) <= max(0.05, 0.02 * ask) if bid > 0 and ask > 0 else False,
+                                      "≤ 2% of the premium")
+                row["quote"] = _cell(f"{bid:.2f} / {ask:.2f}" if bid > 0 and ask > 0 else "one-sided",
+                                     bid > 0 and ask > 0,
+                                     f"IV {float(leg.get('impliedVolatility') or 0):.1f}% · "
+                                     f"vol {int(leg.get('totalTradedVolume') or 0):,}")
+                lot_cost = ask * lot
+                row["lot"] = _cell(f"₹{lot_cost:,.0f} · {lot} sh" if lot and ask > 0 else "—",
+                                   0 < lot_cost <= free, f"free ₹{free:,.0f}")
+                if risk_pts > 0 and lot and ask > 0 and bid > 0:
+                    costs = (leg_cost(ask, lot, "BUY", "OPT", e.cm) + leg_cost(bid, lot, "SELL", "OPT", e.cm)
+                             + (ask - bid) * lot)
+                    loss = d * risk_pts * lot + costs
+                    row["risk"] = _cell(f"₹{loss:,.0f}", loss <= cap_inr,
+                                        f"Δ{d:.2f} × stop ₹{risk_pts:.2f} × {lot} + costs ₹{costs:,.0f} · "
+                                        f"cap ₹{cap_inr:,.0f}")
+                    row["costfrac"] = _cell(f"{costs / max(loss - costs, 1e-9):.2f}",
+                                            costs <= L.max_cost_frac_of_risk * max(loss - costs, 1e-9))
+                    row["net"] = _cell(f"₹{L.reward_risk * (loss - costs) - costs:,.0f}", None,
+                                       f"est. at 1:{L.reward_risk:g}")
+                else:
+                    why = "computed once the stock has a setup with a stop"
+                    row.update({k: _cell("—", None, why) for k in ("risk", "costfrac", "net")})
+                out.append(row)
+    return out
+
+
 def snapshot(e, cfg):
     now = time.time()
     rows = []
@@ -410,6 +503,7 @@ def snapshot(e, cfg):
     for und in names:
         rows.extend(_index_rows(e, und, now))
     rows.extend(_stock_rows(e, now))
+    rows.extend(_stock_option_rows(e, now))
     get = (lambda n: e.candles.get(n, limit=400)) if e.candles else (lambda n: [])
     return {"now": now_ist().strftime("%H:%M:%S"),
             "phase": market_phase(start=cfg.session_start, end=cfg.session_end),
