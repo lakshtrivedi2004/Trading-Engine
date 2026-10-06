@@ -833,6 +833,14 @@ check("risk_includes_costs: a contract whose stop fits but whose stop + costs do
 check("...and the delta cell shows the selector's ceiling with costs inside",
       _row["delta"]["ok"] is False and "for this stop" in _row["delta"]["note"],
       f"{_row['delta']}")
+_both = _cons._index_rows(ec, "NIFTY", time.time())
+_ce = [r for r in _both if r["instrument"]["v"].endswith(" CE")]
+_pe = [r for r in _both if r["instrument"]["v"].endswith(" PE")]
+check("both sides of the index chain are shown (owner, 6 Oct): as many PE rows as CE, CE first when bullish",
+      len(_ce) == len(_pe) > 0 and _both[0]["instrument"]["v"].endswith(" CE"), f"{len(_ce)} CE / {len(_pe)} PE")
+check("...the other side is marked against the direction, with no stop-based risk",
+      all("against it" in r["instrument"]["note"] and r["risk"]["v"] in ("—", "no quote") for r in _pe),
+      _pe[0]["instrument"]["note"] if _pe else "")
 ec2 = _cons_engine(_cap_inr / 0.05, max_risk_pct_per_trade=5.0, max_cost_frac_of_risk=0.0,
                    min_net_points=0.0)
 _row2 = [r for r in _cons._index_rows(ec2, "NIFTY", time.time())

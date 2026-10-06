@@ -247,11 +247,6 @@ def _index_rows(e, und, now):
         return []
     a = atm_index(strikes, spot)
     lo, hi = max(0, a - L.max_strike_offset), min(len(strikes) - 1, a + L.max_strike_offset)
-    ask = cv.ce_ask if opt == "CE" else cv.pe_ask
-    bid = cv.ce_bid if opt == "CE" else cv.pe_bid
-    askq = cv.ce_askq if opt == "CE" else cv.pe_askq
-    age = cv.ce_age if opt == "CE" else cv.pe_age
-    syms = cv.ce_symbol if opt == "CE" else cv.pe_symbol
 
     pace = _pace(L, rows, und)
     bars = _cell(len(rows), len(rows) >= L.min_structure_bars)
@@ -273,66 +268,78 @@ def _index_rows(e, und, now):
     cap_inr = e.capital.capital * L.max_risk_pct_per_trade / 100.0
     free = e.capital.capital - e.book.deployed()
     out = []
-    for i in range(lo, hi + 1):
-        px, bd = float(ask[i]), float(bid[i])
-        name = f"{und} {strikes[i]:g} {opt}"
-        off = i - a
-        row = {"instrument": _cell(name, None, f"{'ATM' if off == 0 else f'ATM{off:+d}'} · {direction}"),
-               "group": und, "evaluated": _cell(when), "pace": pace, "bars": bars,
-               "setup": setup, "conf": conf, "zone": zone, "uses": uses}
-        if px <= 0 or bd <= 0:
-            row.update({k: _cell("no quote", False) for k in
-                        ("delta", "spread", "quote", "lot", "risk", "stop", "net", "costfrac")})
-        else:
-            d = chain_delta(ask, strikes, i, opt)
-            spread = px - bd
-            lot = max(int(cv.lot_size), 1)
-            # The engine's own figures (review D-L3): the exact round trip when
-            # exact_trade_costs is on (_round_trip_points), and with
-            # risk_includes_costs the F5 extra - round trip plus exit slippage -
-            # inside the cap (_extra_risk_points).
-            cost = e._round_trip_points(px, lot)
-            extra = e._extra_risk_points(px, spread, lot) if e._costs_inside() else 0.0
-            # ContractSelector's delta ceiling for the chart's stop, as hunt()
-            # passes it (max_delta, or max_delta_fn with costs inside).
-            ceiling = None
-            if index_risk > 0 and str(getattr(L, "stop_policy", "delta")) == "delta":
-                ceiling = ((cap_inr / lot - extra) / index_risk if e._costs_inside()
-                           else cap_inr / (index_risk * lot))
-            row["delta"] = _cell(f"{d:.2f}", d >= L.min_delta and (ceiling is None or d <= ceiling),
-                                 f"≤ {ceiling:.2f} for this stop" if ceiling is not None else "")
-            row["spread"] = _cell(f"{spread:.2f}", spread <= L.max_spread_points)
-            row["quote"] = _cell(f"{float(age[i]):.0f} ms · {float(askq[i]) / lot:.1f} lots",
-                                 float(age[i]) <= MAX_AGE_MS and float(askq[i]) >= lot * MIN_DEPTH_MULT)
-            row["lot"] = _cell(f"₹{px * lot:,.0f}", px * lot <= free)
-            if index_risk > 0:
-                # plan_trade's premium risk, to the letter.
-                prem = max(index_risk * d, spread * 2.0)
-                prem = min(prem, px * L.max_risk_frac_of_premium)
-                # What a stop-out costs in all, held to the cap the way
-                # plan_trade and hunt() hold it (planned_risk_inr <= cap).
-                planned = (prem + extra) * lot
-                fits = planned <= cap_inr + 1e-6
-                row["risk"] = _cell(f"₹{planned:,.0f}", fits,
-                                    (f"stop ₹{prem * lot:,.0f} + costs ₹{extra * lot:,.0f} · "
-                                     if extra else "") + f"cap ₹{cap_inr:,.0f}")
-                row["stop"] = (_cell(f"{index_risk / a_idx:.2f} ATR", index_risk >= L.min_stop_atr * a_idx)
-                               if a_idx > 0 else _cell("no ATR yet", None))
-                net = L.reward_risk * prem - cost
-                row["net"] = _cell(f"{net:.1f} pts", net >= L.min_net_points, f"at 1:{L.reward_risk:g}")
-                # Friction against the whole bet: the stop plus what it carries
-                # inside the cap (plan_trade's prem_risk + extra).
-                bet = prem + extra
-                frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
-                row["costfrac"] = _cell(f"{cost / bet:.2f}" if bet > 0 else "—",
-                                        bet > 0 and (frac <= 0 or cost <= frac * bet),
-                                        "of stop + costs" if extra else "")
+    # Both sides of the chain (owner, 6 Oct 2026: "I can't see PE for the
+    # indexes"): the setup's side first, then the other one. The stop - and so
+    # the risk, net and cost checks - belongs to the setup's side only.
+    for opt in (("PE", "CE") if side == BEAR else ("CE", "PE")):
+        with_side = bool(side) and (opt == "PE") == (side == BEAR)
+        ask = cv.ce_ask if opt == "CE" else cv.pe_ask
+        bid = cv.ce_bid if opt == "CE" else cv.pe_bid
+        askq = cv.ce_askq if opt == "CE" else cv.pe_askq
+        age = cv.ce_age if opt == "CE" else cv.pe_age
+        syms = cv.ce_symbol if opt == "CE" else cv.pe_symbol
+        for i in range(lo, hi + 1):
+            px, bd = float(ask[i]), float(bid[i])
+            name = f"{und} {strikes[i]:g} {opt}"
+            off = i - a
+            row = {"instrument": _cell(name, None, f"{'ATM' if off == 0 else f'ATM{off:+d}'} · {direction}"
+                                           + ("" if with_side or not side else " · against it")),
+                   "group": und, "evaluated": _cell(when), "pace": pace, "bars": bars,
+                   "setup": setup, "conf": conf, "zone": zone, "uses": uses}
+            if px <= 0 or bd <= 0:
+                row.update({k: _cell("no quote", False) for k in
+                            ("delta", "spread", "quote", "lot", "risk", "stop", "net", "costfrac")})
             else:
-                why = "needs a direction and a stop level"
-                row.update({k: _cell("—", None, why) for k in ("risk", "stop", "net", "costfrac")})
-        left = L.symbol_cooldown_sec - (now - e._symbol_cooldown.get(syms[i], -1e9))
-        row["cooldown"] = _cell(f"{left:.0f} s left" if left > 0 else "clear", left <= 0)
-        out.append(row)
+                d = chain_delta(ask, strikes, i, opt)
+                spread = px - bd
+                lot = max(int(cv.lot_size), 1)
+                # The engine's own figures (review D-L3): the exact round trip when
+                # exact_trade_costs is on (_round_trip_points), and with
+                # risk_includes_costs the F5 extra - round trip plus exit slippage -
+                # inside the cap (_extra_risk_points).
+                cost = e._round_trip_points(px, lot)
+                extra = e._extra_risk_points(px, spread, lot) if e._costs_inside() else 0.0
+                # ContractSelector's delta ceiling for the chart's stop, as hunt()
+                # passes it (max_delta, or max_delta_fn with costs inside).
+                ceiling = None
+                if index_risk > 0 and with_side and str(getattr(L, "stop_policy", "delta")) == "delta":
+                    ceiling = ((cap_inr / lot - extra) / index_risk if e._costs_inside()
+                               else cap_inr / (index_risk * lot))
+                row["delta"] = _cell(f"{d:.2f}", d >= L.min_delta and (ceiling is None or d <= ceiling),
+                                     f"≤ {ceiling:.2f} for this stop" if ceiling is not None else "")
+                row["spread"] = _cell(f"{spread:.2f}", spread <= L.max_spread_points)
+                row["quote"] = _cell(f"{float(age[i]):.0f} ms · {float(askq[i]) / lot:.1f} lots",
+                                     float(age[i]) <= MAX_AGE_MS and float(askq[i]) >= lot * MIN_DEPTH_MULT)
+                row["lot"] = _cell(f"₹{px * lot:,.0f}", px * lot <= free)
+                if index_risk > 0 and with_side:
+                    # plan_trade's premium risk, to the letter.
+                    prem = max(index_risk * d, spread * 2.0)
+                    prem = min(prem, px * L.max_risk_frac_of_premium)
+                    # What a stop-out costs in all, held to the cap the way
+                    # plan_trade and hunt() hold it (planned_risk_inr <= cap).
+                    planned = (prem + extra) * lot
+                    fits = planned <= cap_inr + 1e-6
+                    row["risk"] = _cell(f"₹{planned:,.0f}", fits,
+                                        (f"stop ₹{prem * lot:,.0f} + costs ₹{extra * lot:,.0f} · "
+                                         if extra else "") + f"cap ₹{cap_inr:,.0f}")
+                    row["stop"] = (_cell(f"{index_risk / a_idx:.2f} ATR", index_risk >= L.min_stop_atr * a_idx)
+                                   if a_idx > 0 else _cell("no ATR yet", None))
+                    net = L.reward_risk * prem - cost
+                    row["net"] = _cell(f"{net:.1f} pts", net >= L.min_net_points, f"at 1:{L.reward_risk:g}")
+                    # Friction against the whole bet: the stop plus what it carries
+                    # inside the cap (plan_trade's prem_risk + extra).
+                    bet = prem + extra
+                    frac = float(getattr(L, "max_cost_frac_of_risk", 0.0) or 0.0)
+                    row["costfrac"] = _cell(f"{cost / bet:.2f}" if bet > 0 else "—",
+                                            bet > 0 and (frac <= 0 or cost <= frac * bet),
+                                            "of stop + costs" if extra else "")
+                else:
+                    why = ("needs a direction and a stop level" if not side
+                           else "against the current direction - no stop for this side")
+                    row.update({k: _cell("—", None, why) for k in ("risk", "stop", "net", "costfrac")})
+            left = L.symbol_cooldown_sec - (now - e._symbol_cooldown.get(syms[i], -1e9))
+            row["cooldown"] = _cell(f"{left:.0f} s left" if left > 0 else "clear", left <= 0)
+            out.append(row)
     return out
 
 
