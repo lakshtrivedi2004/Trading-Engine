@@ -29,8 +29,8 @@ from arb.instruments import now_ist, parse_expiry
 from arb.intraday import (ContractSelector, chain_delta, plan_trade,
                           structural_invalidation)
 from arb.positions import EXIT, Position, PositionBook
-from arb.confluence import evaluate, grade_at_least, regrade
-from arb.playbooks import unknown as unknown_playbooks
+from arb.confluence import Verdict, evaluate, grade_at_least, regrade
+from arb.playbooks import Setup, unknown as unknown_playbooks
 from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direction,
                         session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
@@ -59,6 +59,20 @@ class _Ticket:
         self.max_age_ms = 0.0
         self.min_depth_ratio = 1.0
         self.detail = {}
+
+
+class _LhmFrame:
+    """What enter() and plan_trade read off a Structure, for a last_half_hour
+    entry: the decision bar's close and the rule's own index stop. The
+    momentum rule has no swing structure; this is its whole frame."""
+    def __init__(self, close, stop, reason):
+        self.closes = [float(close)]
+        self._stop = float(stop)
+        self.reason = reason
+        self.last_event = "last_half_hour"
+
+    def invalidation(self, side):
+        return self._stop
 
 
 class IntradayEngine:
@@ -467,7 +481,8 @@ class IntradayEngine:
         for pos in self.book.snapshot():
             bid = self._mark_of(pos)
             idx = self._underlying_px(pos)
-            self._trail(pos, idx)
+            if pos.exit_rules != "lhm":         # last_half_hour: the index stop never moves
+                self._trail(pos, idx)
             action, reason = self.book.review(pos, bid, index_px=idx,
                                               minutes_to_close=mins)
             if action == EXIT and reason == "target":
@@ -1113,8 +1128,10 @@ class IntradayEngine:
                 + float(getattr(L, "exit_slip_frac", 0.01)) * float(px))
 
     # ── entries ─────────────────────────────────────────────────────────────
-    def _gates(self):
-        """Everything that must be true before an entry is even considered."""
+    def _gates(self, exempt=()):
+        """Everything that must be true before an entry is even considered.
+        `exempt`: gate names a caller has its own clock for (last_half_hour
+        enters at 15:00, inside no_new_trades_minutes, by design)."""
         L = self.L
         if self.halted:
             return f"halted: {self.halt_reason}"
@@ -1131,10 +1148,11 @@ class IntradayEngine:
         if time.time() - self.last_loss_ts < float(getattr(L, "cooldown_after_loss_sec", 0.0)):
             return "cooldown_after_loss"
         mins = self.book.time_to_close(self.cfg.session_end)
-        if mins <= L.no_new_trades_minutes:
+        if mins <= L.no_new_trades_minutes and "too_close_to_squareoff" not in exempt:
             return "too_close_to_squareoff"
         open_at = now_ist().replace(hour=9, minute=15, second=0, microsecond=0)
-        if (now_ist() - open_at).total_seconds() / 60.0 < L.warmup_minutes:
+        if (now_ist() - open_at).total_seconds() / 60.0 < L.warmup_minutes \
+                and "warmup" not in exempt:
             return "warmup"
         return ""
 
@@ -1217,11 +1235,17 @@ class IntradayEngine:
         return bool(m) and side == self._loss_side and \
             time.time() - self._loss_side_ts < 60.0 * m
 
-    # ── last-half-hour momentum, shadow mode ────────────────────────────────
-    def _lhm_signal(self, und, rows):
+    # ── last-half-hour momentum ─────────────────────────────────────────────
+    def _lhm_signal(self, und, rows, ranges=None):
         """(side, close, stop, move, adr) when the 14:59 bar has moved
         lhm_adr_frac x ADR from the previous close, else None. `rows` are
-        completed bars ending at the decision bar."""
+        completed bars ending at the decision bar. `ranges` ({day: [high,
+        low]}, full sessions from the history fetch) completes the ADR window
+        the candle store is too short for (it holds ~7 sessions, ADR wants 10).
+
+        As research/portfolio_test.py lhm_gen (screen.prep): ADR is the mean
+        high-low of the last lhm_adr_days FULL sessions, the stop
+        lhm_stop_atr x the ATR of the 20 bars BEFORE the decision bar."""
         L = self.L
         if not rows:
             return None
@@ -1229,11 +1253,20 @@ class IntradayEngine:
         prev = [r for r in rows if r[0][:10] < day]
         if not prev:
             return None
-        days = {}
+        days, first = {}, {}
         for r in prev:
             d = days.setdefault(r[0][:10], [r[2], r[3]])
+            first.setdefault(r[0][:10], str(r[0])[11:16])
             d[0], d[1] = max(d[0], r[2]), min(d[1], r[3])
+        # The store keeps its last max_rows bars, so its oldest session is only
+        # a tail (on a full store: 15:00-15:29). A tail is not a day's range -
+        # counted, it pulled the ADR down and let smaller moves through.
+        days = {k: v for k, v in days.items() if first[k] <= "09:20"}
+        for k, hl in (ranges or {}).items():
+            if str(k) < day:
+                days[str(k)] = [float(hl[0]), float(hl[1])]
         keys = sorted(days)[-int(L.lhm_adr_days):]
+        self._lhm_adr_n = len(keys)
         if len(keys) < 3:
             return None
         adr = sum(days[k][0] - days[k][1] for k in keys) / len(keys)
@@ -1242,10 +1275,29 @@ class IntradayEngine:
         if adr <= 0 or abs(move) < float(L.lhm_adr_frac) * adr:
             return None
         side = 1 if move > 0 else -1
-        a = atr(rows, period=int(L.atr_period))
+        a = atr(rows[:-1], period=int(L.atr_period))
         if a <= 0:
             return None
         return side, close, close - side * float(L.lhm_stop_atr) * a, move, adr
+
+    def _lhm_ranges(self, und, day):
+        """Full-session highs and lows from the noise-breakout history fetch,
+        when it has run today (never started from here: no new API calls)."""
+        h = self.__dict__.get("_nb_hist")
+        prof = h.get(day, und) if h is not None else None
+        return (prof or {}).get("ranges")
+
+    def _lhm_mode(self):
+        """"off" | "shadow" | "on"; anything else is off, said once."""
+        mode = str(getattr(self.L, "last_half_hour", "off") or "off")
+        if mode in ("off", "shadow", "on"):
+            return mode
+        said = self.__dict__.setdefault("_lhm_said", set())
+        if ("mode", mode) not in said:
+            said.add(("mode", mode))
+            self.log(f"[intraday] last_half_hour = {mode!r} is not a mode "
+                     f"('off', 'shadow' or 'on') - treated as off")
+        return "off"
 
     def _shadow_lhm(self):
         """last_half_hour = "shadow": at lhm_entry_at, note the trade the rule
@@ -1253,7 +1305,7 @@ class IntradayEngine:
         square-off on live quotes. No order is ever sent. Forward evidence
         before any money (owner's momentum request, 5 Oct 2026)."""
         L = self.L
-        if str(getattr(L, "last_half_hour", "off")) != "shadow":
+        if self._lhm_mode() != "shadow":
             return
         now = now_ist()
         if not hasattr(self, "_lhm"):
@@ -1269,6 +1321,149 @@ class IntradayEngine:
             elif sh and not sh.get("none") and not sh.get("done"):
                 self._lhm_follow(sh)
 
+    def _live_lhm(self):
+        """last_half_hour = "on" (owner, 6 Oct 2026, on research/
+        portfolio_result.txt): at lhm_entry_at, on the CLOSED bar ending then,
+        buy the index's move when it is lhm_adr_frac x ADR from the previous
+        close and the 4-hour trend agrees - through enter(), the same order
+        path, guards and adoption as every other entry. One attempt per index
+        per day, inside entry_window_sec; a pass refused by a gate that may
+        clear (an exit settling, a stale quote) is retried in the window.
+        Returns True when it entered."""
+        L = self.L
+        if self._lhm_mode() != "on":
+            return False
+        now = now_ist()
+        day = now.strftime("%Y-%m-%d")
+        hh, mm = (int(x) for x in str(L.lhm_entry_at).split(":"))
+        at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        since = (now - at).total_seconds()
+        if since < 0:
+            return False
+        st = self.__dict__.get("_lhm_live")
+        if st is None or st.get("day") != day:
+            st = self._lhm_live = {"day": day, "idx": {}}
+        win = float(getattr(L, "entry_window_sec", 15.0))
+        for und in [str(u) for u in (getattr(L, "lhm_indices", ()) or ())]:
+            rec = st["idx"].setdefault(und, {"state": "waiting", "why": "", "said": set()})
+            if rec["state"] != "waiting":
+                continue
+            if since > win:
+                rec["state"] = "missed"
+                self.log(f"[intraday] last_half_hour {und}: not taken today - "
+                         f"{rec['why'] or 'no pass inside the entry window'}")
+                continue
+            final, entered, why = self._lhm_try(und, rec, at, day)
+            rec["why"] = why
+            if why not in rec["said"]:
+                rec["said"].add(why)
+                self.log(f"[intraday] last_half_hour {und}: {why}")
+            if final:
+                rec["state"] = "done"
+            if entered:
+                return True
+        return False
+
+    def _lhm_try(self, und, rec, at, day):
+        """One decision pass for one index. (final, entered, why)."""
+        L = self.L
+        gate = self._gates(exempt=("too_close_to_squareoff", "warmup"))
+        if gate:
+            return False, False, f"blocked: {gate}"
+        limit = abs(self.capital.capital * L.max_daily_loss_pct / 100.0)
+        if self.realised_pnl <= -limit:
+            return True, False, "blocked: daily loss limit"
+        if self.book.time_to_close(self.cfg.session_end) <= float(L.squareoff_minutes) + 1.0:
+            return True, False, "blocked: at the square-off"
+        if self.careful and not grade_at_least("", getattr(L, "grade_after_streak", "B")):
+            return True, False, "blocked: graded setups only until a win (losing streak)"
+        b = self._binding_for(und)
+        if b is None or not self.candles:
+            return True, False, "no expiry bound or no candles"
+        from arb.candles import SECONDS
+        secs = SECONDS.get(getattr(self.candles, "interval", "1m"), 60)
+        if secs != 60:
+            return True, False, "needs 1-minute candles"
+        t0 = time.time()
+        rows, wait = self._closed_rows(und, self.candles.get(und, limit=5000), t0)
+        if wait:
+            return False, False, f"waiting: {wait}"
+        at_ts = at.timestamp()
+
+        def end(r):
+            return datetime.fromisoformat(str(r[0])).timestamp() + secs
+        while rows and end(rows[-1]) > min(at_ts, t0):
+            rows = rows[:-1]                    # the forming 15:00 bar, with closed bars off
+        if not rows or abs(end(rows[-1]) - at_ts) > 1.0:
+            return False, False, f"waiting: the bar ending {L.lhm_entry_at} is not in the candles"
+        sig = self._lhm_signal(und, rows, self._lhm_ranges(und, day))
+        n = getattr(self, "_lhm_adr_n", 0)
+        if sig is None:
+            return True, False, f"no signal (move under {L.lhm_adr_frac:g} x ADR({n}))"
+        side, close, stop, move, adr = sig
+        what = f"{move:+.1f} from prev close ({move / adr:+.2f} x ADR({n}) {adr:.1f})"
+        tr = trend_4h(rows, int(getattr(L, "trend_4h_bars", 5) or 5))
+        if tr != side:
+            return True, False, f"{what} against the 4-hour trend - no trade"
+        if self._same_idea_blocked(side):
+            return True, False, f"{what} - same side as a loss inside same_side_cooldown_min"
+        spot = self._spot(und)
+        if spot <= 0:
+            return False, False, "no spot"
+        if self._chased(rows, spot):
+            return False, False, f"{what} - price moved over max_chase_atr since the close"
+        cv = b.view(self.feed.store, time.perf_counter_ns(), time.time())
+        # The contract exactly as hunt() picks it: the most delta whose loss at
+        # the rule's own index stop fits max_risk_pct_per_trade, costs inside.
+        cap_inr = self.capital.capital * float(L.max_risk_pct_per_trade) / 100.0
+        idx_risk = abs(close - stop)
+        lot = max(int(cv.lot_size), 1)
+        inside = self._costs_inside()
+        cand = self.selector.select(
+            cv, spot, side, self.capital.capital - self.book.deployed(),
+            max_age_ms=400.0, min_depth_mult=1.0, max_delta=cap_inr / (idx_risk * lot),
+            max_delta_fn=(lambda px, spr: (cap_inr / lot - self._extra_risk_points(px, spr, lot))
+                          / idx_risk) if inside else None)
+        if cand is None:
+            return False, False, f"{what} - no contract ({self.selector.last_reject})"
+        if time.time() - self._symbol_cooldown.get(cand.symbol, -1e9) < L.symbol_cooldown_sec:
+            return False, False, f"{what} - symbol_cooldown on {cand.symbol}"
+        frame = _LhmFrame(close, stop, f"last_half_hour: {und} {what}")
+        cost_pts = self._round_trip_points(cand.ask, cand.lot_size)
+        # plan_trade's premium stop is reprice's: max(index risk x delta, 2
+        # spreads), at most max_risk_frac_of_premium of the premium, refused
+        # over the cap (costs inside), under min_net_points or over
+        # max_cost_frac_of_risk.
+        plan = plan_trade(cand, frame, side, L, cost_pts, invalidation=stop,
+                          max_risk_inr=cap_inr,
+                          extra_risk_points=(self._extra_risk_points(
+                              cand.ask, cand.detail.get("spread", 0.0), cand.lot_size)
+                              if inside else 0.0),
+                          atr=atr(rows[:-1], period=L.atr_period))
+        if plan is None:
+            return False, False, f"{what} - {cand.symbol}: no viable premium stop inside the cap"
+        if plan.get("planned_risk_inr", plan["risk_inr"]) > cap_inr + 1e-6:
+            return False, False, f"{what} - risk_too_large"
+        lots = self._lots_for("", cand, plan)
+        if lots <= 0:
+            return False, False, f"{what} - risk_too_large"
+        plan.update(index_entry=spot, entry_bar=rows[-1][0], index_target=0.0,
+                    reward_delta=cand.delta, reward_points=0.0, reward_inr=0.0,
+                    exit_rules="lhm", playbook="last_half_hour")
+        v = Verdict(side=side, day_trend=tr, bias=tr, bias_source="4h", grade="",
+                    reason=frame.reason,
+                    setups=[Setup(name="last_half_hour", side=side, invalidation=stop,
+                                  steps=[(f"move {move / adr:+.2f} ADR", round(move, 1)),
+                                         ("4h trend agrees", tr),
+                                         (f"stop {L.lhm_stop_atr:g} ATR", round(stop, 1))])])
+        rec["state"] = "sent"                   # one order a day, whatever comes back
+        ok = self.enter(cand, plan, frame, None, v, lots=lots)
+        if ok:
+            k = (und, "last_half_hour", side)
+            self.playbook_count[k] = self.playbook_count.get(k, 0) + 1
+        return True, ok, (f"{what} - ENTERED {cand.symbol}, index stop {stop:.1f}" if ok else
+                          f"{what} - entry order for {cand.symbol} not filled (see the order log)")
+
     def _lhm_open(self, und):
         L = self.L
         b = self._binding_for(und)
@@ -1276,7 +1471,8 @@ class IntradayEngine:
             return None
         t0 = time.time()
         rows, wait = self._closed_rows(und, self.candles.get(und, limit=3000), t0=t0)
-        sig = self._lhm_signal(und, rows) if not wait else None
+        sig = self._lhm_signal(und, rows, self._lhm_ranges(und, now_ist().strftime("%Y-%m-%d"))) \
+            if not wait else None
         if sig is None:
             self.log(f"[shadow] last_half_hour {und}: no signal")
             return None
@@ -1800,6 +1996,11 @@ class IntradayEngine:
             self._shadow_lhm()                  # never sends an order
         except Exception as e:
             self.log(f"[shadow] last_half_hour error: {e!r}")
+        try:
+            if self._live_lhm():                # "on": enters through enter() at 15:00
+                return
+        except Exception as e:
+            self.log(f"[intraday] last_half_hour error: {e!r}")
         try:
             self._shadow_noise()                # never sends an order
         except Exception as e:
@@ -2660,6 +2861,15 @@ class IntradayEngine:
                 if pos.index_target > 0 else 0.0
             pos.detail["index_target"] = round(pos.index_target, 2)
             pos.detail["target_premium_est"] = round(fill + est, 2) if est else None
+        if plan.get("exit_rules"):
+            # last_half_hour (and any later rule with the backtest's own exits):
+            # no target of any kind - out at the index stop, the premium stop,
+            # the +1R breakeven or the square-off (arb/positions.py review).
+            pos.exit_rules = str(plan["exit_rules"])
+            pos.index_target = 0.0
+            pos.target = fill * 100.0
+            pos.detail.update(playbook=plan.get("playbook", ""), index_target=0.0,
+                              target_premium_est=None, exit_rules=pos.exit_rules)
         return pos
 
     def enter(self, cand, plan, structure, zone, verdict=None, lots=1):
@@ -2724,6 +2934,8 @@ class IntradayEngine:
 
     @staticmethod
     def _target_text(pos):
+        if pos.exit_rules == "lhm":
+            return "none (index stop, +1R breakeven, square-off)"
         if pos.index_target > 0:
             r = abs(pos.index_target - pos.index_entry) / pos.index_risk \
                 if pos.index_risk else 0.0

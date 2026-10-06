@@ -906,7 +906,12 @@ class IntradayLimits:
     # buy in that direction with a stop lhm_stop_atr ATRs away, out at the
     # square-off. A year of NIFTY (research_out/momentum/l1_feasible_result.txt):
     # 84 trades, +26,040 / +13,007, t 2.4 - after ~80 variants, so unproven.
-    # "off" | "shadow" (log what it would have done, send nothing).
+    # "off" | "shadow" (log what it would have done, send nothing) | "on"
+    # (owner, 6 Oct 2026, on research/portfolio_result.txt: real orders through
+    # enter() at max_risk_pct_per_trade - lhm_risk_pct is the shadow's cap
+    # only - managed by the backtest's exits: the index stop, the premium stop,
+    # the +1R cost-covered breakeven, the square-off; no target, no trail).
+    # Any other value is off.
     last_half_hour: str = "off"
     lhm_indices: tuple = ("NIFTY",)
     lhm_entry_at: str = "15:00"

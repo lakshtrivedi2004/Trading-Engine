@@ -144,7 +144,11 @@ class SigmaHistory:
         used = keys[-self.ndays:]
         prof = {"date": day, "index": name, "ndays": self.ndays, "min_days": self.min_days,
                 "days": used, "prev_day": keys[-1], "prev_close": float(days[keys[-1]][-1][4]),
-                "sigma": sigma, "fetched_at": time.time()}
+                "sigma": sigma, "fetched_at": time.time(),
+                # Each full session's high and low: last_half_hour's ADR(10)
+                # needs more sessions than the live candle store holds (~7).
+                "ranges": {k: [max(float(r[2]) for r in days[k]), min(float(r[3]) for r in days[k])]
+                           for k in keys[-15:]}}
         try:
             os.makedirs(self.cache_dir, exist_ok=True)
             tmp = self._path(day, name) + ".tmp"

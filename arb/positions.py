@@ -92,6 +92,12 @@ class Position:
     # Set when the broker shows the position past flat (a naked short or
     # long): no exit is sent for it again; a human closes it in the app.
     exit_blocked: str = ""
+    # Whose exit rules manage this position. "" = the retest playbooks' rules
+    # (structure trail, index target, time stop). "lhm" = last_half_hour live
+    # (owner, 6 Oct 2026): exactly the backtest's rules (research/lab/
+    # realistic.py reprice) - the index stop, the premium stop, the +1R
+    # cost-covered breakeven and the square-off; no target, no trail, no time stop.
+    exit_rules: str = ""
 
     def __post_init__(self):
         if not self.initial_stop:
@@ -192,7 +198,8 @@ class PositionBook:
         # Time stop. A scalp that has gone nowhere is a thesis that did not
         # happen, and a long option pays theta for every minute it sits. Only a
         # trade that has not earned its keep is cut; a runner is left alone.
-        limit = float(getattr(L, "time_stop_min", 0.0) or 0.0)
+        lhm = pos.exit_rules == "lhm"
+        limit = 0.0 if lhm else float(getattr(L, "time_stop_min", 0.0) or 0.0)
         if limit > 0 and now - pos.opened_at >= 60.0 * limit \
                 and pos.r_multiple < float(getattr(L, "time_stop_min_r", 0.3)):
             return EXIT, "time_stop"
@@ -204,9 +211,12 @@ class PositionBook:
         # every time it is hit. Moving it any further than that would be a
         # tighter stop than the structure justifies, which is a different
         # mistake - so the level is cost-covered breakeven and nothing beyond.
-        if not pos.trailed and pos.r_multiple >= L.trail_trigger_r:
+        # last_half_hour pins the backtest's rule (reprice: bid - entry >= the
+        # premium risk -> stop to entry + the round trip), whatever the config.
+        trigger = 1.0 if lhm else L.trail_trigger_r
+        if not pos.trailed and pos.r_multiple >= trigger:
             free = pos.entry + (pos.cost_points
-                                if getattr(L, "breakeven_covers_costs", False)
+                                if lhm or getattr(L, "breakeven_covers_costs", False)
                                 else 0.0)
             # Never let the new stop land at or above the live mark: that is an
             # instant exit disguised as a trail, and at +1R we want the trade
@@ -217,7 +227,7 @@ class PositionBook:
 
         # After breakeven, ratchet the stop up behind the best price seen so a
         # trade that runs does not hand the whole move back.
-        if pos.trailed and L.trail_step_r > 0 and \
+        if pos.trailed and not lhm and L.trail_step_r > 0 and \
                 str(getattr(L, "trail_mode", "structure")) == "premium":
             ratchet = pos.mfe - L.trail_step_r * pos.risk_points
             if ratchet > pos.stop:
