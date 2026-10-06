@@ -1,0 +1,34 @@
+capital 13,467; candidates 778, after the live pace gate 129
+
+LIVE (no stop-size filter)         n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+
+-- trades bucketed by stop size in ATRs (each bucket run alone) --
+  stop 0-1.0 ATR                   n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0
+  stop 1.0-1.5 ATR                 n= 60 win= 45% year Rs    +681 (IN  -3,700 / OUT  +4,381) avg   +11 worst   -742 maxDD  6,645
+  stop 1.5-2.0 ATR                 n= 27 win= 63% year Rs  +8,705 (IN  +5,154 / OUT  +3,551) avg  +322 worst   -737 maxDD  2,086
+  stop 2.0-3.0 ATR                 n=  9 win= 67% year Rs  +3,537 (IN    +528 / OUT  +3,009) avg  +393 worst   -709 maxDD    709
+  stop 3.0-99 ATR                  n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0
+
+-- bucketed by planned rupee risk as % of capital --
+  risk 0-3% of capital             n=  5 win=  0% year Rs    -545 (IN    -493 / OUT     -52) avg  -109 worst   -443 maxDD    545
+  risk 3-4.5% of capital           n= 83 win= 54% year Rs  +9,569 (IN  +1,478 / OUT  +8,091) avg  +115 worst   -742 maxDD  4,058
+  risk 4.5-6.1% of capital         n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0
+  risk 6.1-99% of capital          n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0
+
+-- filters: skip trades whose stop is wider than X ATR --
+  stop <= 1.0 ATR                  n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0
+  stop <= 1.25 ATR                 n= 37 win= 46% year Rs  -1,776 (IN  -3,579 / OUT  +1,803) avg   -48 worst   -742 maxDD  5,579
+  stop <= 1.5 ATR                  n= 60 win= 45% year Rs    +681 (IN  -3,700 / OUT  +4,381) avg   +11 worst   -742 maxDD  6,645
+  stop <= 2.0 ATR                  n= 80 win= 51% year Rs  +9,130 (IN  +2,124 / OUT  +7,006) avg  +114 worst   -742 maxDD  4,760
+  stop <= 2.5 ATR                  n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+  stop <= 3.0 ATR                  n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+
+-- filters: skip trades whose stop is NARROWER than X ATR --
+  stop >= 0.75 ATR                 n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+  stop >= 1.0 ATR                  n= 87 win= 53% year Rs +10,690 (IN  +2,652 / OUT  +8,039) avg  +123 worst   -742 maxDD  4,058
+  stop >= 1.25 ATR                 n= 57 win= 56% year Rs +11,773 (IN  +4,305 / OUT  +7,468) avg  +207 worst   -737 maxDD  2,701
+  stop >= 1.5 ATR                  n= 34 win= 65% year Rs +10,266 (IN  +5,681 / OUT  +4,584) avg  +302 worst   -737 maxDD  2,086
+
+-- by grade --
+  grade A                          n= 18 win= 44% year Rs    +211 (IN    +485 / OUT    -274) avg   +12 worst   -737 maxDD  3,151
+  grade B                          n= 75 win= 55% year Rs +10,666 (IN  +2,586 / OUT  +8,080) avg  +142 worst   -742 maxDD  2,977
