@@ -1,0 +1,327 @@
+capital Rs 10,672.74, risk cap 8%, daily halt 15% of Rs 13,467, split 2026-05-25, sessions 254; cached OB 129 LHM 74 candidates
+Columns: n, win%, IN (before split), OUT (after), total, max drawdown, trades/session; dIN/dOUT vs baseline; BETTER BOTH = above baseline in both halves.
+
+BASELINE OB + LHM                              n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s {'LHM': 72, 'OB': 87}
+
+== 1. Rule C: NIFTY/BANKNIFTY first-candle divergence -> no new entries (filter on OB + LHM)
+C book fc5m close block 30 (-11 cands)         n=149 win= 52% IN +28,462 OUT +21,905 tot +50,368 DD  3,649 0.59/s | dIN  +1,368 dOUT    +751  BETTER BOTH
+C book fc5m close block 60 (-11 cands)         n=149 win= 52% IN +28,462 OUT +21,905 tot +50,368 DD  3,649 0.59/s | dIN  +1,368 dOUT    +751  BETTER BOTH
+C book fc5m close block until (-12 cands)      n=148 win= 53% IN +28,780 OUT +21,905 tot +50,685 DD  3,388 0.58/s | dIN  +1,686 dOUT    +751  BETTER BOTH
+C book fc5m wick block 30 (-23 cands)          n=144 win= 49% IN +23,792 OUT +20,176 tot +43,968 DD  3,649 0.57/s | dIN  -3,302 dOUT    -978
+C book fc5m wick block 60 (-28 cands)          n=140 win= 48% IN +20,074 OUT +20,176 tot +40,250 DD  3,649 0.55/s | dIN  -7,020 dOUT    -978
+C book fc5m wick block until (-30 cands)       n=137 win= 50% IN +24,541 OUT +20,540 tot +45,082 DD  3,388 0.54/s | dIN  -2,553 dOUT    -614
+C book fc15m close block 30 (-3 cands)         n=156 win= 51% IN +27,133 OUT +21,733 tot +48,867 DD  3,649 0.61/s | dIN     +39 dOUT    +579  BETTER BOTH
+C book fc15m close block 60 (-4 cands)         n=155 win= 52% IN +27,133 OUT +21,891 tot +49,024 DD  3,649 0.61/s | dIN     +39 dOUT    +736  BETTER BOTH
+C book fc15m close block until (-4 cands)      n=155 win= 52% IN +27,133 OUT +21,891 tot +49,024 DD  3,649 0.61/s | dIN     +39 dOUT    +736  BETTER BOTH
+C book fc15m wick block 30 (-10 cands)         n=151 win= 50% IN +25,179 OUT +21,154 tot +46,334 DD  3,649 0.59/s | dIN  -1,915 dOUT      +0
+C book fc15m wick block 60 (-17 cands)         n=147 win= 50% IN +22,634 OUT +21,154 tot +43,788 DD  3,649 0.58/s | dIN  -4,460 dOUT      +0
+C book fc15m wick block until (-18 cands)      n=144 win= 51% IN +25,432 OUT +22,035 tot +47,467 DD  3,388 0.57/s | dIN  -1,662 dOUT    +881
+C OB only fc5m close block 30 (-7 cands)       n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH
+C OB only fc5m close block 60 (-7 cands)       n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH
+C OB only fc5m close block until (-7 cands)    n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH
+C OB only fc5m wick block 30 (-22 cands)       n=145 win= 48% IN +23,027 OUT +20,176 tot +43,203 DD  3,649 0.57/s | dIN  -4,067 dOUT    -978
+C OB only fc5m wick block 60 (-26 cands)       n=142 win= 48% IN +22,640 OUT +20,176 tot +42,816 DD  3,649 0.56/s | dIN  -4,454 dOUT    -978
+C OB only fc5m wick block until (-23 cands)    n=144 win= 49% IN +24,090 OUT +19,761 tot +43,851 DD  3,649 0.57/s | dIN  -3,004 dOUT  -1,393
+C OB only fc15m close block 30 (-1 cands)      n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0
+C OB only fc15m close block 60 (-1 cands)      n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0
+C OB only fc15m close block until (-1 cands)   n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0
+C OB only fc15m wick block 30 (-9 cands)       n=152 win= 49% IN +24,415 OUT +21,154 tot +45,569 DD  3,649 0.60/s | dIN  -2,679 dOUT      +0
+C OB only fc15m wick block 60 (-15 cands)      n=149 win= 50% IN +25,199 OUT +21,154 tot +46,353 DD  3,649 0.59/s | dIN  -1,895 dOUT      +0
+C OB only fc15m wick block until (-10 cands)   n=152 win= 49% IN +24,981 OUT +20,724 tot +45,705 DD  3,649 0.60/s | dIN  -2,113 dOUT    -430
+
+== 2. Rule H: chop filters (filter on OB + LHM); big = range >= k x ATR14 of that timeframe
+Ha big+opposite big k1.5 1m (-56 cands)        n=113 win= 46% IN +13,273 OUT +14,979 tot +28,252 DD  4,297 0.44/s | dIN -13,821 dOUT  -6,175
+Ha big+opposite big k1.5 5m (-61 cands)        n=114 win= 48% IN +21,842 OUT  +6,868 tot +28,710 DD  3,985 0.45/s | dIN  -5,252 dOUT -14,286
+Ha big+opposite big k2 1m (-21 cands)          n=143 win= 49% IN +24,902 OUT +16,567 tot +41,469 DD  4,297 0.56/s | dIN  -2,192 dOUT  -4,587
+Ha big+opposite big k2 5m (-12 cands)          n=153 win= 50% IN +27,085 OUT +21,734 tot +48,819 DD  3,649 0.60/s | dIN      -9 dOUT    +580
+Hb big+2 inside k1.5 1m (-23 cands)            n=143 win= 48% IN +20,750 OUT  +9,389 tot +30,138 DD  4,100 0.56/s | dIN  -6,344 dOUT -11,766
+Hb big+2 inside k1.5 5m (-36 cands)            n=133 win= 48% IN +24,764 OUT  +3,033 tot +27,797 DD  3,388 0.52/s | dIN  -2,330 dOUT -18,121
+Hb big+2 inside k2 1m (-17 cands)              n=146 win= 49% IN +23,159 OUT +21,171 tot +44,330 DD  3,443 0.57/s | dIN  -3,935 dOUT     +17
+Hb big+2 inside k2 5m (-29 cands)              n=138 win= 48% IN +24,956 OUT  +3,856 tot +28,813 DD  3,388 0.54/s | dIN  -2,138 dOUT -17,298
+Hab either k1.5 1m (-68 cands)                 n=105 win= 44% IN +10,684 OUT  +2,351 tot +13,035 DD  5,569 0.41/s | dIN -16,410 dOUT -18,803
+Hab either k1.5 5m (-80 cands)                 n=101 win= 48% IN +21,758 OUT  +3,156 tot +24,914 DD  4,525 0.40/s | dIN  -5,336 dOUT -17,998
+Hab either k2 1m (-32 cands)                   n=135 win= 47% IN +21,024 OUT +16,419 tot +37,444 DD  4,640 0.53/s | dIN  -6,070 dOUT  -4,735
+Hab either k2 5m (-40 cands)                   n=132 win= 48% IN +24,240 OUT  +4,437 tot +28,677 DD  3,388 0.52/s | dIN  -2,854 dOUT -16,718
+
+== 3. Rule A: gap-day direction lock
+   gap days (|open - prev close| >= G), per index for (N80,B220) (N100,B300) (N120,B300): {'NIFTY': [91, 72, 55], 'BANKNIFTY': [88, 64, 64], 'SENSEX': [96, 75, 60]}
+A filter book N80 B220 (-15 cands)             n=148 win= 51% IN +25,980 OUT +22,222 tot +48,202 DD  3,649 0.58/s | dIN  -1,114 dOUT  +1,068
+A filter book N80 B300 (-15 cands)             n=148 win= 51% IN +25,980 OUT +22,222 tot +48,202 DD  3,649 0.58/s | dIN  -1,114 dOUT  +1,068
+A filter book N100 B220 (-12 cands)            n=151 win= 50% IN +25,833 OUT +22,222 tot +48,056 DD  3,649 0.59/s | dIN  -1,261 dOUT  +1,068
+A filter book N100 B300 (-12 cands)            n=151 win= 50% IN +25,833 OUT +22,222 tot +48,056 DD  3,649 0.59/s | dIN  -1,261 dOUT  +1,068
+A filter book N120 B220 (-9 cands)             n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317
+A filter book N120 B300 (-9 cands)             n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317
+A filter OB only N80 B220 (-14 cands)          n=149 win= 50% IN +25,980 OUT +21,502 tot +47,482 DD  3,649 0.59/s | dIN  -1,114 dOUT    +348
+A filter OB only N80 B300 (-14 cands)          n=149 win= 50% IN +25,980 OUT +21,502 tot +47,482 DD  3,649 0.59/s | dIN  -1,114 dOUT    +348
+A filter OB only N100 B220 (-11 cands)         n=152 win= 50% IN +25,833 OUT +21,502 tot +47,336 DD  3,649 0.60/s | dIN  -1,261 dOUT    +348
+A filter OB only N100 B300 (-11 cands)         n=152 win= 50% IN +25,833 OUT +21,502 tot +47,336 DD  3,649 0.60/s | dIN  -1,261 dOUT    +348
+A filter OB only N120 B220 (-8 cands)          n=153 win= 50% IN +25,833 OUT +20,751 tot +46,585 DD  3,649 0.60/s | dIN  -1,261 dOUT    -403
+A filter OB only N120 B300 (-8 cands)          n=153 win= 50% IN +25,833 OUT +20,751 tot +46,585 DD  3,649 0.60/s | dIN  -1,261 dOUT    -403
+A filter book G=0.25 ADR (-18 cands)           n=145 win= 51% IN +25,355 OUT +22,790 tot +48,145 DD  3,649 0.57/s | dIN  -1,739 dOUT  +1,636
+A filter book G=0.35 ADR (-15 cands)           n=148 win= 50% IN +24,021 OUT +22,222 tot +46,243 DD  3,649 0.58/s | dIN  -3,073 dOUT  +1,068
+A filter book G=0.5 ADR (-9 cands)             n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317
+   -- gap Fib-pocket ENTRY added to the book (pullback into 0.5-0.618 of prev close -> day extreme, confirming close, SL that candle (min 1 ATR20), 2R, squareoff 15:00)
+A entry 4h N80 B220 <= 12:00 [+30; alone n=25 -1,150] n=181 win= 48% IN +25,686 OUT +20,261 tot +45,947 DD  4,394 0.71/s | dIN  -1,408 dOUT    -893 {'GAP': 24, 'LHM': 72, 'OB': 85}
+A entry 4h N80 B220 <= 14:45 [+44; alone n=35 -1,280] n=190 win= 47% IN +21,956 OUT +20,531 tot +42,487 DD  4,489 0.75/s | dIN  -5,138 dOUT    -623 {'GAP': 34, 'LHM': 71, 'OB': 85}
+A entry 4h N80 B300 <= 12:00 [+27; alone n=22 -2,624] n=179 win= 48% IN +25,766 OUT +19,778 tot +45,545 DD  4,394 0.70/s | dIN  -1,328 dOUT  -1,376 {'GAP': 22, 'LHM': 72, 'OB': 85}
+A entry 4h N80 B300 <= 14:45 [+41; alone n=32 -2,754] n=188 win= 47% IN +22,036 OUT +20,048 tot +42,084 DD  4,489 0.74/s | dIN  -5,058 dOUT  -1,106 {'GAP': 32, 'LHM': 71, 'OB': 85}
+A entry 4h N100 B220 <= 12:00 [+26; alone n=22 -2,452] n=178 win= 48% IN +24,823 OUT +19,822 tot +44,645 DD  4,820 0.70/s | dIN  -2,271 dOUT  -1,332 {'GAP': 21, 'LHM': 72, 'OB': 85}
+A entry 4h N100 B220 <= 14:45 [+40; alone n=32 -2,582] n=187 win= 47% IN +21,093 OUT +20,092 tot +41,185 DD  4,915 0.74/s | dIN  -6,001 dOUT  -1,062 {'GAP': 31, 'LHM': 71, 'OB': 85}
+A entry 4h N100 B300 <= 12:00 [+23; alone n=19 -3,926] n=176 win= 48% IN +24,904 OUT +19,339 tot +44,243 DD  4,820 0.69/s | dIN  -2,190 dOUT  -1,815 {'GAP': 19, 'LHM': 72, 'OB': 85}
+A entry 4h N100 B300 <= 14:45 [+37; alone n=29 -4,056] n=185 win= 46% IN +21,173 OUT +19,609 tot +40,783 DD  4,915 0.73/s | dIN  -5,921 dOUT  -1,545 {'GAP': 29, 'LHM': 71, 'OB': 85}
+A entry 4h N120 B220 <= 12:00 [+18; alone n=17 -1,169] n=174 win= 49% IN +26,269 OUT +20,389 tot +46,659 DD  4,352 0.69/s | dIN    -825 dOUT    -765 {'GAP': 16, 'LHM': 72, 'OB': 86}
+A entry 4h N120 B220 <= 14:45 [+29; alone n=25 -2,132] n=181 win= 48% IN +22,539 OUT +19,826 tot +42,366 DD  4,352 0.71/s | dIN  -4,555 dOUT  -1,328 {'GAP': 24, 'LHM': 71, 'OB': 86}
+A entry 4h N120 B300 <= 12:00 [+15; alone n=14 -2,643] n=172 win= 49% IN +26,350 OUT +19,907 tot +46,256 DD  4,352 0.68/s | dIN    -744 dOUT  -1,248 {'GAP': 14, 'LHM': 72, 'OB': 86}
+A entry 4h N120 B300 <= 14:45 [+26; alone n=22 -3,606] n=179 win= 47% IN +22,619 OUT +19,344 tot +41,963 DD  4,352 0.70/s | dIN  -4,475 dOUT  -1,811 {'GAP': 22, 'LHM': 71, 'OB': 86}
+A entry no4h N80 B220 <= 12:00 [+72; alone n=53 -4,811] n=208 win= 46% IN +24,899 OUT +18,151 tot +43,050 DD  5,072 0.82/s | dIN  -2,195 dOUT  -3,003 {'GAP': 52, 'LHM': 72, 'OB': 84}
+A entry no4h N80 B220 <= 14:45 [+90; alone n=67 -4,900] n=220 win= 45% IN +22,208 OUT +18,166 tot +40,374 DD  5,200 0.87/s | dIN  -4,886 dOUT  -2,989 {'GAP': 66, 'LHM': 71, 'OB': 83}
+A entry no4h N80 B300 <= 12:00 [+66; alone n=48 -6,470] n=204 win= 46% IN +24,795 OUT +17,668 tot +42,463 DD  5,108 0.80/s | dIN  -2,299 dOUT  -3,486 {'GAP': 48, 'LHM': 72, 'OB': 84}
+A entry no4h N80 B300 <= 14:45 [+83; alone n=61 -6,347] n=215 win= 45% IN +22,315 OUT +17,683 tot +39,998 DD  5,734 0.85/s | dIN  -4,779 dOUT  -3,472 {'GAP': 61, 'LHM': 71, 'OB': 83}
+A entry no4h N100 B220 <= 12:00 [+57; alone n=45 -3,549] n=201 win= 46% IN +24,420 OUT +19,128 tot +43,548 DD  5,072 0.79/s | dIN  -2,674 dOUT  -2,026 {'GAP': 44, 'LHM': 72, 'OB': 85}
+A entry no4h N100 B220 <= 14:45 [+75; alone n=59 -3,638] n=213 win= 45% IN +21,729 OUT +19,143 tot +40,871 DD  5,072 0.84/s | dIN  -5,365 dOUT  -2,012 {'GAP': 58, 'LHM': 71, 'OB': 84}
+A entry no4h N100 B300 <= 12:00 [+51; alone n=40 -5,208] n=197 win= 46% IN +24,315 OUT +18,645 tot +42,961 DD  5,072 0.78/s | dIN  -2,779 dOUT  -2,509 {'GAP': 40, 'LHM': 72, 'OB': 85}
+A entry no4h N100 B300 <= 14:45 [+68; alone n=53 -5,086] n=208 win= 45% IN +21,836 OUT +18,660 tot +40,495 DD  5,072 0.82/s | dIN  -5,258 dOUT  -2,495 {'GAP': 53, 'LHM': 71, 'OB': 84}
+A entry no4h N120 B220 <= 12:00 [+43; alone n=37 -1,473] n=194 win= 47% IN +26,659 OUT +19,695 tot +46,355 DD  4,360 0.76/s | dIN    -434 dOUT  -1,459 {'GAP': 36, 'LHM': 72, 'OB': 86}
+A entry no4h N120 B220 <= 14:45 [+58; alone n=49 -2,394] n=204 win= 46% IN +23,968 OUT +18,877 tot +42,845 DD  4,360 0.80/s | dIN  -3,126 dOUT  -2,277 {'GAP': 48, 'LHM': 71, 'OB': 85}
+A entry no4h N120 B300 <= 12:00 [+37; alone n=32 -3,129] n=190 win= 47% IN +26,558 OUT +19,212 tot +45,770 DD  4,360 0.75/s | dIN    -536 dOUT  -1,942 {'GAP': 32, 'LHM': 72, 'OB': 86}
+A entry no4h N120 B300 <= 14:45 [+51; alone n=43 -3,839] n=199 win= 46% IN +24,078 OUT +18,394 tot +42,472 DD  4,360 0.78/s | dIN  -3,016 dOUT  -2,760 {'GAP': 43, 'LHM': 71, 'OB': 85}
+
+== 4. Rule B: NIFTY/BANKNIFTY divergence (SMT) entry added to the book (refs: prev close, first-15m extreme, day extreme; confirm within 10 bars)
+B 4h SL candle TP 40 [+158; alone n=141 +253]  n=291 win= 41% IN +30,611 OUT +14,780 tot +45,391 DD  9,623 1.15/s | dIN  +3,517 dOUT  -6,375 {'LHM': 72, 'OB': 81, 'SMT': 138}
+B 4h SL candle TP swing50 [+156; alone n=141 -46] n=293 win= 44% IN +31,913 OUT +12,478 tot +44,391 DD  8,574 1.15/s | dIN  +4,819 dOUT  -8,676 {'LHM': 72, 'OB': 83, 'SMT': 138}
+B 4h SL 20 TP 40 [+236; alone n=201 -16,071]   n=349 win= 40% IN +24,587 OUT  +7,066 tot +31,653 DD 12,530 1.37/s | dIN  -2,507 dOUT -14,088 {'LHM': 72, 'OB': 81, 'SMT': 196}
+B 4h SL 20 TP swing50 [+231; alone n=202 -13,217] n=350 win= 45% IN +27,642 OUT  +6,459 tot +34,101 DD 12,103 1.38/s | dIN    +548 dOUT -14,695 {'LHM': 72, 'OB': 82, 'SMT': 196}
+B 4h SL 30 TP 40 [+199; alone n=172 -11,537]   n=319 win= 46% IN +29,151 OUT  +7,076 tot +36,228 DD 10,120 1.26/s | dIN  +2,057 dOUT -14,078 {'LHM': 72, 'OB': 79, 'SMT': 168}
+B 4h SL 30 TP swing50 [+195; alone n=173 -12,702] n=322 win= 50% IN +26,153 OUT  +7,507 tot +33,660 DD 10,344 1.27/s | dIN    -941 dOUT -13,647 {'LHM': 72, 'OB': 81, 'SMT': 169}
+B no4h SL candle TP 40 [+321; alone n=275 -13,428] n=419 win= 35% IN +24,418 OUT  +4,786 tot +29,204 DD 10,554 1.65/s | dIN  -2,676 dOUT -16,368 {'LHM': 72, 'OB': 77, 'SMT': 270}
+B no4h SL candle TP swing50 [+312; alone n=277 -7,908] n=422 win= 40% IN +29,434 OUT  +5,357 tot +34,791 DD 10,583 1.66/s | dIN  +2,340 dOUT -15,797 {'LHM': 72, 'OB': 78, 'SMT': 272}
+B no4h SL 20 TP 40 [+473; alone n=393 -34,857] n=534 win= 35% IN +16,721 OUT  -4,890 tot +11,831 DD 20,495 2.10/s | dIN -10,373 dOUT -26,045 {'LHM': 71, 'OB': 76, 'SMT': 387}
+B no4h SL 20 TP swing50 [+460; alone n=400 -28,028] n=540 win= 44% IN +22,775 OUT  -3,356 tot +19,419 DD 19,197 2.13/s | dIN  -4,319 dOUT -24,510 {'LHM': 72, 'OB': 76, 'SMT': 392}
+B no4h SL 30 TP 40 [+411; alone n=349 -36,512] n=485 win= 42% IN +14,091 OUT  -4,679 tot  +9,411 DD 19,280 1.91/s | dIN -13,003 dOUT -25,834 {'LHM': 68, 'OB': 74, 'SMT': 343}
+B no4h SL 30 TP swing50 [+400; alone n=353 -39,605] n=491 win= 48% IN  +8,684 OUT  -3,200 tot  +5,484 DD 17,081 1.93/s | dIN -18,410 dOUT -24,354 {'LHM': 71, 'OB': 74, 'SMT': 346}
+     (info) SL20/TP40 SMT trades taken, ref pc: n=34 win=26% IN -3,826 OUT -519
+     (info) SL20/TP40 SMT trades taken, ref fc: n=82 win=32% IN -2,245 OUT -5,185
+     (info) SL20/TP40 SMT trades taken, ref dl: n=80 win=34% IN +3,301 OUT -6,705
+
+== 5. Rule D: sweep and reclaim (PDH/PDL, prev close, round numbers N100/B500/S500, first-15m extremes), entry on the reclaim close, SL beyond the sweep (min 1 ATR20)
+D plain 4h k1 2R [+1111; alone n=582 -67,495]  n=701 win= 32% IN -17,659 OUT  -3,043 tot -20,702 DD 37,690 2.76/s | dIN -44,753 dOUT -24,197 {'LHM': 70, 'OB': 58, 'SWEEP': 573}
+D plain 4h k1 3R [+1111; alone n=565 -61,846]  n=681 win= 25% IN -10,441 OUT  -7,033 tot -17,474 DD 33,925 2.68/s | dIN -37,535 dOUT -28,187 {'LHM': 70, 'OB': 53, 'SWEEP': 558}
+D plain 4h k3 2R [+1229; alone n=607 -72,081]  n=719 win= 31% IN -30,232 OUT  +2,521 tot -27,711 DD 46,887 2.83/s | dIN -57,326 dOUT -18,633 {'LHM': 66, 'OB': 56, 'SWEEP': 597}
+D plain 4h k3 3R [+1229; alone n=580 -70,014]  n=688 win= 24% IN -22,909 OUT  -5,566 tot -28,475 DD 42,382 2.71/s | dIN -50,003 dOUT -26,720 {'LHM': 63, 'OB': 53, 'SWEEP': 572}
+D plain no4h k1 2R [+2182; alone n=956 -114,509] n=1050 win= 31% IN -58,431 OUT -17,227 tot -75,658 DD 79,450 4.13/s | dIN -85,525 dOUT -38,381 {'LHM': 56, 'OB': 54, 'SWEEP': 940}
+D plain no4h k1 3R [+2182; alone n=901 -120,639] n=993 win= 21% IN -58,860 OUT -27,044 tot -85,905 DD 86,269 3.91/s | dIN -85,954 dOUT -48,198 {'LHM': 55, 'OB': 48, 'SWEEP': 890}
+D plain no4h k3 2R [+2429; alone n=986 -124,394] n=1072 win= 30% IN -77,025 OUT -13,182 tot -90,207 DD 94,021 4.22/s | dIN -104,119 dOUT -34,336 {'LHM': 53, 'OB': 52, 'SWEEP': 967}
+D plain no4h k3 3R [+2429; alone n=923 -132,655] n=1003 win= 21% IN -73,022 OUT -26,510 tot -99,532 DD 99,532 3.95/s | dIN -100,116 dOUT -47,664 {'LHM': 48, 'OB': 47, 'SWEEP': 908}
+D stretched 4h k1 2R [+406; alone n=312 -21,356] n=445 win= 38% IN  +8,389 OUT +19,311 tot +27,700 DD 12,428 1.75/s | dIN -18,705 dOUT  -1,843 {'LHM': 67, 'OB': 75, 'SWEEP': 303}
+D stretched 4h k1 3R [+406; alone n=307 -20,293] n=435 win= 31% IN +13,089 OUT +15,689 tot +28,778 DD 12,597 1.71/s | dIN -14,005 dOUT  -5,465 {'LHM': 66, 'OB': 69, 'SWEEP': 300}
+D stretched 4h k3 2R [+506; alone n=367 -28,743] n=501 win= 36% IN  +3,016 OUT +16,663 tot +19,679 DD 14,918 1.97/s | dIN -24,078 dOUT  -4,491 {'LHM': 66, 'OB': 74, 'SWEEP': 361}
+D stretched 4h k3 3R [+506; alone n=360 -29,578] n=487 win= 29% IN  +2,085 OUT +14,979 tot +17,064 DD 19,791 1.92/s | dIN -25,009 dOUT  -6,175 {'LHM': 63, 'OB': 68, 'SWEEP': 356}
+D touched 4h k1 2R [+799; alone n=510 -59,889] n=630 win= 33% IN -10,937 OUT    +989 tot  -9,948 DD 27,599 2.48/s | dIN -38,031 dOUT -20,165 {'LHM': 69, 'OB': 61, 'SWEEP': 500}
+D touched 4h k1 3R [+799; alone n=491 -63,433] n=610 win= 25% IN -12,065 OUT  -5,034 tot -17,100 DD 25,190 2.40/s | dIN -39,159 dOUT -26,189 {'LHM': 67, 'OB': 59, 'SWEEP': 484}
+D touched 4h k3 2R [+911; alone n=552 -65,197] n=663 win= 33% IN -15,536 OUT  -3,727 tot -19,263 DD 27,597 2.61/s | dIN -42,630 dOUT -24,881 {'LHM': 66, 'OB': 57, 'SWEEP': 540}
+D touched 4h k3 3R [+911; alone n=530 -71,908] n=638 win= 25% IN -19,604 OUT  -8,685 tot -28,289 DD 33,713 2.51/s | dIN -46,698 dOUT -29,839 {'LHM': 62, 'OB': 54, 'SWEEP': 522}
+     (info) k1/2R sweep trades taken, level pdh: n=50 win=32% IN -1,163 OUT -2,123
+     (info) k1/2R sweep trades taken, level pdl: n=60 win=27% IN -5,779 OUT -1,570
+     (info) k1/2R sweep trades taken, level pc: n=57 win=30% IN -3,316 OUT -1,988
+     (info) k1/2R sweep trades taken, level round: n=181 win=29% IN -14,776 OUT -10,564
+     (info) k1/2R sweep trades taken, level fch: n=101 win=25% IN -10,286 OUT -4,407
+     (info) k1/2R sweep trades taken, level fcl: n=124 win=31% IN -7,688 OUT -849
+   -- volume confirmation: NIFTY-constituent rupee-volume proxy (Jun-Sep 2026 ONLY, all of it in the OUT half; index volume is 0 in the history)
+   proxy from 50 NIFTY 50 names in .cache/history/stocks; ratio = this minute / median of the same minute over the previous 10 sessions; usable from 2026-06-15
+   window baseline OB+LHM 2026-06-15..09-28    n= 45 win= 51% IN      +0 OUT +10,123 tot +10,123 DD  2,431 0.18/s
+   window + D NIFTY k1 2R, no volume test [+74] n=101 win= 38% IN      +0 OUT  +2,293 tot  +2,293 DD  7,872 0.40/s | vs window base dTOT -7,831
+   window + D NIFTY k1 2R, sweep-bar vol >= 1.2x [+43] n= 80 win= 39% IN      +0 OUT  +3,541 tot  +3,541 DD  4,421 0.31/s | vs window base dTOT -6,583
+   window + D NIFTY k1 2R, sweep-bar vol >= 1.5x [+23] n= 64 win= 39% IN      +0 OUT  +2,804 tot  +2,804 DD  4,248 0.25/s | vs window base dTOT -7,319
+   window + D NIFTY k1 2R, sweep-bar vol >= 2x [+11] n= 55 win= 42% IN      +0 OUT  +6,650 tot  +6,650 DD  3,406 0.22/s | vs window base dTOT -3,474
+   window + D NIFTY k3 2R, no volume test [+93] n=116 win= 35% IN      +0 OUT    +626 tot    +626 DD  8,743 0.46/s | vs window base dTOT -9,497
+   window + D NIFTY k3 2R, sweep-bar vol >= 1.2x [+55] n= 87 win= 38% IN      +0 OUT  +2,555 tot  +2,555 DD  4,746 0.34/s | vs window base dTOT -7,568
+   window + D NIFTY k3 2R, sweep-bar vol >= 1.5x [+41] n= 80 win= 36% IN      +0 OUT    +703 tot    +703 DD  6,946 0.31/s | vs window base dTOT -9,421
+   window + D NIFTY k3 2R, sweep-bar vol >= 2x [+19] n= 63 win= 38% IN      +0 OUT  +4,260 tot  +4,260 DD  5,014 0.25/s | vs window base dTOT -5,863
+
+== 6. Exit rules on the book (OB + LHM re-priced with the exit changed; entries unchanged)
+   (check: reprice_x with be_r=1.0 reproduces the baseline exactly)
+6a breakeven at never                          n=160 win= 52% IN +27,458 OUT +20,728 tot +48,186 DD  3,388 0.63/s | dIN    +364 dOUT    -426
+6a breakeven at 0.75 R                         n=159 win= 48% IN +27,590 OUT +19,679 tot +47,270 DD  3,649 0.63/s | dIN    +496 dOUT  -1,475
+6a breakeven at 1.0 R (= engine, baseline)     n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0
+6a breakeven at 1.25 R                         n=160 win= 51% IN +27,187 OUT +21,154 tot +48,342 DD  3,649 0.63/s | dIN     +93 dOUT      +0
+6a breakeven at 1.5 R                          n=160 win= 51% IN +27,113 OUT +21,154 tot +48,267 DD  3,649 0.63/s | dIN     +19 dOUT      +0
+6b book 50% at 2R, rest +1R stop, trail 10 pts, orig n=159 win= 50% IN +18,192 OUT +13,272 tot +31,464 DD  3,649 0.63/s | dIN  -8,902 dOUT  -7,882
+6b book 50% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +17,988 OUT +13,129 tot +31,117 DD  3,649 0.63/s | dIN  -9,106 dOUT  -8,025
+6b book 50% at 2R, rest +1R stop, trail 20 pts, orig n=159 win= 50% IN +19,894 OUT +13,748 tot +33,641 DD  3,649 0.63/s | dIN  -7,200 dOUT  -7,407
+6b book 80% at 2R, rest +1R stop, trail 10 pts, orig n=159 win= 50% IN +16,668 OUT +10,163 tot +26,830 DD  3,649 0.63/s | dIN -10,426 dOUT -10,991
+6b book 80% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +16,586 OUT +10,106 tot +26,691 DD  3,649 0.63/s | dIN -10,508 dOUT -11,049
+6b book 80% at 2R, rest +1R stop, trail 20 pts, orig n=159 win= 50% IN +17,348 OUT +10,353 tot +27,701 DD  3,649 0.63/s | dIN  -9,746 dOUT -10,801
+6b book 100% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +16,359 OUT  +8,444 tot +24,803 DD  3,649 0.63/s | dIN -10,735 dOUT -12,710
+6b book 50% at 2R, rest +1R stop, trail 10 pts, run n=159 win= 50% IN +17,298 OUT +13,281 tot +30,579 DD  3,649 0.63/s | dIN  -9,796 dOUT  -7,873
+6b book 50% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +17,074 OUT +12,313 tot +29,387 DD  3,649 0.63/s | dIN -10,020 dOUT  -8,841
+6b book 50% at 2R, rest +1R stop, trail 20 pts, run n=159 win= 50% IN +18,960 OUT +12,981 tot +31,941 DD  3,649 0.63/s | dIN  -8,134 dOUT  -8,173
+6b book 80% at 2R, rest +1R stop, trail 10 pts, run n=159 win= 50% IN +16,310 OUT +10,166 tot +26,476 DD  3,649 0.63/s | dIN -10,784 dOUT -10,988
+6b book 80% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +16,221 OUT  +9,779 tot +26,000 DD  3,649 0.63/s | dIN -10,873 dOUT -11,375
+6b book 80% at 2R, rest +1R stop, trail 20 pts, run n=159 win= 50% IN +16,975 OUT +10,046 tot +27,021 DD  3,649 0.63/s | dIN -10,119 dOUT -11,108
+6b book 100% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +16,359 OUT  +8,444 tot +24,803 DD  3,649 0.63/s | dIN -10,735 dOUT -12,710
+   (6b: every trade here is ONE lot - NIFTY 65 / BANKNIFTY 30 / SENSEX 20 units - so an 80% or 50% partial cannot be placed at this capital; the fractional rows are hypothetical, 100% at 2R is the executable version)
+   (6c: loss limit Rs 2,020; baseline best day Rs 11,782; days at or above Rs 4,040: 2)
+6c stop for the day at +1.5 x loss limit (Rs 3,030) n=158 win= 50% IN +27,094 OUT +20,544 tot +47,638 DD  3,649 0.62/s | dIN      +0 dOUT    -610
+6c stop for the day at +2 x loss limit (Rs 4,040) n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0
+6c stop for the day at +3 x loss limit (Rs 6,060) n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0
+6d at most 2 trades a day                      n=153 win= 50% IN +26,361 OUT +20,544 tot +46,905 DD  3,649 0.60/s | dIN    -733 dOUT    -610
+6d at most 3 trades a day                      n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0
+6d at most 4 trades a day                      n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0
+
+========================================================================================================================
+ALL VARIANTS vs BASELINE (OB + LHM).  BOTH = better IN and OUT;  PASS = BOTH and every one-parameter neighbour in its family BOTH too
+========================================================================================================================
+BASELINE OB + LHM                              n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s
+-- C divergence filter (book)
+  C book fc5m close block 30 (-11 cands)       n=149 win= 52% IN +28,462 OUT +21,905 tot +50,368 DD  3,649 0.59/s | dIN  +1,368 dOUT    +751  BETTER BOTH  [3 nb] both, no plateau
+  C book fc5m close block 60 (-11 cands)       n=149 win= 52% IN +28,462 OUT +21,905 tot +50,368 DD  3,649 0.59/s | dIN  +1,368 dOUT    +751  BETTER BOTH  [4 nb] both, no plateau
+  C book fc5m close block until (-12 cands)    n=148 win= 53% IN +28,780 OUT +21,905 tot +50,685 DD  3,388 0.58/s | dIN  +1,686 dOUT    +751  BETTER BOTH  [3 nb] both, no plateau
+  C book fc5m wick block 30 (-23 cands)        n=144 win= 49% IN +23,792 OUT +20,176 tot +43,968 DD  3,649 0.57/s | dIN  -3,302 dOUT    -978  [3 nb] 
+  C book fc5m wick block 60 (-28 cands)        n=140 win= 48% IN +20,074 OUT +20,176 tot +40,250 DD  3,649 0.55/s | dIN  -7,020 dOUT    -978  [4 nb] 
+  C book fc5m wick block until (-30 cands)     n=137 win= 50% IN +24,541 OUT +20,540 tot +45,082 DD  3,388 0.54/s | dIN  -2,553 dOUT    -614  [3 nb] 
+  C book fc15m close block 30 (-3 cands)       n=156 win= 51% IN +27,133 OUT +21,733 tot +48,867 DD  3,649 0.61/s | dIN     +39 dOUT    +579  BETTER BOTH  [3 nb] both, no plateau
+  C book fc15m close block 60 (-4 cands)       n=155 win= 52% IN +27,133 OUT +21,891 tot +49,024 DD  3,649 0.61/s | dIN     +39 dOUT    +736  BETTER BOTH  [4 nb] both, no plateau
+  C book fc15m close block until (-4 cands)    n=155 win= 52% IN +27,133 OUT +21,891 tot +49,024 DD  3,649 0.61/s | dIN     +39 dOUT    +736  BETTER BOTH  [3 nb] both, no plateau
+  C book fc15m wick block 30 (-10 cands)       n=151 win= 50% IN +25,179 OUT +21,154 tot +46,334 DD  3,649 0.59/s | dIN  -1,915 dOUT      +0  [3 nb] 
+  C book fc15m wick block 60 (-17 cands)       n=147 win= 50% IN +22,634 OUT +21,154 tot +43,788 DD  3,649 0.58/s | dIN  -4,460 dOUT      +0  [4 nb] 
+  C book fc15m wick block until (-18 cands)    n=144 win= 51% IN +25,432 OUT +22,035 tot +47,467 DD  3,388 0.57/s | dIN  -1,662 dOUT    +881  [3 nb] 
+-- C divergence filter (OB only)
+  C OB only fc5m close block 30 (-7 cands)     n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH  [3 nb] both, no plateau
+  C OB only fc5m close block 60 (-7 cands)     n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH  [4 nb] both, no plateau
+  C OB only fc5m close block until (-7 cands)  n=153 win= 51% IN +27,908 OUT +21,169 tot +49,077 DD  3,649 0.60/s | dIN    +814 dOUT     +15  BETTER BOTH  [3 nb] both, no plateau
+  C OB only fc5m wick block 30 (-22 cands)     n=145 win= 48% IN +23,027 OUT +20,176 tot +43,203 DD  3,649 0.57/s | dIN  -4,067 dOUT    -978  [3 nb] 
+  C OB only fc5m wick block 60 (-26 cands)     n=142 win= 48% IN +22,640 OUT +20,176 tot +42,816 DD  3,649 0.56/s | dIN  -4,454 dOUT    -978  [4 nb] 
+  C OB only fc5m wick block until (-23 cands)  n=144 win= 49% IN +24,090 OUT +19,761 tot +43,851 DD  3,649 0.57/s | dIN  -3,004 dOUT  -1,393  [3 nb] 
+  C OB only fc15m close block 30 (-1 cands)    n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0  [3 nb] 
+  C OB only fc15m close block 60 (-1 cands)    n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0  [4 nb] 
+  C OB only fc15m close block until (-1 cands) n=158 win= 51% IN +27,133 OUT +21,154 tot +48,287 DD  3,649 0.62/s | dIN     +39 dOUT      +0  [3 nb] 
+  C OB only fc15m wick block 30 (-9 cands)     n=152 win= 49% IN +24,415 OUT +21,154 tot +45,569 DD  3,649 0.60/s | dIN  -2,679 dOUT      +0  [3 nb] 
+  C OB only fc15m wick block 60 (-15 cands)    n=149 win= 50% IN +25,199 OUT +21,154 tot +46,353 DD  3,649 0.59/s | dIN  -1,895 dOUT      +0  [4 nb] 
+  C OB only fc15m wick block until (-10 cands) n=152 win= 49% IN +24,981 OUT +20,724 tot +45,705 DD  3,649 0.60/s | dIN  -2,113 dOUT    -430  [3 nb] 
+-- H chop a
+  Ha big+opposite big k1.5 1m (-56 cands)      n=113 win= 46% IN +13,273 OUT +14,979 tot +28,252 DD  4,297 0.44/s | dIN -13,821 dOUT  -6,175  [2 nb] 
+  Ha big+opposite big k1.5 5m (-61 cands)      n=114 win= 48% IN +21,842 OUT  +6,868 tot +28,710 DD  3,985 0.45/s | dIN  -5,252 dOUT -14,286  [2 nb] 
+  Ha big+opposite big k2 1m (-21 cands)        n=143 win= 49% IN +24,902 OUT +16,567 tot +41,469 DD  4,297 0.56/s | dIN  -2,192 dOUT  -4,587  [2 nb] 
+  Ha big+opposite big k2 5m (-12 cands)        n=153 win= 50% IN +27,085 OUT +21,734 tot +48,819 DD  3,649 0.60/s | dIN      -9 dOUT    +580  [2 nb] 
+-- H chop b
+  Hb big+2 inside k1.5 1m (-23 cands)          n=143 win= 48% IN +20,750 OUT  +9,389 tot +30,138 DD  4,100 0.56/s | dIN  -6,344 dOUT -11,766  [2 nb] 
+  Hb big+2 inside k1.5 5m (-36 cands)          n=133 win= 48% IN +24,764 OUT  +3,033 tot +27,797 DD  3,388 0.52/s | dIN  -2,330 dOUT -18,121  [2 nb] 
+  Hb big+2 inside k2 1m (-17 cands)            n=146 win= 49% IN +23,159 OUT +21,171 tot +44,330 DD  3,443 0.57/s | dIN  -3,935 dOUT     +17  [2 nb] 
+  Hb big+2 inside k2 5m (-29 cands)            n=138 win= 48% IN +24,956 OUT  +3,856 tot +28,813 DD  3,388 0.54/s | dIN  -2,138 dOUT -17,298  [2 nb] 
+-- H chop ab
+  Hab either k1.5 1m (-68 cands)               n=105 win= 44% IN +10,684 OUT  +2,351 tot +13,035 DD  5,569 0.41/s | dIN -16,410 dOUT -18,803  [2 nb] 
+  Hab either k1.5 5m (-80 cands)               n=101 win= 48% IN +21,758 OUT  +3,156 tot +24,914 DD  4,525 0.40/s | dIN  -5,336 dOUT -17,998  [2 nb] 
+  Hab either k2 1m (-32 cands)                 n=135 win= 47% IN +21,024 OUT +16,419 tot +37,444 DD  4,640 0.53/s | dIN  -6,070 dOUT  -4,735  [2 nb] 
+  Hab either k2 5m (-40 cands)                 n=132 win= 48% IN +24,240 OUT  +4,437 tot +28,677 DD  3,388 0.52/s | dIN  -2,854 dOUT -16,718  [2 nb] 
+-- A gap filter (book)
+  A filter book N80 B220 (-15 cands)           n=148 win= 51% IN +25,980 OUT +22,222 tot +48,202 DD  3,649 0.58/s | dIN  -1,114 dOUT  +1,068  [2 nb] 
+  A filter book N80 B300 (-15 cands)           n=148 win= 51% IN +25,980 OUT +22,222 tot +48,202 DD  3,649 0.58/s | dIN  -1,114 dOUT  +1,068  [2 nb] 
+  A filter book N100 B220 (-12 cands)          n=151 win= 50% IN +25,833 OUT +22,222 tot +48,056 DD  3,649 0.59/s | dIN  -1,261 dOUT  +1,068  [3 nb] 
+  A filter book N100 B300 (-12 cands)          n=151 win= 50% IN +25,833 OUT +22,222 tot +48,056 DD  3,649 0.59/s | dIN  -1,261 dOUT  +1,068  [3 nb] 
+  A filter book N120 B220 (-9 cands)           n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317  [2 nb] 
+  A filter book N120 B300 (-9 cands)           n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317  [2 nb] 
+-- A gap filter (OB only)
+  A filter OB only N80 B220 (-14 cands)        n=149 win= 50% IN +25,980 OUT +21,502 tot +47,482 DD  3,649 0.59/s | dIN  -1,114 dOUT    +348  [2 nb] 
+  A filter OB only N80 B300 (-14 cands)        n=149 win= 50% IN +25,980 OUT +21,502 tot +47,482 DD  3,649 0.59/s | dIN  -1,114 dOUT    +348  [2 nb] 
+  A filter OB only N100 B220 (-11 cands)       n=152 win= 50% IN +25,833 OUT +21,502 tot +47,336 DD  3,649 0.60/s | dIN  -1,261 dOUT    +348  [3 nb] 
+  A filter OB only N100 B300 (-11 cands)       n=152 win= 50% IN +25,833 OUT +21,502 tot +47,336 DD  3,649 0.60/s | dIN  -1,261 dOUT    +348  [3 nb] 
+  A filter OB only N120 B220 (-8 cands)        n=153 win= 50% IN +25,833 OUT +20,751 tot +46,585 DD  3,649 0.60/s | dIN  -1,261 dOUT    -403  [2 nb] 
+  A filter OB only N120 B300 (-8 cands)        n=153 win= 50% IN +25,833 OUT +20,751 tot +46,585 DD  3,649 0.60/s | dIN  -1,261 dOUT    -403  [2 nb] 
+-- A gap filter (book, G = x ADR)
+  A filter book G=0.25 ADR (-18 cands)         n=145 win= 51% IN +25,355 OUT +22,790 tot +48,145 DD  3,649 0.57/s | dIN  -1,739 dOUT  +1,636  [1 nb] 
+  A filter book G=0.35 ADR (-15 cands)         n=148 win= 50% IN +24,021 OUT +22,222 tot +46,243 DD  3,649 0.58/s | dIN  -3,073 dOUT  +1,068  [2 nb] 
+  A filter book G=0.5 ADR (-9 cands)           n=152 win= 50% IN +25,833 OUT +21,471 tot +47,305 DD  3,649 0.60/s | dIN  -1,261 dOUT    +317  [1 nb] 
+-- A gap entry (4h)
+  A entry 4h N80 B220 <= 12:00 [+30; alone n=25 -1,150] n=181 win= 48% IN +25,686 OUT +20,261 tot +45,947 DD  4,394 0.71/s | dIN  -1,408 dOUT    -893  [3 nb] 
+  A entry 4h N80 B220 <= 14:45 [+44; alone n=35 -1,280] n=190 win= 47% IN +21,956 OUT +20,531 tot +42,487 DD  4,489 0.75/s | dIN  -5,138 dOUT    -623  [3 nb] 
+  A entry 4h N80 B300 <= 12:00 [+27; alone n=22 -2,624] n=179 win= 48% IN +25,766 OUT +19,778 tot +45,545 DD  4,394 0.70/s | dIN  -1,328 dOUT  -1,376  [3 nb] 
+  A entry 4h N80 B300 <= 14:45 [+41; alone n=32 -2,754] n=188 win= 47% IN +22,036 OUT +20,048 tot +42,084 DD  4,489 0.74/s | dIN  -5,058 dOUT  -1,106  [3 nb] 
+  A entry 4h N100 B220 <= 12:00 [+26; alone n=22 -2,452] n=178 win= 48% IN +24,823 OUT +19,822 tot +44,645 DD  4,820 0.70/s | dIN  -2,271 dOUT  -1,332  [4 nb] 
+  A entry 4h N100 B220 <= 14:45 [+40; alone n=32 -2,582] n=187 win= 47% IN +21,093 OUT +20,092 tot +41,185 DD  4,915 0.74/s | dIN  -6,001 dOUT  -1,062  [4 nb] 
+  A entry 4h N100 B300 <= 12:00 [+23; alone n=19 -3,926] n=176 win= 48% IN +24,904 OUT +19,339 tot +44,243 DD  4,820 0.69/s | dIN  -2,190 dOUT  -1,815  [4 nb] 
+  A entry 4h N100 B300 <= 14:45 [+37; alone n=29 -4,056] n=185 win= 46% IN +21,173 OUT +19,609 tot +40,783 DD  4,915 0.73/s | dIN  -5,921 dOUT  -1,545  [4 nb] 
+  A entry 4h N120 B220 <= 12:00 [+18; alone n=17 -1,169] n=174 win= 49% IN +26,269 OUT +20,389 tot +46,659 DD  4,352 0.69/s | dIN    -825 dOUT    -765  [3 nb] 
+  A entry 4h N120 B220 <= 14:45 [+29; alone n=25 -2,132] n=181 win= 48% IN +22,539 OUT +19,826 tot +42,366 DD  4,352 0.71/s | dIN  -4,555 dOUT  -1,328  [3 nb] 
+  A entry 4h N120 B300 <= 12:00 [+15; alone n=14 -2,643] n=172 win= 49% IN +26,350 OUT +19,907 tot +46,256 DD  4,352 0.68/s | dIN    -744 dOUT  -1,248  [3 nb] 
+  A entry 4h N120 B300 <= 14:45 [+26; alone n=22 -3,606] n=179 win= 47% IN +22,619 OUT +19,344 tot +41,963 DD  4,352 0.70/s | dIN  -4,475 dOUT  -1,811  [3 nb] 
+-- A gap entry (no4h)
+  A entry no4h N80 B220 <= 12:00 [+72; alone n=53 -4,811] n=208 win= 46% IN +24,899 OUT +18,151 tot +43,050 DD  5,072 0.82/s | dIN  -2,195 dOUT  -3,003  [3 nb] 
+  A entry no4h N80 B220 <= 14:45 [+90; alone n=67 -4,900] n=220 win= 45% IN +22,208 OUT +18,166 tot +40,374 DD  5,200 0.87/s | dIN  -4,886 dOUT  -2,989  [3 nb] 
+  A entry no4h N80 B300 <= 12:00 [+66; alone n=48 -6,470] n=204 win= 46% IN +24,795 OUT +17,668 tot +42,463 DD  5,108 0.80/s | dIN  -2,299 dOUT  -3,486  [3 nb] 
+  A entry no4h N80 B300 <= 14:45 [+83; alone n=61 -6,347] n=215 win= 45% IN +22,315 OUT +17,683 tot +39,998 DD  5,734 0.85/s | dIN  -4,779 dOUT  -3,472  [3 nb] 
+  A entry no4h N100 B220 <= 12:00 [+57; alone n=45 -3,549] n=201 win= 46% IN +24,420 OUT +19,128 tot +43,548 DD  5,072 0.79/s | dIN  -2,674 dOUT  -2,026  [4 nb] 
+  A entry no4h N100 B220 <= 14:45 [+75; alone n=59 -3,638] n=213 win= 45% IN +21,729 OUT +19,143 tot +40,871 DD  5,072 0.84/s | dIN  -5,365 dOUT  -2,012  [4 nb] 
+  A entry no4h N100 B300 <= 12:00 [+51; alone n=40 -5,208] n=197 win= 46% IN +24,315 OUT +18,645 tot +42,961 DD  5,072 0.78/s | dIN  -2,779 dOUT  -2,509  [4 nb] 
+  A entry no4h N100 B300 <= 14:45 [+68; alone n=53 -5,086] n=208 win= 45% IN +21,836 OUT +18,660 tot +40,495 DD  5,072 0.82/s | dIN  -5,258 dOUT  -2,495  [4 nb] 
+  A entry no4h N120 B220 <= 12:00 [+43; alone n=37 -1,473] n=194 win= 47% IN +26,659 OUT +19,695 tot +46,355 DD  4,360 0.76/s | dIN    -434 dOUT  -1,459  [3 nb] 
+  A entry no4h N120 B220 <= 14:45 [+58; alone n=49 -2,394] n=204 win= 46% IN +23,968 OUT +18,877 tot +42,845 DD  4,360 0.80/s | dIN  -3,126 dOUT  -2,277  [3 nb] 
+  A entry no4h N120 B300 <= 12:00 [+37; alone n=32 -3,129] n=190 win= 47% IN +26,558 OUT +19,212 tot +45,770 DD  4,360 0.75/s | dIN    -536 dOUT  -1,942  [3 nb] 
+  A entry no4h N120 B300 <= 14:45 [+51; alone n=43 -3,839] n=199 win= 46% IN +24,078 OUT +18,394 tot +42,472 DD  4,360 0.78/s | dIN  -3,016 dOUT  -2,760  [3 nb] 
+-- B SMT entry (4h)
+  B 4h SL candle TP 40 [+158; alone n=141 +253] n=291 win= 41% IN +30,611 OUT +14,780 tot +45,391 DD  9,623 1.15/s | dIN  +3,517 dOUT  -6,375  [2 nb] 
+  B 4h SL candle TP swing50 [+156; alone n=141 -46] n=293 win= 44% IN +31,913 OUT +12,478 tot +44,391 DD  8,574 1.15/s | dIN  +4,819 dOUT  -8,676  [2 nb] 
+  B 4h SL 20 TP 40 [+236; alone n=201 -16,071] n=349 win= 40% IN +24,587 OUT  +7,066 tot +31,653 DD 12,530 1.37/s | dIN  -2,507 dOUT -14,088  [3 nb] 
+  B 4h SL 20 TP swing50 [+231; alone n=202 -13,217] n=350 win= 45% IN +27,642 OUT  +6,459 tot +34,101 DD 12,103 1.38/s | dIN    +548 dOUT -14,695  [3 nb] 
+  B 4h SL 30 TP 40 [+199; alone n=172 -11,537] n=319 win= 46% IN +29,151 OUT  +7,076 tot +36,228 DD 10,120 1.26/s | dIN  +2,057 dOUT -14,078  [2 nb] 
+  B 4h SL 30 TP swing50 [+195; alone n=173 -12,702] n=322 win= 50% IN +26,153 OUT  +7,507 tot +33,660 DD 10,344 1.27/s | dIN    -941 dOUT -13,647  [2 nb] 
+-- B SMT entry (no4h)
+  B no4h SL candle TP 40 [+321; alone n=275 -13,428] n=419 win= 35% IN +24,418 OUT  +4,786 tot +29,204 DD 10,554 1.65/s | dIN  -2,676 dOUT -16,368  [2 nb] 
+  B no4h SL candle TP swing50 [+312; alone n=277 -7,908] n=422 win= 40% IN +29,434 OUT  +5,357 tot +34,791 DD 10,583 1.66/s | dIN  +2,340 dOUT -15,797  [2 nb] 
+  B no4h SL 20 TP 40 [+473; alone n=393 -34,857] n=534 win= 35% IN +16,721 OUT  -4,890 tot +11,831 DD 20,495 2.10/s | dIN -10,373 dOUT -26,045  [3 nb] 
+  B no4h SL 20 TP swing50 [+460; alone n=400 -28,028] n=540 win= 44% IN +22,775 OUT  -3,356 tot +19,419 DD 19,197 2.13/s | dIN  -4,319 dOUT -24,510  [3 nb] 
+  B no4h SL 30 TP 40 [+411; alone n=349 -36,512] n=485 win= 42% IN +14,091 OUT  -4,679 tot  +9,411 DD 19,280 1.91/s | dIN -13,003 dOUT -25,834  [2 nb] 
+  B no4h SL 30 TP swing50 [+400; alone n=353 -39,605] n=491 win= 48% IN  +8,684 OUT  -3,200 tot  +5,484 DD 17,081 1.93/s | dIN -18,410 dOUT -24,354  [2 nb] 
+-- D sweep (4h)
+  D plain 4h k1 2R [+1111; alone n=582 -67,495] n=701 win= 32% IN -17,659 OUT  -3,043 tot -20,702 DD 37,690 2.76/s | dIN -44,753 dOUT -24,197  [2 nb] 
+  D plain 4h k1 3R [+1111; alone n=565 -61,846] n=681 win= 25% IN -10,441 OUT  -7,033 tot -17,474 DD 33,925 2.68/s | dIN -37,535 dOUT -28,187  [2 nb] 
+  D plain 4h k3 2R [+1229; alone n=607 -72,081] n=719 win= 31% IN -30,232 OUT  +2,521 tot -27,711 DD 46,887 2.83/s | dIN -57,326 dOUT -18,633  [2 nb] 
+  D plain 4h k3 3R [+1229; alone n=580 -70,014] n=688 win= 24% IN -22,909 OUT  -5,566 tot -28,475 DD 42,382 2.71/s | dIN -50,003 dOUT -26,720  [2 nb] 
+-- D sweep (no4h)
+  D plain no4h k1 2R [+2182; alone n=956 -114,509] n=1050 win= 31% IN -58,431 OUT -17,227 tot -75,658 DD 79,450 4.13/s | dIN -85,525 dOUT -38,381  [2 nb] 
+  D plain no4h k1 3R [+2182; alone n=901 -120,639] n=993 win= 21% IN -58,860 OUT -27,044 tot -85,905 DD 86,269 3.91/s | dIN -85,954 dOUT -48,198  [2 nb] 
+  D plain no4h k3 2R [+2429; alone n=986 -124,394] n=1072 win= 30% IN -77,025 OUT -13,182 tot -90,207 DD 94,021 4.22/s | dIN -104,119 dOUT -34,336  [2 nb] 
+  D plain no4h k3 3R [+2429; alone n=923 -132,655] n=1003 win= 21% IN -73,022 OUT -26,510 tot -99,532 DD 99,532 3.95/s | dIN -100,116 dOUT -47,664  [2 nb] 
+-- D sweep + stretched approach (4h)
+  D stretched 4h k1 2R [+406; alone n=312 -21,356] n=445 win= 38% IN  +8,389 OUT +19,311 tot +27,700 DD 12,428 1.75/s | dIN -18,705 dOUT  -1,843  [2 nb] 
+  D stretched 4h k1 3R [+406; alone n=307 -20,293] n=435 win= 31% IN +13,089 OUT +15,689 tot +28,778 DD 12,597 1.71/s | dIN -14,005 dOUT  -5,465  [2 nb] 
+  D stretched 4h k3 2R [+506; alone n=367 -28,743] n=501 win= 36% IN  +3,016 OUT +16,663 tot +19,679 DD 14,918 1.97/s | dIN -24,078 dOUT  -4,491  [2 nb] 
+  D stretched 4h k3 3R [+506; alone n=360 -29,578] n=487 win= 29% IN  +2,085 OUT +14,979 tot +17,064 DD 19,791 1.92/s | dIN -25,009 dOUT  -6,175  [2 nb] 
+-- D sweep + level touched earlier (liquidity) (4h)
+  D touched 4h k1 2R [+799; alone n=510 -59,889] n=630 win= 33% IN -10,937 OUT    +989 tot  -9,948 DD 27,599 2.48/s | dIN -38,031 dOUT -20,165  [2 nb] 
+  D touched 4h k1 3R [+799; alone n=491 -63,433] n=610 win= 25% IN -12,065 OUT  -5,034 tot -17,100 DD 25,190 2.40/s | dIN -39,159 dOUT -26,189  [2 nb] 
+  D touched 4h k3 2R [+911; alone n=552 -65,197] n=663 win= 33% IN -15,536 OUT  -3,727 tot -19,263 DD 27,597 2.61/s | dIN -42,630 dOUT -24,881  [2 nb] 
+  D touched 4h k3 3R [+911; alone n=530 -71,908] n=638 win= 25% IN -19,604 OUT  -8,685 tot -28,289 DD 33,713 2.51/s | dIN -46,698 dOUT -29,839  [2 nb] 
+-- 6a breakeven trigger (premium R)
+  6a breakeven at never                        n=160 win= 52% IN +27,458 OUT +20,728 tot +48,186 DD  3,388 0.63/s | dIN    +364 dOUT    -426  [1 nb] 
+  6a breakeven at 0.75 R                       n=159 win= 48% IN +27,590 OUT +19,679 tot +47,270 DD  3,649 0.63/s | dIN    +496 dOUT  -1,475  [1 nb] 
+  6a breakeven at 1.0 R (= engine, baseline)   n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0  [2 nb] 
+  6a breakeven at 1.25 R                       n=160 win= 51% IN +27,187 OUT +21,154 tot +48,342 DD  3,649 0.63/s | dIN     +93 dOUT      +0  [2 nb] 
+  6a breakeven at 1.5 R                        n=160 win= 51% IN +27,113 OUT +21,154 tot +48,267 DD  3,649 0.63/s | dIN     +19 dOUT      +0  [2 nb] 
+-- 6b partial at 2R, rest orig
+  6b book 50% at 2R, rest +1R stop, trail 10 pts, orig n=159 win= 50% IN +18,192 OUT +13,272 tot +31,464 DD  3,649 0.63/s | dIN  -8,902 dOUT  -7,882  [2 nb] 
+  6b book 50% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +17,988 OUT +13,129 tot +31,117 DD  3,649 0.63/s | dIN  -9,106 dOUT  -8,025  [3 nb] 
+  6b book 50% at 2R, rest +1R stop, trail 20 pts, orig n=159 win= 50% IN +19,894 OUT +13,748 tot +33,641 DD  3,649 0.63/s | dIN  -7,200 dOUT  -7,407  [2 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 10 pts, orig n=159 win= 50% IN +16,668 OUT +10,163 tot +26,830 DD  3,649 0.63/s | dIN -10,426 dOUT -10,991  [2 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +16,586 OUT +10,106 tot +26,691 DD  3,649 0.63/s | dIN -10,508 dOUT -11,049  [4 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 20 pts, orig n=159 win= 50% IN +17,348 OUT +10,353 tot +27,701 DD  3,649 0.63/s | dIN  -9,746 dOUT -10,801  [2 nb] 
+  6b book 100% at 2R, rest +1R stop, trail 15 pts, orig n=159 win= 50% IN +16,359 OUT  +8,444 tot +24,803 DD  3,649 0.63/s | dIN -10,735 dOUT -12,710  [1 nb] 
+-- 6b partial at 2R, rest run
+  6b book 50% at 2R, rest +1R stop, trail 10 pts, run n=159 win= 50% IN +17,298 OUT +13,281 tot +30,579 DD  3,649 0.63/s | dIN  -9,796 dOUT  -7,873  [2 nb] 
+  6b book 50% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +17,074 OUT +12,313 tot +29,387 DD  3,649 0.63/s | dIN -10,020 dOUT  -8,841  [3 nb] 
+  6b book 50% at 2R, rest +1R stop, trail 20 pts, run n=159 win= 50% IN +18,960 OUT +12,981 tot +31,941 DD  3,649 0.63/s | dIN  -8,134 dOUT  -8,173  [2 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 10 pts, run n=159 win= 50% IN +16,310 OUT +10,166 tot +26,476 DD  3,649 0.63/s | dIN -10,784 dOUT -10,988  [2 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +16,221 OUT  +9,779 tot +26,000 DD  3,649 0.63/s | dIN -10,873 dOUT -11,375  [4 nb] 
+  6b book 80% at 2R, rest +1R stop, trail 20 pts, run n=159 win= 50% IN +16,975 OUT +10,046 tot +27,021 DD  3,649 0.63/s | dIN -10,119 dOUT -11,108  [2 nb] 
+  6b book 100% at 2R, rest +1R stop, trail 15 pts, run n=159 win= 50% IN +16,359 OUT  +8,444 tot +24,803 DD  3,649 0.63/s | dIN -10,735 dOUT -12,710  [1 nb] 
+-- 6c daily profit cap
+  6c stop for the day at +1.5 x loss limit (Rs 3,030) n=158 win= 50% IN +27,094 OUT +20,544 tot +47,638 DD  3,649 0.62/s | dIN      +0 dOUT    -610  [1 nb] 
+  6c stop for the day at +2 x loss limit (Rs 4,040) n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0  [2 nb] 
+  6c stop for the day at +3 x loss limit (Rs 6,060) n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0  [1 nb] 
+-- 6d max trades a day (his N=3)
+  6d at most 2 trades a day                    n=153 win= 50% IN +26,361 OUT +20,544 tot +46,905 DD  3,649 0.60/s | dIN    -733 dOUT    -610  [1 nb] 
+  6d at most 3 trades a day                    n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0  [2 nb] 
+  6d at most 4 trades a day                    n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s | dIN      +0 dOUT      +0  [1 nb] 
+
+PASSING VARIANTS: none
+
+(run time 170s)
