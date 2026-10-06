@@ -2489,7 +2489,8 @@ class IntradayEngine:
         from arb.stockspike import pick_stock_option
         cap_inr = self.capital.capital * stock_risk_pct(self.L) / 100.0
         lot = int(info.get("lot") or 0)
-        choice, why = pick_stock_option(chain, side, risk_pts, self.capital.capital, cap_inr, lot, self.cm) \
+        choice, why = pick_stock_option(chain, side, risk_pts, self.capital.capital, cap_inr, lot, self.cm,
+                                        otm=int(getattr(self.L, "stocks_option_strikes", 4))) \
             if chain else (None, [f"no NSE chain ({getattr(nse, 'last_error', '')[:60]})"])
         rec = {"playbook": "stock_option", "symbol": sym, "side": side, "setup": playbook,
                "stock_px": px, "stop_points": risk_pts, "lot": lot, "cap_inr": round(cap_inr, 2),

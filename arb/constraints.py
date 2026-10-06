@@ -405,7 +405,7 @@ def _stock_rows(e, now):
 
 def _stock_option_rows(e, now):
     """The stock's own option chain (NSE, refreshed by the desk), for every stock
-    in play: ATM and one strike either side, calls and puts. Shadow only - the
+    in play: ATM and stocks_option_strikes either side, calls and puts. Shadow only - the
     engine logs what it would buy (stocks_options) but never orders one."""
     L = e.L
     desk = e.stocks
@@ -453,7 +453,8 @@ def _stock_option_rows(e, now):
                 leg = r.get(opt) or {}
                 b, a = float(leg.get("buyPrice1") or 0), float(leg.get("sellPrice1") or 0)
                 mids.append((b + a) / 2 if b > 0 and a > 0 else float(leg.get("lastPrice") or 0))
-            for i in (atm - 1, atm, atm + 1):
+            w = int(getattr(L, "stocks_option_strikes", 4))
+            for i in range(atm - w, atm + w + 1):
                 if not 0 <= i < len(rows):
                     continue
                 leg = rows[i].get(opt) or {}

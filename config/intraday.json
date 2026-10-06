@@ -10,7 +10,7 @@
   "trail_step_r": 1.0,
   "max_risk_frac_of_premium": 0.5,
   "min_net_points": 10.0,
-  "max_risk_pct_per_trade": 6.0,
+  "max_risk_pct_per_trade": 8.0,
   "max_daily_loss_pct": 15.0,
   "max_open_positions": 1,
   "max_trades_per_day": 15,
@@ -37,6 +37,7 @@
   "stocks_spike_hold_min": 15,
   "stocks_movers_min": 5,
   "stocks_options": "shadow",
+  "stocks_option_strikes": 4,
   "capital_ceiling": 13466.9,
   "atr_by_index": {
     "NIFTY": [

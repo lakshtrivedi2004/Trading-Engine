@@ -811,6 +811,9 @@ class IntradayLimits:
     # it cannot (one lot above capital, loss at the stop above the risk cap).
     # Never sends an order; anything else is off.
     stocks_options: str = "off"
+    # Stock option strikes either side of the money: shown on the constraints
+    # page (ATM +/- this) and searched out of the money for a buy (owner: +/- 4).
+    stocks_option_strikes: int = 4
     # Universe filters. Liquidity is what makes a scalp possible at all: a
     # stock that trades Rs 50 crore a day has a one-tick spread on a Rs 50k
     # order; a thin one does not.

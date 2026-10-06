@@ -260,6 +260,7 @@ section("7. The constraints page shows each stock's option chain; the desk keeps
 import arb.constraints as cons
 L7 = IntradayLimits()
 L7.stocks_options = "shadow"
+L7.stocks_option_strikes = 1
 calls7 = []
 nse7 = SimpleNamespace(option_chain=lambda sym: calls7.append(sym) or ch, last_error="")
 d7 = sd.StockDesk({"ABC": {"lot": 500}}, {"ABC": 0}, Candles({}), L7, nse=nse7, log=lambda *_: None)
@@ -287,6 +288,12 @@ check("no setup on the stock yet: risk is '—' with the reason", atm_ce["risk"]
 e7.capital = SimpleNamespace(capital=3_000.0)
 rows7b = cons._stock_option_rows(e7, time.time())
 check("a lot above free capital is marked failing", rows7b[1]["lot"]["ok"] is False, rows7b[1]["lot"]["v"])
+L7.stocks_option_strikes = 4
+e7.capital = SimpleNamespace(capital=10_000.0)
+rows7c = cons._stock_option_rows(e7, time.time())
+check("ATM +/- 4 (the default): every strike the chain has within 4 either side",
+      [r["instrument"]["v"] for r in rows7c][:6] == [f"ABC {k} CE" for k in K], str(len(rows7c)))
+check("the default is 4 strikes either side", IntradayLimits().stocks_option_strikes == 4)
 L7.stocks_options = "off"
 check("stocks_options off: no option rows", cons._stock_option_rows(e7, time.time()) == [])
 
