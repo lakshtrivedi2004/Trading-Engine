@@ -178,6 +178,7 @@ class CandleStore:
         self._vol = VolumeTracker()
         self.live = {}                 # name -> [iso, o, h, l, c, v] for the open bucket
         self.max_rows = 3000           # ~8 sessions of 1-minute bars
+        self.stale_tick_sec = 30.0     # no index tick for this long: build no live bar (sparse index ticks reach ~20 s)
         self._fetch_errors = {}        # name -> last error text, logged once
         self._live_thread = None
         # The option premium chart: one mid-price row per minute for every
@@ -257,9 +258,20 @@ class CandleStore:
             b, a = st.bid, st.ask
             with self._lock:
                 self._premium.append((iso, np.where((b > 0) & (a > 0), (b + a) / 2, st.ltp)))
+        recv = getattr(st, "recv_ns", None)
+        now_ns = time.perf_counter_ns()
         for name, slot in self._spot_slots.items():
             px = float(st.ltp[slot])
             if px <= 0:
+                continue
+            # A dead feed must not invent bars. Without this the last price
+            # was written as a flat bar every minute: 5 Oct 12:16-12:26 the
+            # pace read 0.50 against a true 1.03, and 20 flat bars make ATR 0,
+            # which the regime gate used to pass. A minute with no tick is left
+            # missing; the next history refresh fills it. Index slots only - a
+            # quiet cash stock legitimately goes seconds without a trade.
+            if recv is not None and self.stale_tick_sec > 0 and name not in self._memory_only \
+                    and (now_ns - int(recv[slot])) / 1e9 > self.stale_tick_sec:
                 continue
             bar = self.live.get(name)
             if bar is None or bar[0] != iso:

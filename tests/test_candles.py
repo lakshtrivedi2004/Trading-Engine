@@ -163,6 +163,60 @@ try:
           market_phase(datetime(2026, 11, 10, 11, 0, tzinfo=IST)) == "holiday")
     check("a weekend is still a weekend",
           market_phase(datetime(2026, 10, 3, 10, 0, tzinfo=IST)) == "weekend")
+    # ═════════════════════════════════════════════════════════════════════════
+    section("4. A dead feed builds no bars; zero-range bars never pass the pace gate (5 Oct 12:16)")
+
+    class TickStore(Store):
+        def __init__(self):
+            super().__init__()
+            self.recv_ns = np.zeros(4, dtype=np.int64)
+
+    cs4 = cdl.CandleStore(FakeApi(done), [und], interval="1m", cache_dir=os.path.join(tmp, "c4"))
+    st4 = TickStore()
+    cs4.attach_feed(st4, {"NIFTY": 0})
+    cs4.data["NIFTY"] = [list(r) for r in done]          # 10:00-10:04
+    at(5, 1)
+    st4.ltp[0] = 24050.0
+    st4.recv_ns[0] = time.perf_counter_ns()               # fresh tick
+    cs4._sample_live()
+    check("a fresh tick opens the live bar", cs4.live.get("NIFTY", [None])[0] == iso(5))
+    st4.recv_ns[0] = time.perf_counter_ns() - int(90e9)   # feed silent for 90 s
+    for m in (6, 7, 8):
+        at(m, 1)
+        cs4._sample_live()
+    check("no tick for 90 s: no new bar is invented for 10:06-10:08",
+          cs4.live["NIFTY"][0] == iso(5) and cs4.data["NIFTY"][-1][0] == iso(4),
+          f"live {cs4.live['NIFTY'][0][11:16]}, last row {cs4.data['NIFTY'][-1][0][11:16]}")
+    st4.ltp[0] = 24070.0
+    st4.recv_ns[0] = time.perf_counter_ns()               # ticks resume at 10:09
+    at(9, 2)
+    cs4._sample_live()
+    check("ticks resume: the real 10:05 bar is kept, 10:09 opens, no flat 10:06-10:08",
+          [r[0][11:16] for r in cs4.data["NIFTY"][-2:]] == ["10:04", "10:05"]
+          and cs4.live["NIFTY"][0] == iso(9), str([r[0][11:16] for r in cs4.data["NIFTY"][-3:]]))
+    st4.ltp[0] = 24071.0
+    st4.recv_ns[0] = time.perf_counter_ns() - int(20e9)   # sparse but alive: 20 s since the last tick
+    at(10, 1)
+    cs4._sample_live()
+    check("a 20 s gap between index ticks (normal for sparse slots) still rolls the bar",
+          cs4.live["NIFTY"][0] == iso(10) and cs4.data["NIFTY"][-1][0] == iso(9))
+    cs5 = cdl.CandleStore(FakeApi(done), [und], interval="1m", cache_dir=os.path.join(tmp, "c5"))
+    st5 = TickStore()
+    cs5.attach_feed(st5, {}, extra_slots={"RELIANCE": 1})
+    st5.ltp[1] = 1400.0
+    st5.recv_ns[1] = time.perf_counter_ns() - int(60e9)   # a quiet stock
+    at(10, 1)
+    cs5._sample_live()
+    check("stocks are not held to the index tick-age rule",
+          cs5.live.get("RELIANCE", [None])[0] == iso(10))
+
+    from arb.config import IntradayLimits
+    from arb.regime import regime_gate
+    Lg = IntradayLimits()
+    flat = [[iso(m), 24000.0, 24000.0, 24000.0, 24000.0, 0.0] for m in range(60)]
+    why = regime_gate(flat, Lg, name="NIFTY")
+    check("60 flat bars (dead feed) are refused, not passed as 'unknown regime'",
+          why == "no_range_bars", repr(why))
 finally:
     time.time = _real_time
 

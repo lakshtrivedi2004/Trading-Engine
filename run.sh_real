@@ -127,6 +127,13 @@ echo
 red  "This places REAL orders with REAL money. Every trade can lose."
 dim  "The research log (research/PAPERS.md 0f-0i) has not shown a proven edge after costs;"
 dim  "the stock desk has not yet passed its replay. Start small and watch the first day."
+# 5 Oct 12:36: started from VS Code's terminal, the engine shared VS Code's snap
+# cgroup (OOMPolicy=stop) and was killed with it when memory ran out.
+if grep -q "snap.code" /proc/self/cgroup 2>/dev/null; then
+  red  "WARNING: this terminal is inside VS Code's memory group (snap.code)."
+  dim  "If VS Code or a research job runs out of memory, the LIVE engine is killed with it."
+  dim  "Prefer starting from a normal system terminal (GNOME Terminal), not VS Code's."
+fi
 printf 'Type REAL to start live trading: '
 read -r answer
 if [ "$answer" != "REAL" ]; then

@@ -25,7 +25,7 @@ from arb.candles import CandleStore
 from arb.dashboard import Dashboard, DashboardState
 from arb.engine import ArbEngine, ChainBinding
 from arb.execution import ExecutionEngine, LiveBroker, PaperBroker
-from arb.feed import NSE_CM, NSE_FO, AngelSession, MarketFeed
+from arb.feed import NSE_CM, NSE_FO, AngelSession, MarketFeed, redact
 from arb.instruments import (build_universe, live_futures, load_scrip_master, market_phase,
                              now_ist, years_to_expiry)
 from arb.intraday_engine import IntradayEngine
@@ -378,13 +378,60 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
         while not stopping.is_set():
             if not _wait_until_session(cfg, stopping, log):
                 break
-            _run_intraday_day(cfg, cm, creds, args, mode, notifier,
-                              dash_holder, current, stopping)
+            current["stage"], current["started"] = "starting", []
+            try:
+                _run_intraday_day(cfg, cm, creds, args, mode, notifier,
+                                  dash_holder, current, stopping)
+            except Exception as e:
+                # 6 Oct 09:17: one read timeout while downloading the scrip
+                # master ended the live process before the open, with nothing
+                # to restart it. A failure BEFORE the engine starts trading is
+                # retried; once it has started, the old behaviour stands (a
+                # rebuild must never run over a day that may hold positions).
+                if current.get("stage") != "starting":
+                    raise
+                _stop_partial_start(current, log)
+                why = redact(f"{type(e).__name__}: {e}")[:300]
+                log(f"day start failed: {why} - retrying in {START_RETRY_SEC:g} s")
+                if notifier:
+                    try:
+                        notifier.send(f"⚠️ <b>ENGINE START FAILED</b> · <code>{mode.upper()}</code>\n"
+                                      f"<code>{why[:200]}</code>\nRetrying in {START_RETRY_SEC:g} s.")
+                    except Exception:
+                        pass
+                stopping.wait(START_RETRY_SEC)
     finally:
         if dash_holder["dash"]:
             dash_holder["dash"].stop()
         if notifier:
             notifier.stop()
+
+
+START_RETRY_SEC = 60.0
+
+
+def _pace_need(L, name):
+    """This index's own pace threshold right now (atr_by_index halves) for the
+    pulse line - it printed min_atr_ratio for every index, so BANKNIFTY at
+    1.33x read 'open' while its gate needed 1.5 (5 Oct audit)."""
+    try:
+        from arb.constraints import _need
+        need, _rule, blocked = _need(L, name)
+        return "blocked" if blocked else f"{need:g}"
+    except Exception:
+        return "?"
+
+
+def _stop_partial_start(current, log):
+    """Stop whatever a failed day start had already started (candle store,
+    recorder, feed), so a retry never runs two of them."""
+    for obj in reversed(current.get("started") or []):
+        try:
+            obj.stop()
+        except Exception as e:
+            log(f"day start cleanup: {type(obj).__name__}.stop() failed: {e!r}")
+    current["started"] = []
+    current["engine"] = None
 
 
 def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
@@ -444,6 +491,7 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
     candles.attach_feed(feed.store, getattr(feed, "spot_slots", {}),
                         getattr(feed, "future_slots", {}),
                         extra_slots=getattr(feed, "stock_slots", {})).start()
+    current.setdefault("started", []).append(candles)
 
     engine = IntradayEngine(feed, bindings, cfg, cm, L, broker, journal,
                             capital, candles, notifier=notifier, log=log)
@@ -456,6 +504,8 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
     # One book snapshot a minute (~4 MB a day): Angel serves no history for
     # expired options, so this is the only premium data any rule can be tested on.
     recorder = TickRecorder(feed.store, bindings, hz=1 / 60.0).start() if cfg.record_ticks else None
+    if recorder:
+        current.setdefault("started", []).append(recorder)
 
     dash = dash_holder["dash"]
     if dash is not None:
@@ -478,6 +528,7 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
         log(f"dashboard   {dash.url} (bound to today's session)")
 
     feed.start()
+    current.setdefault("started", []).append(feed)
     log("websocket connecting...")
     if not feed.connected.wait(timeout=30):
         log("websocket did not connect in 30s; continuing to wait in background")
@@ -519,6 +570,7 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
         return market_phase(start=cfg.session_start,
                             end=cfg.session_end) == "closed" and phase == "open"
 
+    current["stage"] = "running"            # from here a failure is never retried
     engine.start(stop_predicate=should_stop)
     log(f"scanning ({mode}); Ctrl+C to stop")
 
@@ -538,14 +590,14 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
                 s = engine.summary()
                 # The pace gate refuses most of the day by design; printing the
                 # reading against its bar says so, instead of looking like a fault.
-                pace = " ".join(f"{k} {v['atr_ratio']:.2f}x"
+                pace = " ".join(f"{k} {v['atr_ratio']:.2f}x/{_pace_need(engine.L, k)}"
                                 for k, v in sorted(s["structures"].items()))
                 log(f"ticks={feed.ticks:,} passes={engine.passes:,} "
                     f"trades={s['trades']} (W{s['wins']}/L{s['losses']}) "
                     f"open={s['open']} "
                     f"pnl={_inr(s['day_pnl'])} ({s['day_pct']:+.2f}%) "
                     f"target={_inr(s['target_inr'])} "
-                    + (f"| pace {pace} (need {engine.L.min_atr_ratio:g}x) " if pace else "")
+                    + (f"| pace {pace} (reading/need) " if pace else "")
                     + f"| {s['rejects'] or 'scanning'}")
     except KeyboardInterrupt:
         pass

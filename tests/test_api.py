@@ -457,5 +457,63 @@ try:
 except Exception as ex:
     check("scrip master fallback (raised)", False, repr(ex)[:200])
 
+section("day loop: a failed start is retried, a failure after the engine started is not (6 Oct 09:17)")
+try:
+    import run_bot as _rb
+    _saved = (_rb._run_intraday_day, _rb._wait_until_session, _rb.START_RETRY_SEC, _rb.signal.signal)
+    _rb.START_RETRY_SEC = 0.0
+    _rb.signal.signal = lambda *a, **k: None
+
+    class _Args:
+        no_telegram, no_dashboard, duration, capital, port = True, True, None, None, 0
+
+    class _Leftover:
+        stopped = 0
+
+        def stop(self):
+            _Leftover.stopped += 1
+
+    _rb._wait_until_session = lambda cfg, stopping, log: not stopping.is_set()
+    seen = {"n": 0}
+
+    def _day(cfg, cm, creds, args, mode, notifier, dash_holder, current, stopping):
+        seen["n"] += 1
+        if seen["n"] == 1:
+            current["started"].append(_Leftover())
+            raise TimeoutError("The read operation timed out")
+        check("the retry starts clean: nothing left over from the failed start",
+              current["started"] == [] and current["stage"] == "starting")
+        current["stage"] = "running"
+        stopping.set()
+
+    _rb._run_intraday_day = _day
+    _rb.run_intraday_forever(None, None, None, _Args(), "live")
+    check("a start-up timeout is retried and the half-started parts are stopped",
+          seen["n"] == 2 and _Leftover.stopped == 1, f"days {seen['n']}, stopped {_Leftover.stopped}")
+
+    def _late(cfg, cm, creds, args, mode, notifier, dash_holder, current, stopping):
+        current["stage"] = "running"
+        raise RuntimeError("mid-day failure")
+
+    _rb._run_intraday_day = _late
+    try:
+        _rb.run_intraday_forever(None, None, None, _Args(), "live")
+        check("a failure after the engine started is NOT retried (raises)", False)
+    except RuntimeError:
+        check("a failure after the engine started is NOT retried (raises)", True)
+
+    def _refuse(cfg, cm, creds, args, mode, notifier, dash_holder, current, stopping):
+        raise SystemExit("LIVE START REFUSED: open positions")
+
+    _rb._run_intraday_day = _refuse
+    try:
+        _rb.run_intraday_forever(None, None, None, _Args(), "live")
+        check("a deliberate start refusal (SystemExit) is NOT retried", False)
+    except SystemExit:
+        check("a deliberate start refusal (SystemExit) is NOT retried", True)
+    _rb._run_intraday_day, _rb._wait_until_session, _rb.START_RETRY_SEC, _rb.signal.signal = _saved
+except Exception as ex:
+    check("day loop retry (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

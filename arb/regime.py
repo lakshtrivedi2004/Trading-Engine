@@ -175,6 +175,10 @@ def regime_gate(candles, L, now=None, name=None):
         ar = atr_ratio(candles, period=L.atr_period,
                        baseline_bars=L.atr_baseline_bars)
         if ar <= 0:
+            # Zero range over the whole ATR window is not a quiet market, it is
+            # a dead feed (flat bars at the last price): never a pass.
+            if atr(candles, L.atr_period) <= 0:
+                return "no_range_bars"
             # Not enough history to know the tape's own normal. That is a fact
             # about our data, not about the market, and it is only a refusal
             # when the operator asked for one.
