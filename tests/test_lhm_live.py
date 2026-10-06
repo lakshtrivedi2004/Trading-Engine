@@ -372,9 +372,13 @@ def t_once():
     CLK.at(15, 0, 12)
     e.hunt()
     check("...even after the book is flat again", len(api.params) == 1)
-    CLK.at(15, 0, 3)
+    # The normal hunt closes no_new_trades_minutes before the session end (the
+    # owner moved it from 15 to 5 on 6 Oct 2026: closed from 15:10); only the
+    # 15:00 last_half_hour entry is exempt from that gate.
+    _close_m = 15 - int(float(IntradayLimits.load().no_new_trades_minutes)) + 1
+    CLK.at(15, _close_m, 3)
     e0, _, _ = make(mode="off")
-    check("the normal hunt is still closed at 15:00 (too_close_to_squareoff not exempted for it)",
+    check(f"the normal hunt is closed at 15:{_close_m:02d} (too_close_to_squareoff not exempted for it)",
           e0._gates() == "too_close_to_squareoff", e0._gates())
 
     # An IOC that did not fill: one attempt, never chased.

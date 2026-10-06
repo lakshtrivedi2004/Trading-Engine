@@ -21,7 +21,7 @@
   "min_structure_bars": 25,
   "require_order_block": true,
   "squareoff_minutes": 1.0,
-  "no_new_trades_minutes": 15.0,
+  "no_new_trades_minutes": 5.0,
   "warmup_minutes": 15.0,
   "playbooks": [
     "ob_fvg_retest"
