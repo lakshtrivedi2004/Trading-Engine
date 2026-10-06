@@ -230,12 +230,16 @@ h = SigmaHistory(lambda: "API", {"NIFTY": _U()}, 14, 10, 28, cache_dir=_cache, l
                  fetch=fake_fetch)
 check("ensure() returns at once and starts a worker", h.ensure(DAY, ["NIFTY"]) is True)
 h._thread.join(5)
-check("the history call ran off the calling thread",
-      len(calls) == 1 and calls[0][0] != threading.current_thread().name, str([c[0] for c in calls]))
-p = calls[0][1]
-check("ONE_MINUTE on the spot token, ending yesterday",
+check("the history calls ran off the calling thread, in 10-day windows (28 days = 3 calls)",
+      len(calls) == 3 and all(c[0] != threading.current_thread().name for c in calls),
+      str([c[0] for c in calls]))
+p, pl = calls[0][1], calls[-1][1]
+check("ONE_MINUTE on the spot token, from 28 days back to yesterday, windows contiguous",
       p["interval"] == "ONE_MINUTE" and p["symboltoken"] == "99926000" and p["exchange"] == "NSE"
-      and p["todate"].startswith("2026-09-30") and p["fromdate"].startswith("2026-09-03"), str(p))
+      and p["fromdate"].startswith("2026-09-03") and pl["todate"].startswith("2026-09-30")
+      and [c[1]["fromdate"][:10] for c in calls] == ["2026-09-03", "2026-09-13", "2026-09-23"]
+      and [c[1]["todate"][:10] for c in calls] == ["2026-09-12", "2026-09-22", "2026-09-30"],
+      str([(c[1]["fromdate"][:10], c[1]["todate"][:10]) for c in calls]))
 prof = h.get(DAY, "NIFTY")
 check("profile from the last 14 sessions, today never in it",
       prof is not None and prof["days"] == HIST_DAYS[-14:] and DAY not in prof["days"]
@@ -243,7 +247,7 @@ check("profile from the last 14 sessions, today never in it",
 exp = nb.sigma_profile(nb.by_day([r for d in HIST_DAYS[-14:] for r in quiet_day(d)]), 14, 10)
 check("...equal to sigma_profile of those sessions", prof["sigma"] == exp)
 check("cached on disk under <date>_<index>.json", os.path.exists(os.path.join(_cache, f"{DAY}_NIFTY.json")))
-check("a second ensure() spends nothing", h.ensure(DAY, ["NIFTY"]) is False and len(calls) == 1)
+check("a second ensure() spends nothing", h.ensure(DAY, ["NIFTY"]) is False and len(calls) == 3)
 
 
 def boom(api, params):
@@ -410,7 +414,7 @@ try:
     e._shadow_noise()
     e._nb_hist._thread.join(5)
     check("the engine's history uses the candle store's spot token and api, off-thread",
-          len(calls) == 1 and calls[0][0] == "noise-sigma" and calls[0][1]["symboltoken"] == "99926000",
+          len(calls) == 3 and all(c[0] == "noise-sigma" and c[1]["symboltoken"] == "99926000" for c in calls),
           str(calls[:1]))
     check("built from the config: 14 sessions, need 10",
           e._nb_hist.ndays == 14 and e._nb_hist.min_days == 10 and e._nb_hist.get(DAY, "NIFTY") is not None)

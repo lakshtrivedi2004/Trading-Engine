@@ -27,7 +27,7 @@ class SigmaHistory:
     RETRY_SEC = 600.0
 
     def __init__(self, api_fn, underlyings, ndays=14, min_days=10, history_days=28,
-                 cache_dir=None, log=print, fetch=None):
+                 cache_dir=None, log=print, fetch=None, chunk_days=10):
         """api_fn() -> the SmartConnect (read at fetch time); underlyings:
         {name: Underlying} with spot_exchange / spot_token; fetch(api, params)
         defaults to candle_data."""
@@ -35,6 +35,10 @@ class SigmaHistory:
         self.underlyings = underlyings or {}
         self.ndays, self.min_days = int(ndays), int(min_days)
         self.history_days = int(history_days)
+        # 6 Oct: one 28-day ONE_MINUTE request for NIFTY timed out three times
+        # at the SDK's 7 s read timeout (BANKNIFTY/SENSEX got through). Smaller
+        # windows answer faster; the shared budget spaces them.
+        self.chunk_days = max(1, int(chunk_days))
         self.cache_dir = cache_dir or os.path.join(ROOT, ".cache", "noise_sigma")
         self.log = log
         self.fetch = fetch or candle_data
@@ -111,20 +115,26 @@ class SigmaHistory:
         if u is None:
             raise RuntimeError("no spot token for this index")
         d0 = date.fromisoformat(day)
-        params = {
-            "exchange": u.spot_exchange,
-            "symboltoken": u.spot_token,
-            "interval": "ONE_MINUTE",
-            "fromdate": (d0 - timedelta(days=self.history_days)).strftime("%Y-%m-%d 09:15"),
-            "todate": (d0 - timedelta(days=1)).strftime("%Y-%m-%d 15:30"),
-        }
-        self.calls += 1
-        r = self.fetch(self.api_fn(), params)
-        if isinstance(r, dict) and r.get("status") is False:
-            raise RuntimeError(f"{r.get('errorCode', '')} {r.get('message', '')}".strip())
-        raw = (r or {}).get("data") or []
-        rows = [[str(x[0]), float(x[1]), float(x[2]), float(x[3]), float(x[4])]
-                for x in raw if x and len(x) >= 5]
+        merged = {}
+        a, end = d0 - timedelta(days=self.history_days), d0 - timedelta(days=1)
+        while a <= end:                       # oldest window first; any failure fails the fetch
+            b = min(end, a + timedelta(days=self.chunk_days - 1))
+            params = {
+                "exchange": u.spot_exchange,
+                "symboltoken": u.spot_token,
+                "interval": "ONE_MINUTE",
+                "fromdate": a.strftime("%Y-%m-%d 09:15"),
+                "todate": b.strftime("%Y-%m-%d 15:30"),
+            }
+            self.calls += 1
+            r = self.fetch(self.api_fn(), params)
+            if isinstance(r, dict) and r.get("status") is False:
+                raise RuntimeError(f"{r.get('errorCode', '')} {r.get('message', '')}".strip())
+            for x in (r or {}).get("data") or []:
+                if x and len(x) >= 5:
+                    merged[str(x[0])] = [str(x[0]), float(x[1]), float(x[2]), float(x[3]), float(x[4])]
+            a = b + timedelta(days=1)
+        rows = [merged[k] for k in sorted(merged)]
         rows = [r_ for r_ in nb.in_session(rows) if r_[0][:10] < day]     # never today
         days = nb.by_day(rows)
         keys = sorted(days)
