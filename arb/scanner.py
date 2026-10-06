@@ -214,24 +214,35 @@ def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None,
     """
     rows = []
     banned = set(banned or ())
+    # Why names drop out, for the "nothing passes" log line (6 Oct 2026: TRENT
+    # +11% and nothing passed, with no way to see which filter refused it).
+    funnel = {"universe": len(stats), "no_quote_or_banned": 0, "price": 0, "turnover": 0,
+              "atr": 0, "cost": 0, "rvol": 0}
+    rank.last_funnel = funnel
     window = float(getattr(L, "stocks_rvol_window_min", 15.0))
     max_cost = float(getattr(L, "stocks_max_cost_ratio", 1.0))
     cost_ratio = cost_ratio or {}
     for sym, st in stats.items():
         q = live.get(sym)
         if not q or st is None or sym in banned:
+            funnel["no_quote_or_banned"] += 1
             continue
         o, h, lo, px, vol = (float(q.get(k) or 0.0) for k in ("open", "high", "low", "ltp", "volume"))
         if min(o, h, lo, px, st.prev_close) <= 0 or st.atr_pct <= 0:
+            funnel["no_quote_or_banned"] += 1
             continue
         if px < float(getattr(L, "stocks_min_price", 50.0)):
+            funnel["price"] += 1
             continue
         if st.turnover_cr < float(getattr(L, "stocks_min_turnover_cr", 50.0)):
+            funnel["turnover"] += 1
             continue
         if st.atr_pct * 100 < float(getattr(L, "stocks_min_atr_pct", 1.5)):
+            funnel["atr"] += 1
             continue
         cr = cost_ratio.get(sym)
         if cr is not None and max_cost > 0 and cr > max_cost:
+            funnel["cost"] += 1
             continue
         atr = st.atr_pct * st.prev_close
         base = (same_time or {}).get(sym) or (st.adv * volume_done(minute) if st.adv > 0 else 0.0)
@@ -271,6 +282,8 @@ def rank(stats, live, minute, L, banned=(), index_moves=None, same_time=None,
         r.score = sum(wk * rk[i] for wk, rk in zip(w, ranks)) / max(sum(w), 1e-9)
         r.reasons = [f"{n} p{100 * rk[i]:.0f}" for n, rk, wk in zip(names, ranks, w) if wk and rk[i] >= 0.8]
     min_rvol = float(getattr(L, "stocks_min_rvol", 0.0))
+    funnel["rvol"] = sum(1 for r in rows if r.rvol < min_rvol)
     rows = [r for r in rows if r.rvol >= min_rvol]
+    funnel["passed"] = len(rows)
     rows.sort(key=lambda r: -r.score)
     return rows

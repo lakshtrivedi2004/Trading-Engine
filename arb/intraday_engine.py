@@ -1816,6 +1816,15 @@ class IntradayEngine:
                           cost_ratio=self._stock_cost_ratio)
             except Exception as e:
                 self.log(f"[stocks] scan failed: {e!r}")
+        if desk is not None:
+            # Every subscribed stock, once a minute: a sudden ATR spike joins the
+            # picks at once instead of waiting for the next 30-minute rescan.
+            try:
+                desk.spike_tick(cost_ratio=self._stock_cost_ratio)
+            except Exception as e:
+                if not getattr(self, "_spike_err_logged", False):
+                    self._spike_err_logged = True
+                    self.log(f"[stocks] spike watch failed: {e!r}")
         gate = self._gates()
         if gate:
             self._note(gate)
@@ -2413,6 +2422,12 @@ class IntradayEngine:
             if risk <= 0 or (a > 0 and risk < L.min_stop_atr * a):
                 self._note("stock:no_viable_stop")
                 continue
+            try:
+                self._shadow_stock_option(sym, info, v.side, px, risk, getattr(lead, "name", ""))
+            except Exception as e:
+                if not getattr(self, "_sso_err_logged", False):
+                    self._sso_err_logged = True
+                    self.log(f"[shadow] stock option error: {e!r}")
             bid, ask = float(store.bid[slot]), float(store.ask[slot])
             if bid <= 0 or ask <= 0:
                 self._note("stock:no_quote")
@@ -2436,6 +2451,64 @@ class IntradayEngine:
                 continue
             if self._enter_stock(sym, info, slot, v, st, px, inv, risk, tgt, qty, fill_px, rt, rows, pick):
                 return
+
+    # ── the stock's own option, shadow only ─────────────────────────────────
+    def _shadow_stock_option(self, sym, info, side, px, risk_pts, playbook=""):
+        """stocks_options = "shadow": for a stock setup that has a stop, price
+        the stock's CE (long) / PE (short) off NSE's chain and log what the
+        engine would buy - or why it cannot (one lot above capital, loss at the
+        stop above the risk cap). The chain is fetched on a background thread
+        (one at a time, reused for 3 minutes); a setup is logged at most once
+        per stock per 10 minutes. Never sends an order."""
+        if str(getattr(self.L, "stocks_options", "off")) != "shadow":
+            return
+        nse = getattr(self.stocks, "nse", None)
+        if nse is None:
+            return
+        now = time.time()
+        if not hasattr(self, "_sso_chain"):
+            self._sso_chain, self._sso_last, self._sso_busy = {}, {}, False
+        if now - self._sso_last.get(sym, -1e9) < 600:
+            return
+        got = self._sso_chain.get(sym)
+        if got is None or now - got[0] > 180:
+            if not self._sso_busy:
+                self._sso_busy = True
+
+                def work():
+                    try:
+                        self._sso_chain[sym] = (time.time(), nse.option_chain(sym) or {})
+                    except Exception:
+                        self._sso_chain[sym] = (time.time(), {})
+                    finally:
+                        self._sso_busy = False
+                threading.Thread(target=work, name="nse-chain", daemon=True).start()
+            return                               # decided on a later pass, with the chain
+        self._sso_last[sym] = now
+        chain = got[1]
+        from arb.stockspike import pick_stock_option
+        cap_inr = self.capital.capital * stock_risk_pct(self.L) / 100.0
+        lot = int(info.get("lot") or 0)
+        choice, why = pick_stock_option(chain, side, risk_pts, self.capital.capital, cap_inr, lot, self.cm) \
+            if chain else (None, [f"no NSE chain ({getattr(nse, 'last_error', '')[:60]})"])
+        rec = {"playbook": "stock_option", "symbol": sym, "side": side, "setup": playbook,
+               "stock_px": px, "stop_points": risk_pts, "lot": lot, "cap_inr": round(cap_inr, 2),
+               "opened": now_ist().isoformat(), "choice": choice, "skipped": why}
+        if choice:
+            self.log(f"[shadow] stock option WOULD BUY {sym} {choice['strike']:g}{choice['opt']} "
+                     f"{choice['expiry']} @ {choice['ask']:.2f} x{lot} (Rs {choice['lot_cost']:,.0f}) | "
+                     f"delta {choice['delta']:.2f}, loss at stop Rs {choice['loss_at_stop']:,.0f} "
+                     f"<= cap Rs {cap_inr:,.0f} | NO ORDER SENT")
+        else:
+            self.log(f"[shadow] stock option {sym} {'CE' if side > 0 else 'PE'}: nothing tradable - "
+                     + "; ".join(why[:3]))
+        jdir = getattr(self.journal, "dir", None)
+        if jdir:
+            try:
+                with open(os.path.join(jdir, f"shadow_{rec['opened'][:10]}.jsonl"), "a") as fh:
+                    fh.write(json.dumps(rec, default=str) + "\n")
+            except OSError:
+                pass
 
     def _enter_stock(self, sym, info, slot, v, st, px, inv, risk, tgt, qty, quote, rt, rows, pick):
         L = self.L

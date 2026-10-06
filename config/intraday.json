@@ -31,6 +31,12 @@
   "extend_giveback_r": 0.25,
   "stocks_enabled": true,
   "stocks_top_k": 5,
+  "stocks_spike_watch": "on",
+  "stocks_spike_ratio": 5.0,
+  "stocks_spike_k": 3,
+  "stocks_spike_hold_min": 15,
+  "stocks_movers_min": 5,
+  "stocks_options": "shadow",
   "capital_ceiling": 13466.9,
   "atr_by_index": {
     "NIFTY": [

@@ -792,6 +792,25 @@ class IntradayLimits:
     stocks_top_k: int = 5
     stocks_pick_at: str = "09:30"
     stocks_rescan_min: float = 30.0
+    # Per-minute spike watch over every subscribed stock (arb/stockspike.py,
+    # owner 6 Oct 2026): "on" adds a spiking stock to the picks for
+    # stocks_spike_hold_min (traded by the same gates, stops and risk cap as
+    # any pick), "shadow" only logs it, anything else is off. Spike = mean true
+    # range of the last stocks_spike_fast closed 1-minute bars over the median
+    # of up to stocks_spike_base_bars before them.
+    stocks_spike_watch: str = "off"
+    stocks_spike_ratio: float = 5.0          # 2.5 fired 1,000-2,500 times a day on real bars; 5 fires 11-34
+    stocks_spike_fast: int = 5
+    stocks_spike_base_bars: int = 120
+    stocks_spike_k: int = 3
+    stocks_spike_hold_min: float = 15.0
+    # NSE's live top gainers/losers (F&O), refreshed this often (minutes; 0 = off).
+    stocks_movers_min: float = 5.0
+    # The stock's own option (CE long / PE short) priced off NSE's chain for
+    # every stock setup: "shadow" logs and journals what it would buy, or why
+    # it cannot (one lot above capital, loss at the stop above the risk cap).
+    # Never sends an order; anything else is off.
+    stocks_options: str = "off"
     # Universe filters. Liquidity is what makes a scalp possible at all: a
     # stock that trades Rs 50 crore a day has a one-tick spread on a Rs 50k
     # order; a thin one does not.

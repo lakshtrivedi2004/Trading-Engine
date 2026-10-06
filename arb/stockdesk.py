@@ -25,7 +25,8 @@ import time
 from collections import deque
 
 from arb.instruments import IST, now_ist
-from arb.scanner import daily_stat, rank, same_time_volume
+from arb.scanner import InPlay, daily_stat, rank, same_time_volume
+from arb.stockspike import spike
 
 HIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     ".cache", "history", "stocks")
@@ -65,6 +66,17 @@ class StockDesk:
         # them. Not "seeded": today's bars are still missing, so the next
         # rescan asks the API again rather than leaving the gap all session.
         self._disk_only = set()
+        # Per-minute spike watch over EVERY subscribed stock (owner, 6 Oct 2026):
+        # a stock whose range explodes between two 30-minute rescans joins the
+        # picks at once and stays for stocks_spike_hold_min.
+        self._picks = []            # the last rescan's top K
+        self._spikes = {}           # symbol -> (InPlay, expires_at)
+        self._spike_minute = ""
+        self.last_spikes = []       # [(symbol, ratio, move)] of the last scan, for the log/page
+        # NSE's live top gainers / losers (F&O), refreshed in the background.
+        self.movers = {}            # symbol -> (list, % change, rank)
+        self._movers_at = 0.0
+        self._movers_busy = False
 
     # ── reference data ──────────────────────────────────────────────────────
     def load(self):
@@ -224,25 +236,148 @@ class StockDesk:
                       index_moves=index_moves, same_time=same,
                       same_time_recent=same_recent, cost_ratio=costs)
         self.last_rank = ranked[:15]
-        self.active = ranked[:int(self.L.stocks_top_k)]
+        self._picks = ranked[:int(self.L.stocks_top_k)]
+        self._merge_spikes()
         self.last_pick = time.time()
         if not ranked:
             # Probably no quotes yet (just started): look again in a minute,
             # not at the next half-hour rescan.
             self.last_pick -= max(0.0, 60.0 * float(self.L.stocks_rescan_min) - 60.0)
-        if self.active:
+        if self._picks:
             self.log("[stocks] in play: " + "; ".join(
                 f"{r.symbol} {r.bias} {100 * r.from_open:+.1f}% rvol {r.rvol:.1f} "
                 f"ATR {100 * r.atr_pct:.1f}%"
                 + (f" cost {r.cost_ratio:.2f}" if r.cost_ratio is not None else "")
-                for r in self.active))
-            want = [r.symbol for r in self.active if r.symbol not in self._seeded]
+                for r in self._picks))
+            want = [r.symbol for r in self._picks if r.symbol not in self._seeded]
             if want:
                 threading.Thread(target=self._seed_all, args=(want,),
                                  name="stock-seed", daemon=True).start()
         else:
-            self.log("[stocks] nothing passes the scan filters")
+            f = getattr(rank, "last_funnel", None) or {}
+            self.log("[stocks] nothing passes the scan filters"
+                     + (" (" + ", ".join(f"{k} {v}" for k, v in f.items()) + ")" if f else ""))
         return self.active
+
+    # ── the per-minute spike watch ──────────────────────────────────────────
+    def _merge_spikes(self, now=None):
+        """active = the rescan's picks + live spikes not already among them."""
+        t = time.time() if now is None else now
+        self._spikes = {s: v for s, v in self._spikes.items() if v[1] > t}
+        names = {r.symbol for r in self._picks}
+        self.active = list(self._picks) + [v[0] for s, v in sorted(
+            self._spikes.items(), key=lambda kv: -kv[1][0].score) if s not in names]
+
+    def _closed_rows(self, sym, n, limit=200):
+        """This stock's CLOSED one-minute bars (the bar of minute `n` is still forming)."""
+        cur = n.strftime("%Y-%m-%dT%H:%M")
+        return [r for r in self.candles.get(sym, limit=limit) if r[0][:16] < cur]
+
+    def refresh_movers(self):
+        """NSE's top gainers and losers (F&O), on a background thread, at most
+        every stocks_movers_min. Abstains (keeps the last list) on any failure."""
+        every = 60.0 * float(getattr(self.L, "stocks_movers_min", 5.0) or 0.0)
+        if self.nse is None or every <= 0 or self._movers_busy or time.time() - self._movers_at < every:
+            return
+
+        def work():
+            try:
+                out = {}
+                for side in ("gainers", "losers"):
+                    for k, x in enumerate(self.nse.movers(side) or []):
+                        sym = x.get("symbol")
+                        if sym:
+                            out[sym] = (side, float(x.get("perChange") or 0.0), k + 1)
+                if out:
+                    self.movers = out
+            except Exception:
+                pass
+            finally:
+                self._movers_at = time.time()
+                self._movers_busy = False
+
+        self._movers_busy = True
+        threading.Thread(target=work, name="nse-movers", daemon=True).start()
+
+    def spike_tick(self, now=None, cost_ratio=None):
+        """Once a minute (just after the bar closes): every subscribed stock's
+        short-window ATR against its own recent normal. A stock at or above
+        stocks_spike_ratio joins the active picks for stocks_spike_hold_min -
+        NSE top gainers/losers first, then the biggest spikes. Returns the new
+        spike names. stocks_spike_watch: "on" feeds the engine, "shadow" only
+        logs, anything else is off."""
+        mode = str(getattr(self.L, "stocks_spike_watch", "off"))
+        if mode not in ("on", "shadow") or not self._ready.is_set():
+            return []
+        n = now or now_ist()
+        key = n.strftime("%H:%M")
+        if key == self._spike_minute or n.second < 3:
+            return []
+        m = n.hour * 60 + n.minute
+        hh, mm = (int(x) for x in str(self.L.stocks_pick_at).split(":"))
+        if m < hh * 60 + mm or m >= 15 * 60:          # no new stock entries from 15:00
+            return []
+        self._spike_minute = key
+        self.refresh_movers()
+        L = self.L
+        thr = float(getattr(L, "stocks_spike_ratio", 2.5))
+        fast = int(getattr(L, "stocks_spike_fast", 5))
+        base = int(getattr(L, "stocks_spike_base_bars", 120))
+        max_cost = float(getattr(L, "stocks_max_cost_ratio", 1.0))
+        with self._lock:
+            stats = dict(self.stats)
+        found = []
+        for sym in self.slots:
+            st = stats.get(sym)
+            if st is None or sym in self.banned:
+                continue
+            if st.prev_close < float(getattr(L, "stocks_min_price", 100.0)) \
+                    or st.turnover_cr < float(getattr(L, "stocks_min_turnover_cr", 50.0)):
+                continue
+            rows = self._closed_rows(sym, n, limit=base + fast + 2)
+            r = spike(rows, fast=fast, base=base)
+            if r is None or r[0] < thr:
+                continue
+            cr = None
+            if cost_ratio is not None:
+                try:
+                    cr = cost_ratio(sym)
+                except Exception:
+                    cr = None
+                if cr is not None and max_cost > 0 and cr > max_cost:
+                    continue
+            found.append((sym, r[0], r[1], cr, rows[-1][4], st))
+        # NSE's movers first (the owner's "most positive / most negative"), then size of spike.
+        found.sort(key=lambda f: (f[0] not in self.movers, -f[1]))
+        self.last_spikes = [(f[0], round(f[1], 2), round(f[2], 4)) for f in found[:15]]
+        k = int(getattr(L, "stocks_spike_k", 3))
+        hold = 60.0 * float(getattr(L, "stocks_spike_hold_min", 15.0))
+        picks = {r.symbol for r in self._picks}
+        new = []
+        for sym, ratio, move, cr, px, st in found:
+            if len(new) >= k:
+                break
+            if sym in picks:
+                continue
+            mv = self.movers.get(sym)
+            tag = f" NSE {mv[0][:-1]} #{mv[2]} {mv[1]:+.1f}%" if mv else ""
+            ip = InPlay(sym, ratio, px, st.atr_pct, 0.0, px / st.prev_close - 1 if st.prev_close else 0.0,
+                        move, 0.0, 0.0, cost_ratio=cr, reasons=[f"spike {ratio:.1f}x" + tag])
+            fresh = sym not in self._spikes
+            if mode == "on":
+                self._spikes[sym] = (ip, time.time() + hold)
+            if fresh:
+                new.append(sym)
+                self.log(f"[stocks] spike{' (shadow)' if mode != 'on' else ''}: {sym} "
+                         f"{ratio:.1f}x its normal 1-min range, {100 * move:+.2f}% in {fast} min"
+                         f"{tag}" + (f" cost {cr:.2f}" if cr is not None else ""))
+        if mode == "on":
+            self._merge_spikes()
+            want = [s for s in new if s not in self._seeded]
+            if want:
+                threading.Thread(target=self._seed_all, args=(want,),
+                                 name="stock-seed", daemon=True).start()
+        return new
 
     def same_time_for(self, stats, minute):
         """Average volume on recent sessions, where a stock has 1-minute history
@@ -350,5 +485,8 @@ class StockDesk:
                                 reasons=r.reasons)
                            for r in self.active],
                 "ranked": [r.symbol for r in self.last_rank],
+                "spikes": list(self.last_spikes),
+                "movers": sorted(([s, v[0], v[1]] for s, v in self.movers.items()),
+                                 key=lambda x: -abs(x[2]))[:10],
                 "universe": len(self.slots), "with_stats": len(self.stats),
                 "banned": sorted(self.banned)}

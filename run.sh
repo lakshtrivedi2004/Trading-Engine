@@ -64,6 +64,8 @@ case "$cmd" in
     echo
     "$PY" tests/test_noise_breakout.py || exit 1
     echo
+    "$PY" tests/test_stockspike.py || exit 1
+    echo
     exec "$PY" tests/test_live.py ;;
   arb)     shift; set -- --strategy arb "$@" ;;
   logs)
