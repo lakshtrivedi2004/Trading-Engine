@@ -419,18 +419,20 @@ check("...and the next rescan loads today's history once the API answers",
       desk.api.calls == calls + 1 and "AAA" in desk._seeded and "AAA" not in desk._disk_only
       and c.seeded["AAA"] != saved, f"{desk.api.calls - calls} more calls")
 
-section("5. Stocks have their own risk cap: 8% of capital, never more (owner, 6 Oct 2026)")
+section("5. Stocks: the index's risk cap unless set, never above 7% (owner, 6 Oct 2026)")
 from arb.config import stock_risk_pct
 L5 = IntradayLimits()
 L5.max_risk_pct_per_trade = 6.0
 L5.stocks_max_risk_pct = 0.0
 check("unset: a stock uses the index cap (6%)", stock_risk_pct(L5) == 6.0)
-L5.stocks_max_risk_pct = 8.0
-check("set to 8: a stock may risk 8%, the index cap stays 6%",
-      stock_risk_pct(L5) == 8.0 and L5.max_risk_pct_per_trade == 6.0)
+L5.stocks_max_risk_pct = 7.0
+check("set to 7: a stock may risk 7%, the index cap stays 6%",
+      stock_risk_pct(L5) == 7.0 and L5.max_risk_pct_per_trade == 6.0)
 L5.stocks_max_risk_pct = 80.0
-check("a typo of 80 is held to the 8% ceiling", stock_risk_pct(L5) == 8.0)
-L5.stocks_max_risk_pct = 8.0
+check("a typo of 80 is held to the 7% ceiling", stock_risk_pct(L5) == 7.0)
+L5.max_risk_pct_per_trade, L5.stocks_max_risk_pct = 9.0, 0.0
+check("even the index cap raised to 9% leaves stocks at 7%", stock_risk_pct(L5) == 7.0)
+L5.max_risk_pct_per_trade, L5.stocks_max_risk_pct = 6.0, 7.0
 L6 = IntradayLimits()
 L6.max_risk_pct_per_trade = 6.0
 L6.stocks_max_risk_pct = 0.0
@@ -438,8 +440,8 @@ L6.stocks_max_risk_pct = 0.0
 # fees are a smaller share of the risk and the cost ratio falls.
 r8 = scan_cost_ratio(999.9, 1000.1, 15.0, 10_000.0, L5, CM)
 r6 = scan_cost_ratio(999.9, 1000.1, 15.0, 10_000.0, L6, CM)
-check("the scan's cost ratio uses the stock cap (8% < 6% ratio on a risk-bound size)",
-      r8 is not None and r6 is not None and r8 < r6, f"8%: {r8:.3f}  6%: {r6:.3f}")
+check("the scan's cost ratio uses the stock cap (7% < 6% ratio on a risk-bound size)",
+      r8 is not None and r6 is not None and r8 < r6, f"7%: {r8:.3f}  6%: {r6:.3f}")
 
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")

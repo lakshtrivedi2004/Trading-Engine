@@ -783,10 +783,10 @@ class IntradayLimits:
     # broker may give less on a given stock, and a live order above its limit
     # is refused, not resized.
     stocks_leverage: float = 5.0
-    # Per-trade risk cap for a STOCK trade, % of capital, costs inside (owner,
-    # 6 Oct 2026: "stocks: stoploss below 8% of capital, not more"). 0 = use
-    # max_risk_pct_per_trade. Never above STOCKS_RISK_CEILING_PCT whatever the
-    # file says. Indices keep max_risk_pct_per_trade.
+    # Per-trade risk cap for a STOCK trade, % of capital, costs inside. 0 = the
+    # same cap as the indices (max_risk_pct_per_trade). Owner, 6 Oct 2026:
+    # "7% or below, the same as the index" - never above
+    # STOCKS_RISK_CEILING_PCT whatever the file says.
     stocks_max_risk_pct: float = 0.0
     # The scan: how many names to trade, when to pick them, how often to re-pick.
     stocks_top_k: int = 5
@@ -955,11 +955,11 @@ class IntradayLimits:
             json.dump(self.__dict__, fh, indent=2)
 
 
-STOCKS_RISK_CEILING_PCT = 8.0
+STOCKS_RISK_CEILING_PCT = 7.0
 
 
 def stock_risk_pct(L):
     """The per-trade risk cap for a stock trade, % of capital: stocks_max_risk_pct
-    when set, else max_risk_pct_per_trade; never above 8% (owner, 6 Oct 2026)."""
+    when set, else max_risk_pct_per_trade; never above 7% (owner, 6 Oct 2026)."""
     pct = float(getattr(L, "stocks_max_risk_pct", 0.0) or 0.0) or float(L.max_risk_pct_per_trade)
     return min(pct, STOCKS_RISK_CEILING_PCT)
