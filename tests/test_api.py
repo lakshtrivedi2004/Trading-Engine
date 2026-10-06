@@ -388,5 +388,39 @@ try:
 except Exception as ex:                                # the parent commit has no bucket
     check("order bucket (raised)", False, repr(ex)[:200])
 
+section("feed: reconnects never grow the subscription lists (5 Oct OOM)")
+try:
+    import threading as _th
+    from SmartApi.smartWebSocketV2 import SmartWebSocketV2 as _RealWS
+    from arb import feed as _feed
+
+    class _SentApp:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, data, *a, **k):
+            self.sent.append(len(data))
+
+    class _Stub:
+        pass
+
+    st = _Stub()
+    st.subscriptions = {1: ["26000", "26009", "2885"], 2: ["35001", "35002"], 3: ["19000"]}
+    st.correlation_id = "arbfeed01"
+    st.connected = _th.Event()
+    sizes, frames = [], []
+    for gen in range(6):
+        # The REAL SDK class (its subscribe keeps what it is given), a fake socket.
+        st.sws = _RealWS("jwt", "key", "CLIENT", "feed", max_retry_attempt=0)
+        st.sws.wsapp = _SentApp()
+        _feed.MarketFeed._on_open(st, None)
+        sizes.append({et: len(t) for et, t in st.subscriptions.items()})
+        frames.append(st.sws.wsapp.sent[-1] if st.sws.wsapp.sent else 0)
+    check("our lists stay the same size over 6 reconnects", all(x == sizes[0] for x in sizes),
+          f"{sizes[0]} .. {sizes[-1]}")
+    check("each subscribe frame is the same size", len(set(frames)) == 1 and frames[0] > 0, f"{frames}")
+except Exception as ex:
+    check("subscription growth (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

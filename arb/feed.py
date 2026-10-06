@@ -246,7 +246,11 @@ class MarketFeed:
             self.dropped += 1
 
     def _on_open(self, wsapp):
-        token_list = [{"exchangeType": et, "tokens": toks}
+        # COPIES, never our own lists: the SDK keeps what it is given and
+        # extends it on the next subscribe, so passing self.subscriptions by
+        # reference doubled every list on every reconnect (5 Oct 12:36: 49
+        # reconnects, 7.7 GB, engine OOM-killed).
+        token_list = [{"exchangeType": et, "tokens": list(toks)}
                       for et, toks in self.subscriptions.items() if toks]
         if token_list:
             self.sws.subscribe(self.correlation_id, SmartWebSocketV2.SNAP_QUOTE, token_list)
@@ -314,14 +318,16 @@ class MarketFeed:
                 self._stopping.wait(5.0)
 
     def _run_once(self):
-        self._gen += 1
-        gen = self._gen
+        gen = self._gen + 1
         # A generation's own event: a late close of an abandoned socket can no
-        # longer end the NEXT socket's life (review F-M1).
+        # longer end the NEXT socket's life (review F-M1). Everything the
+        # watchdog reads is set BEFORE the new number is published, so it can
+        # never pair the new generation with the old start time.
         self._dead = dead = threading.Event()
         self.connected.clear()
         self._opened_ns = 0
         self._gen_started = time.time()
+        self._gen = gen
         self.sws = sws = self._new_socket(gen)
         threading.Thread(target=self._connect, args=(sws, gen, dead),
                          name=f"ws-{gen}", daemon=True).start()
