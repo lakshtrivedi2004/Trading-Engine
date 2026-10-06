@@ -422,5 +422,40 @@ try:
 except Exception as ex:
     check("subscription growth (raised)", False, repr(ex)[:200])
 
+section("scrip master: a failed download retries, then falls back to yesterday's file (6 Oct 09:17)")
+try:
+    import io as _io, json as _json, urllib.request as _ur
+    from arb import instruments as _ins
+    _saved = (_ins.CACHE_DIR, _ur.urlopen)
+    _tmp = tempfile.mkdtemp()
+    _ins.CACHE_DIR = _tmp
+    calls = {"n": 0}
+
+    def _mk(fail_first):
+        def _open(req, timeout=None):
+            calls["n"] += 1
+            if calls["n"] <= fail_first:
+                raise TimeoutError("The read operation timed out")
+            return _io.BytesIO(_json.dumps([{"token": "1", "name": "NIFTY"}]).encode())
+        return _open
+
+    _ur.urlopen = _mk(2)
+    data, src = _ins.load_scrip_master(force=True, retry_sec=0)
+    check("two timeouts then a good download", src == "downloaded" and calls["n"] == 3 and data, src)
+    calls["n"] = 0
+    _ur.urlopen = _mk(99)
+    data, src = _ins.load_scrip_master(force=True, retry_sec=0)
+    check("all tries fail, cache present: yesterday's file, marked STALE",
+          src.startswith("STALE") and data and calls["n"] == 3, src)
+    os.remove(os.path.join(_tmp, "scrip_master.json"))
+    try:
+        _ins.load_scrip_master(force=True, retry_sec=0)
+        check("all tries fail, no cache: raises", False)
+    except TimeoutError:
+        check("all tries fail, no cache: raises", True)
+    _ins.CACHE_DIR, _ur.urlopen = _saved
+except Exception as ex:
+    check("scrip master fallback (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

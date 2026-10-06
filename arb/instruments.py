@@ -28,7 +28,7 @@ def years_to_expiry(expiry_str, ref=None):
     return max(secs, 60.0) / (365.0 * 24 * 3600)
 
 
-def load_scrip_master(max_age_hours=12, force=False):
+def load_scrip_master(max_age_hours=12, force=False, tries=3, retry_sec=10.0, stale_ok_hours=96):
     """Download the scrip master, caching it for the day. Contract definitions
     change only overnight, so re-downloading 8 MB mid-session is pure latency."""
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -38,14 +38,33 @@ def load_scrip_master(max_age_hours=12, force=False):
         if age < max_age_hours:
             with open(path) as fh:
                 return json.load(fh), f"cache ({age:.1f}h old)"
-    req = urllib.request.Request(SCRIP_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(data, fh)
-    os.replace(tmp, path)
-    return data, "downloaded"
+    err = None
+    for attempt in range(tries):
+        try:
+            req = urllib.request.Request(SCRIP_URL, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(data, list) or not data:
+                raise ValueError("empty or malformed scrip master")
+            tmp = path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump(data, fh)
+            os.replace(tmp, path)
+            return data, "downloaded"
+        except Exception as e:                  # network, timeout, bad JSON
+            err = e
+            if attempt + 1 < tries:
+                time.sleep(retry_sec * (attempt + 1))
+    # 6 Oct 09:17: one read timeout here ended the live engine before the
+    # open. Contract definitions are listed days ahead, so yesterday's file
+    # is a safe fallback; expired contracts are filtered out downstream.
+    if os.path.exists(path):
+        age = (time.time() - os.path.getmtime(path)) / 3600.0
+        if age < stale_ok_hours:
+            with open(path) as fh:
+                return json.load(fh), (f"STALE cache ({age:.1f}h old) - download failed: "
+                                       f"{type(err).__name__}: {str(err)[:80]}")
+    raise err
 
 
 def _strike(scrip):
