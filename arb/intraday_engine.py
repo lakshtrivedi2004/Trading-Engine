@@ -635,6 +635,28 @@ class IntradayEngine:
     def _in_book(self, pos):
         return any(p.trade_id == pos.trade_id for p in self.book.snapshot())
 
+    IP_PAUSE_SEC = 300.0
+
+    def _ip_refused(self, legs):
+        """Angel refused the entry because this machine's public IP is not
+        registered for the API (AG7002). Nothing was placed. Pause new entries
+        for IP_PAUSE_SEC instead of re-sending every pass (7 Oct 09:55-09:58:
+        five refusals in three minutes), and say what to do, once an hour."""
+        if not (legs and legs[0].get("ip_refused")):
+            return False
+        self._note("ip_not_registered")
+        self.paused_until = max(self.paused_until, time.time() + self.IP_PAUSE_SEC)
+        if time.time() - getattr(self, "_ip_alert_at", 0.0) > 3600:
+            self._ip_alert_at = time.time()
+            self.log("[intraday] ANGEL REFUSES ORDERS FROM THIS IP (AG7002, not a registered IP): "
+                     "register it in SmartAPI or switch to the registered network. "
+                     f"New entries paused {self.IP_PAUSE_SEC / 60:.0f} min at a time; exits still try.")
+            if self.notifier:
+                self.notifier.send("🛑 <b>ORDERS REFUSED: IP NOT REGISTERED</b>\nAngel (AG7002) refuses "
+                                   "orders from this network's IP. Register it in SmartAPI or switch "
+                                   "network. New entries paused.")
+        return True
+
     def _halt_alert(self, reason, text):
         """Halt new entries and say so - once per reason, not every pass."""
         if self.halted and self.halt_reason == reason:
@@ -2728,6 +2750,8 @@ class IntradayEngine:
             self.log(f"[intraday] stock entry failed: {e!r}")
             self._note("entry_error")
             return False
+        if self._ip_refused(legs):
+            return False
         self._entry_working(legs[0], leg["symbol"], side=v.side)
         if not legs[0].get("filled"):
             self._unknown_entry(legs[0], leg["symbol"], side=v.side)
@@ -2893,6 +2917,8 @@ class IntradayEngine:
 
         def adopt(held):
             return self._adopt_entry(cand, plan, structure, zone, verdict, held)
+        if self._ip_refused(legs):
+            return False
         if not legs[0].get("filled"):
             self._entry_working(legs[0], cand.symbol, adopt=adopt)
             self._unknown_entry(legs[0], cand.symbol, adopt=adopt)

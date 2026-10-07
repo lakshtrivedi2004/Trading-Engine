@@ -547,5 +547,39 @@ try:
 except Exception as ex:
     check("start read retry (raised)", False, repr(ex)[:200])
 
+section("an order from an unregistered IP (AG7002) is a refusal, and new entries pause (7 Oct 09:55)")
+try:
+    from arb.execution import LiveBroker as _LB, ip_refused as _ipr
+    from arb.config import CostModel as _CM2
+    from arb.intraday_engine import IntradayEngine as _IE2
+    from types import SimpleNamespace as _NS2
+
+    class _IpApi:
+        def placeOrderFullResponse(self, params):
+            return {"success": False, "message": "223.190.81.113 is not a registered IP, please check your registered IP.",
+                    "errorCode": "AG7002", "data": ""}
+
+    b = _LB(_IpApi(), _CM2(), product="INTRADAY", confirm_fills=True)
+    b.exit_safety_fixes = True
+    leg = {"symbol": "SENSEX26O0872300CE", "token": "1", "side": "BUY", "price": 100.0, "qty": 20,
+           "instrument": "OPT", "exchange": "BFO", "kind": "E", "underlying": "SENSEX", "strike": 72300.0,
+           "opt": "CE", "depth": 100, "age_ms": 0.0, "market": False, "quote_price": 100.0}
+    b.protection_pct = 1.0
+    b.order_rate_per_sec = 0.0
+    msg = b._place_confirmed(leg)
+    check("AG7002 is recognised", _ipr({"errorCode": "AG7002"}) and _ipr({"message": "x is not a registered IP"})
+          and not _ipr({"message": "some other refusal"}))
+    if msg is not None:
+        check("...the leg is refused and final, not 'unknown'",
+              leg.get("broker_status") == "refused" and leg.get("final") and leg.get("ip_refused"), str(leg))
+    logs = []
+    e = _NS2(paused_until=0.0, notifier=None, log=logs.append, _note=lambda *_: None, IP_PAUSE_SEC=300.0)
+    hit = _IE2._ip_refused(e, [{"ip_refused": True}])
+    check("the engine pauses new entries ~5 min and says what to do",
+          hit and e.paused_until > time.time() + 290 and any("REGISTERED" in x.upper() for x in logs), str(logs[-1:]))
+    check("an ordinary unfilled entry does not pause", not _IE2._ip_refused(e, [{"filled": False}]))
+except Exception as ex:
+    check("IP refusal (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

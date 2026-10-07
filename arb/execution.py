@@ -65,6 +65,14 @@ class PaperBroker:
         return legs, []
 
 
+def ip_refused(r):
+    """Angel's answer to an order sent from an IP not registered for the API."""
+    if not isinstance(r, dict):
+        return "not a registered ip" in str(r).lower()
+    return str(r.get("errorCode") or "") == "AG7002" or \
+        "not a registered ip" in str(r.get("message") or "").lower()
+
+
 class LiveBroker:
     """Real orders through Angel One SmartAPI.
 
@@ -292,6 +300,12 @@ class LiveBroker:
         data = data if isinstance(data, dict) else {}
         oid, uid = data.get("orderid"), data.get("uniqueorderid")
         why = (r or {}).get("message") if isinstance(r, dict) else r
+        if not oid and ip_refused(r):
+            # SEBI's static-IP rule: Angel's gateway refuses an order from an
+            # unregistered IP before it reaches the exchange (AG7002). That is
+            # a certain "nothing placed", not an unknown (7 Oct 2026 09:55).
+            leg["broker_status"], leg["final"], leg["ip_refused"] = "refused", True, True
+            return f"{leg['symbol']}: order refused: {why}"
         if fixes and not oid and uid:
             # Only a uniqueorderid came back (Angel answers an LPP refusal so,
             # forum 4703): read the order by it before calling it anything.
