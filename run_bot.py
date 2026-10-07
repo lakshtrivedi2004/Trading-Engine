@@ -103,13 +103,24 @@ def open_broker_positions(api):
     return out
 
 
+READ_TRIES = 3
+READ_RETRY_SEC = 5.0
+
+
 def refuse_working_orders(broker, log=print, wait=5.0):
     """Live start guard for orders, as open_broker_positions is for positions.
     A working order the engine did not place - or cannot see the end of - is
     refused: it could fill into a position nobody manages. One the engine left
     behind (tag TE...) on a symbol now flat is cancelled, and must read final
     within `wait` seconds."""
-    rows = broker.open_orders()
+    rows = None
+    for k in range(READ_TRIES):
+        rows = broker.open_orders()
+        if rows is not None:
+            break
+        if k + 1 < READ_TRIES:
+            log(f"order book not readable yet; retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
     if rows is None:
         raise SystemExit("LIVE START REFUSED: the Angel order book could not be read")
     for r in rows:
@@ -449,8 +460,21 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
     if mode == "live":
         # Real money: its own ledger and journal, sized from the funds the
         # broker says the account holds - never from the paper ledger's P&L.
-        funds, detail = live_funds(session.api)
-        open_pos = open_broker_positions(session.api)
+        # 7 Oct 09:15: one network error on a read refused the whole start.
+        # A failed READ is retried; a real finding (an open position, no funds
+        # in a readable answer, a working order) still refuses at once.
+        for k in range(READ_TRIES):
+            funds, detail = live_funds(session.api)
+            if funds > 0 or not str(detail).startswith("rmsLimit failed"):
+                break
+            log(f"funds not readable yet ({detail[:80]}); retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
+        for k in range(READ_TRIES):
+            open_pos = open_broker_positions(session.api)
+            if not (len(open_pos) == 1 and open_pos[0].startswith("could not read positions")):
+                break
+            log(f"positions not readable yet; retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
         if open_pos:
             raise SystemExit(
                 "LIVE START REFUSED: the account already has open positions the engine "

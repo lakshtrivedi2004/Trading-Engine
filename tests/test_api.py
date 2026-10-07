@@ -516,5 +516,36 @@ try:
 except Exception as ex:
     check("day loop retry (raised)", False, repr(ex)[:200])
 
+section("live start: a failed order-book read is retried; a real working order still refuses (7 Oct 09:15)")
+try:
+    import run_bot as _rb2
+    _rb2.READ_RETRY_SEC = 0.0
+
+    class _OB:
+        def __init__(self, answers):
+            self.answers, self.calls = list(answers), 0
+
+        def open_orders(self):
+            self.calls += 1
+            return self.answers.pop(0) if self.answers else None
+
+    b1 = _OB([None, []])
+    _rb2.refuse_working_orders(b1, log=lambda *_: None)
+    check("one unreadable order book, then an empty one: the start goes ahead", b1.calls == 2)
+    b2 = _OB([None, None, None])
+    try:
+        _rb2.refuse_working_orders(b2, log=lambda *_: None)
+        check("three unreadable answers still refuse", False)
+    except SystemExit:
+        check("three unreadable answers still refuse", b2.calls == 3)
+    b3 = _OB([[{"tag": "", "oid": "9", "symbol": "X", "status": "open", "side": "BUY", "variety": "NORMAL", "uid": "1"}]])
+    try:
+        _rb2.refuse_working_orders(b3, log=lambda *_: None)
+        check("a working order nobody placed refuses at once", False)
+    except SystemExit:
+        check("a working order nobody placed refuses at once", b3.calls == 1)
+except Exception as ex:
+    check("start read retry (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
