@@ -144,6 +144,7 @@ function controls(d){
   const live = d.mode === "live";
   el.innerHTML = `
     <button class="btn" id="btnSwitch" ${CTL_BUSY?"disabled":""}>Switch to ${live?"PAPER":"LIVE"}</button>
+    ${live && d.start_refused ? `<button class="btn danger" id="btnRetry" ${CTL_BUSY?"disabled":""}>Retry LIVE start</button>` : ""}
     <button class="btn danger" id="btnStop" ${CTL_BUSY?"disabled":""}>Stop ${live?"real ":""}trading</button>
     <button class="btn danger" id="btnExit" ${CTL_BUSY?"disabled":""}>Exit all trades</button>
     <button class="btn" id="btnLogs">View logs</button>
@@ -157,6 +158,14 @@ function controls(d){
     const res = await post("/api/control/switch_mode");
     CTL_BUSY = false;
     alert(res.ok ? `Switching to ${res.switching_to.toUpperCase()}…` : `Switch failed: ${res.error}`);
+  };
+  const retry = document.getElementById("btnRetry");
+  if(retry) retry.onclick = async () => {
+    if(!confirm(`Retry the LIVE start — real money?\n\nRefused because:\n${d.start_refused}\n\nThe engine restarts and runs every start check again.`)) return;
+    CTL_BUSY = true;
+    const res = await post("/api/control/switch_mode?to=live");
+    CTL_BUSY = false;
+    alert(res.ok ? "Restarting LIVE…" : `Retry failed: ${res.error}`);
   };
   document.getElementById("btnStop").onclick = async () => {
     if(!confirm(`Stop ${live?"REAL ":""}trading now?\n\nThis halts new entries AND closes every open position at market.`)) return;
