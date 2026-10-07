@@ -1,0 +1,854 @@
+capital Rs 10,672.74, risk cap 8%, daily halt 15%, split 2026-05-25, sessions 254; live pace {'NIFTY': [1.3, 1.5], 'BANKNIFTY': [1.5, 1.5], 'SENSEX': [1.2, 1.2], 'MIDCPNIFTY': [0.8, 0.8], 'FINNIFTY': [1.5, 1.7]}
+Columns: n, win%, IN (before split), OUT (after), total, max drawdown, trades/session, % of sessions with >= 1 trade; dIN/dOUT vs baseline.
+
+BASELINE OB + LHM(NIFTY 15:00 0.5 ADR 1.5 ATR)             n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days {'LHM': 72, 'OB': 87}
+
+== 1. LHM extensions. Book = OB + LHM on the listed indices; on a day several fire at the same minute the FIRST listed index with a priced, trend-agreeing signal takes the slot (live _live_lhm order)
+   (check: NIFTY 15:00/0.5/1.5 regenerated = cached LHM, 74 candidates; built in 14s)
+   -- LHM alone per index (no OB), 15:00 / 0.5 ADR / 1.5 ATR and the full grid summary:
+   LHM alone NIFTY 14:45 adr0.3 stop1                      n= 33 win= 21% IN    +741 OUT    +511 tot  +1,252 DD  8,201 0.13/s  13%days | dIN -26,353 dOUT -20,643
+   LHM alone NIFTY 14:45 adr0.3 stop1.5                    n= 94 win= 27% IN +15,091 OUT  +6,865 tot +21,956 DD  7,942 0.37/s  37%days | dIN -12,003 dOUT -14,289
+   LHM alone NIFTY 14:45 adr0.3 stop2                      n=114 win= 33% IN +21,058 OUT  +4,736 tot +25,794 DD 10,821 0.45/s  45%days | dIN  -6,036 dOUT -16,418
+   LHM alone NIFTY 14:45 adr0.4 stop1                      n= 27 win= 22% IN  +3,054 OUT    +128 tot  +3,183 DD  6,537 0.11/s  11%days | dIN -24,040 dOUT -21,026
+   LHM alone NIFTY 14:45 adr0.4 stop1.5                    n= 81 win= 25% IN +14,124 OUT  +6,295 tot +20,419 DD  9,175 0.32/s  32%days | dIN -12,970 dOUT -14,859
+   LHM alone NIFTY 14:45 adr0.4 stop2                      n=100 win= 31% IN +19,564 OUT  +1,987 tot +21,551 DD 11,954 0.39/s  39%days | dIN  -7,530 dOUT -19,167
+   LHM alone NIFTY 14:45 adr0.5 stop1                      n= 27 win= 22% IN  +3,054 OUT    +128 tot  +3,183 DD  6,537 0.11/s  11%days | dIN -24,040 dOUT -21,026
+   LHM alone NIFTY 14:45 adr0.5 stop1.5                    n= 76 win= 25% IN +14,781 OUT  +7,470 tot +22,251 DD  8,000 0.30/s  30%days | dIN -12,313 dOUT -13,684
+   LHM alone NIFTY 14:45 adr0.5 stop2                      n= 89 win= 33% IN +21,132 OUT  +3,035 tot +24,167 DD 10,906 0.35/s  35%days | dIN  -5,962 dOUT -18,119
+   LHM alone NIFTY 15:00 adr0.3 stop1                      n= 38 win= 34% IN +13,779 OUT  -1,453 tot +12,325 DD  3,163 0.15/s  15%days | dIN -13,315 dOUT -22,608
+   LHM alone NIFTY 15:00 adr0.3 stop1.5                    n= 94 win= 43% IN +23,011 OUT +14,249 tot +37,260 DD  3,420 0.37/s  37%days | dIN  -4,083 dOUT  -6,905
+   LHM alone NIFTY 15:00 adr0.3 stop2                      n=116 win= 43% IN +19,821 OUT  +8,820 tot +28,641 DD  4,025 0.46/s  46%days | dIN  -7,273 dOUT -12,334
+   LHM alone NIFTY 15:00 adr0.4 stop1                      n= 32 win= 34% IN +12,487 OUT    -849 tot +11,638 DD  2,559 0.13/s  13%days | dIN -14,607 dOUT -22,003
+   LHM alone NIFTY 15:00 adr0.4 stop1.5                    n= 81 win= 43% IN +22,940 OUT +13,449 tot +36,389 DD  2,873 0.32/s  32%days | dIN  -4,154 dOUT  -7,706
+   LHM alone NIFTY 15:00 adr0.4 stop2                      n=100 win= 43% IN +21,442 OUT  +6,924 tot +28,366 DD  5,406 0.39/s  39%days | dIN  -5,652 dOUT -14,230
+   LHM alone NIFTY 15:00 adr0.5 stop1                      n= 27 win= 37% IN +11,392 OUT    -273 tot +11,120 DD  2,176 0.11/s  11%days | dIN -15,702 dOUT -21,427
+   LHM alone NIFTY 15:00 adr0.5 stop1.5                    n= 74 win= 45% IN +22,688 OUT +13,656 tot +36,343 DD  2,724 0.29/s  29%days | dIN  -4,406 dOUT  -7,499
+   LHM alone NIFTY 15:00 adr0.5 stop2                      n= 89 win= 46% IN +22,762 OUT  +8,313 tot +31,075 DD  4,008 0.35/s  35%days | dIN  -4,332 dOUT -12,842
+   LHM alone NIFTY 15:05 adr0.3 stop1                      n= 50 win= 38% IN    +984 OUT  -1,547 tot    -563 DD  5,175 0.20/s  20%days | dIN -26,110 dOUT -22,701
+   LHM alone NIFTY 15:05 adr0.3 stop1.5                    n= 99 win= 43% IN  +1,299 OUT  -5,808 tot  -4,509 DD  7,910 0.39/s  39%days | dIN -25,795 dOUT -26,963
+   LHM alone NIFTY 15:05 adr0.3 stop2                      n=113 win= 43% IN    -170 OUT  -6,988 tot  -7,159 DD  8,796 0.44/s  44%days | dIN -27,264 dOUT -28,143
+   LHM alone NIFTY 15:05 adr0.4 stop1                      n= 45 win= 38% IN  +1,016 OUT  -3,135 tot  -2,119 DD  5,340 0.18/s  18%days | dIN -26,078 dOUT -24,289
+   LHM alone NIFTY 15:05 adr0.4 stop1.5                    n= 88 win= 44% IN    +840 OUT  -6,902 tot  -6,062 DD  8,253 0.35/s  35%days | dIN -26,254 dOUT -28,056
+   LHM alone NIFTY 15:05 adr0.4 stop2                      n=101 win= 44% IN     +81 OUT  -8,307 tot  -8,227 DD  9,779 0.40/s  40%days | dIN -27,013 dOUT -29,462
+   LHM alone NIFTY 15:05 adr0.5 stop1                      n= 42 win= 38% IN  +2,125 OUT  -3,737 tot  -1,612 DD  5,340 0.17/s  17%days | dIN -24,969 dOUT -24,891
+   LHM alone NIFTY 15:05 adr0.5 stop1.5                    n= 78 win= 42% IN  +1,826 OUT  -7,240 tot  -5,413 DD  7,841 0.31/s  31%days | dIN -25,268 dOUT -28,394
+   LHM alone NIFTY 15:05 adr0.5 stop2                      n= 88 win= 42% IN  +1,879 OUT  -8,341 tot  -6,463 DD  8,981 0.35/s  35%days | dIN -25,215 dOUT -29,496
+   LHM alone NIFTY 15:10 adr0.3 stop1                      n= 50 win= 38% IN  -4,253 OUT  -3,740 tot  -7,993 DD  8,132 0.20/s  20%days | dIN -31,347 dOUT -24,895
+   LHM alone NIFTY 15:10 adr0.3 stop1.5                    n= 98 win= 34% IN  -5,214 OUT  -9,489 tot -14,703 DD 14,739 0.39/s  39%days | dIN -32,308 dOUT -30,643
+   LHM alone NIFTY 15:10 adr0.3 stop2                      n=111 win= 31% IN  -5,462 OUT -10,798 tot -16,260 DD 16,272 0.44/s  44%days | dIN -32,556 dOUT -31,952
+   LHM alone NIFTY 15:10 adr0.4 stop1                      n= 46 win= 37% IN  -3,821 OUT  -3,740 tot  -7,562 DD  7,701 0.18/s  18%days | dIN -30,915 dOUT -24,895
+   LHM alone NIFTY 15:10 adr0.4 stop1.5                    n= 90 win= 33% IN  -4,727 OUT  -9,078 tot -13,805 DD 13,841 0.35/s  35%days | dIN -31,821 dOUT -30,232
+   LHM alone NIFTY 15:10 adr0.4 stop2                      n=101 win= 31% IN  -4,454 OUT -10,378 tot -14,832 DD 14,844 0.40/s  40%days | dIN -31,548 dOUT -31,533
+   LHM alone NIFTY 15:10 adr0.5 stop1                      n= 43 win= 35% IN  -4,115 OUT  -3,204 tot  -7,319 DD  7,355 0.17/s  17%days | dIN -31,208 dOUT -24,358
+   LHM alone NIFTY 15:10 adr0.5 stop1.5                    n= 80 win= 34% IN  -4,194 OUT  -6,949 tot -11,143 DD 11,179 0.31/s  31%days | dIN -31,288 dOUT -28,103
+   LHM alone NIFTY 15:10 adr0.5 stop2                      n= 88 win= 32% IN  -4,086 OUT  -8,719 tot -12,805 DD 12,817 0.35/s  35%days | dIN -31,180 dOUT -29,873
+   LHM alone BANKNIFTY 14:45 adr0.3 stop1                  n= 37 win= 16% IN  -5,403 OUT  +1,250 tot  -4,153 DD  7,587 0.15/s  15%days | dIN -32,497 dOUT -19,905
+   LHM alone BANKNIFTY 14:45 adr0.3 stop1.5                n= 48 win= 21% IN  -6,828 OUT  -2,341 tot  -9,170 DD  9,170 0.19/s  19%days | dIN -33,922 dOUT -23,496
+   LHM alone BANKNIFTY 14:45 adr0.3 stop2                  n= 48 win= 25% IN  -7,632 OUT  -1,872 tot  -9,504 DD 10,436 0.19/s  19%days | dIN -34,726 dOUT -23,026
+   LHM alone BANKNIFTY 14:45 adr0.4 stop1                  n= 33 win= 15% IN  -5,841 OUT  +1,333 tot  -4,507 DD  8,025 0.13/s  13%days | dIN -32,935 dOUT -19,821
+   LHM alone BANKNIFTY 14:45 adr0.4 stop1.5                n= 42 win= 19% IN  -5,799 OUT  -1,762 tot  -7,561 DD  7,984 0.17/s  17%days | dIN -32,893 dOUT -22,917
+   LHM alone BANKNIFTY 14:45 adr0.4 stop2                  n= 42 win= 24% IN  -6,396 OUT  -1,596 tot  -7,992 DD  9,199 0.17/s  17%days | dIN -33,490 dOUT -22,751
+   LHM alone BANKNIFTY 14:45 adr0.5 stop1                  n= 28 win= 11% IN  -7,759 OUT  +1,333 tot  -6,425 DD  7,759 0.11/s  11%days | dIN -34,853 dOUT -19,821
+   LHM alone BANKNIFTY 14:45 adr0.5 stop1.5                n= 34 win= 18% IN  -6,692 OUT  -1,322 tot  -8,015 DD  8,015 0.13/s  13%days | dIN -33,786 dOUT -22,477
+   LHM alone BANKNIFTY 14:45 adr0.5 stop2                  n= 34 win= 24% IN  -6,285 OUT  -1,051 tot  -7,336 DD  7,336 0.13/s  13%days | dIN -33,379 dOUT -22,206
+   LHM alone BANKNIFTY 15:00 adr0.3 stop1                  n= 32 win= 16% IN  -9,413 OUT    +433 tot  -8,980 DD  9,413 0.13/s  13%days | dIN -36,507 dOUT -20,721
+   LHM alone BANKNIFTY 15:00 adr0.3 stop1.5                n= 48 win= 29% IN  -6,339 OUT  -2,974 tot  -9,312 DD 10,542 0.19/s  19%days | dIN -33,433 dOUT -24,128
+   LHM alone BANKNIFTY 15:00 adr0.3 stop2                  n= 45 win= 38% IN  -3,568 OUT  -4,144 tot  -7,713 DD  8,982 0.18/s  18%days | dIN -30,662 dOUT -25,298
+   LHM alone BANKNIFTY 15:00 adr0.4 stop1                  n= 28 win= 18% IN  -7,896 OUT    +433 tot  -7,463 DD  7,896 0.11/s  11%days | dIN -34,990 dOUT -20,721
+   LHM alone BANKNIFTY 15:00 adr0.4 stop1.5                n= 42 win= 33% IN  -5,129 OUT  -2,047 tot  -7,176 DD  8,406 0.17/s  17%days | dIN -32,223 dOUT -23,201
+   LHM alone BANKNIFTY 15:00 adr0.4 stop2                  n= 39 win= 44% IN  -2,384 OUT  -2,997 tot  -5,382 DD  6,651 0.15/s  15%days | dIN -29,478 dOUT -24,152
+   LHM alone BANKNIFTY 15:00 adr0.5 stop1                  n= 24 win= 21% IN  -6,812 OUT    +819 tot  -5,993 DD  6,812 0.09/s   9%days | dIN -33,906 dOUT -20,335
+   LHM alone BANKNIFTY 15:00 adr0.5 stop1.5                n= 34 win= 35% IN  -4,490 OUT  -1,507 tot  -5,997 DD  7,227 0.13/s  13%days | dIN -31,584 dOUT -22,661
+   LHM alone BANKNIFTY 15:00 adr0.5 stop2                  n= 31 win= 45% IN  -2,554 OUT  -2,326 tot  -4,880 DD  5,838 0.12/s  12%days | dIN -29,648 dOUT -23,480
+   LHM alone BANKNIFTY 15:05 adr0.3 stop1                  n= 30 win= 33% IN    -640 OUT    -322 tot    -962 DD  3,190 0.12/s  12%days | dIN -27,734 dOUT -21,477
+   LHM alone BANKNIFTY 15:05 adr0.3 stop1.5                n= 44 win= 36% IN  -1,953 OUT  -2,535 tot  -4,488 DD  6,882 0.17/s  17%days | dIN -29,047 dOUT -23,689
+   LHM alone BANKNIFTY 15:05 adr0.3 stop2                  n= 41 win= 41% IN    -270 OUT  -2,167 tot  -2,437 DD  4,608 0.16/s  16%days | dIN -27,364 dOUT -23,321
+   LHM alone BANKNIFTY 15:05 adr0.4 stop1                  n= 28 win= 36% IN    +366 OUT    -322 tot     +44 DD  2,902 0.11/s  11%days | dIN -26,728 dOUT -21,477
+   LHM alone BANKNIFTY 15:05 adr0.4 stop1.5                n= 40 win= 40% IN    -718 OUT  -2,087 tot  -2,806 DD  5,200 0.16/s  16%days | dIN -27,812 dOUT -23,242
+   LHM alone BANKNIFTY 15:05 adr0.4 stop2                  n= 37 win= 46% IN    +898 OUT  -1,613 tot    -715 DD  3,550 0.15/s  15%days | dIN -26,196 dOUT -22,767
+   LHM alone BANKNIFTY 15:05 adr0.5 stop1                  n= 25 win= 36% IN    +295 OUT     +75 tot    +369 DD  2,505 0.10/s  10%days | dIN -26,799 dOUT -21,079
+   LHM alone BANKNIFTY 15:05 adr0.5 stop1.5                n= 34 win= 41% IN    +157 OUT  -1,991 tot  -1,833 DD  4,590 0.13/s  13%days | dIN -26,937 dOUT -23,145
+   LHM alone BANKNIFTY 15:05 adr0.5 stop2                  n= 31 win= 48% IN  +1,562 OUT  -1,374 tot    +188 DD  2,866 0.12/s  12%days | dIN -25,532 dOUT -22,528
+   LHM alone BANKNIFTY 15:10 adr0.3 stop1                  n= 31 win= 29% IN  -2,772 OUT  -2,356 tot  -5,128 DD  5,370 0.12/s  12%days | dIN -29,866 dOUT -23,510
+   LHM alone BANKNIFTY 15:10 adr0.3 stop1.5                n= 44 win= 34% IN  -1,459 OUT  -3,414 tot  -4,872 DD  4,991 0.17/s  17%days | dIN -28,553 dOUT -24,568
+   LHM alone BANKNIFTY 15:10 adr0.3 stop2                  n= 43 win= 35% IN  -1,265 OUT  -2,134 tot  -3,399 DD  4,179 0.17/s  17%days | dIN -28,359 dOUT -23,288
+   LHM alone BANKNIFTY 15:10 adr0.4 stop1                  n= 28 win= 32% IN  -2,026 OUT  -1,909 tot  -3,935 DD  4,177 0.11/s  11%days | dIN -29,120 dOUT -23,063
+   LHM alone BANKNIFTY 15:10 adr0.4 stop1.5                n= 39 win= 36% IN    -559 OUT  -2,488 tot  -3,047 DD  3,166 0.15/s  15%days | dIN -27,653 dOUT -23,642
+   LHM alone BANKNIFTY 15:10 adr0.4 stop2                  n= 38 win= 37% IN    -704 OUT  -1,390 tot  -2,095 DD  2,875 0.15/s  15%days | dIN -27,798 dOUT -22,544
+   LHM alone BANKNIFTY 15:10 adr0.5 stop1                  n= 26 win= 31% IN  -1,800 OUT  -1,909 tot  -3,709 DD  3,951 0.10/s  10%days | dIN -28,894 dOUT -23,063
+   LHM alone BANKNIFTY 15:10 adr0.5 stop1.5                n= 34 win= 35% IN    -160 OUT  -2,641 tot  -2,801 DD  3,123 0.13/s  13%days | dIN -27,254 dOUT -23,795
+   LHM alone BANKNIFTY 15:10 adr0.5 stop2                  n= 33 win= 36% IN    -205 OUT  -1,543 tot  -1,748 DD  2,375 0.13/s  13%days | dIN -27,299 dOUT -22,697
+   LHM alone SENSEX 14:45 adr0.3 stop1                     n= 80 win= 16% IN  +8,637 OUT  -3,704 tot  +4,933 DD  8,152 0.31/s  31%days | dIN -18,457 dOUT -24,859
+   LHM alone SENSEX 14:45 adr0.3 stop1.5                   n=106 win= 20% IN +12,191 OUT    +876 tot +13,067 DD  9,595 0.42/s  42%days | dIN -14,903 dOUT -20,278
+   LHM alone SENSEX 14:45 adr0.3 stop2                     n=107 win= 28% IN  +9,676 OUT  +2,948 tot +12,624 DD 10,871 0.42/s  42%days | dIN -17,418 dOUT -18,206
+   LHM alone SENSEX 14:45 adr0.4 stop1                     n= 68 win= 16% IN +10,629 OUT  -3,055 tot  +7,573 DD  6,811 0.27/s  27%days | dIN -16,465 dOUT -24,209
+   LHM alone SENSEX 14:45 adr0.4 stop1.5                   n= 92 win= 18% IN +12,755 OUT  +1,231 tot +13,985 DD 10,016 0.36/s  36%days | dIN -14,339 dOUT -19,923
+   LHM alone SENSEX 14:45 adr0.4 stop2                     n= 92 win= 27% IN +11,898 OUT    +894 tot +12,792 DD 11,196 0.36/s  36%days | dIN -15,196 dOUT -20,260
+   LHM alone SENSEX 14:45 adr0.5 stop1                     n= 63 win= 17% IN +13,023 OUT  -2,580 tot +10,442 DD  4,737 0.25/s  25%days | dIN -14,071 dOUT -23,735
+   LHM alone SENSEX 14:45 adr0.5 stop1.5                   n= 83 win= 18% IN +14,147 OUT  -7,592 tot  +6,555 DD  8,801 0.33/s  33%days | dIN -12,947 dOUT -28,746
+   LHM alone SENSEX 14:45 adr0.5 stop2                     n= 83 win= 25% IN  +9,352 OUT  -7,712 tot  +1,639 DD 10,042 0.33/s  33%days | dIN -17,742 dOUT -28,866
+   LHM alone SENSEX 15:00 adr0.3 stop1                     n= 87 win= 24% IN  +8,799 OUT  -3,641 tot  +5,157 DD  6,227 0.34/s  34%days | dIN -18,295 dOUT -24,796
+   LHM alone SENSEX 15:00 adr0.3 stop1.5                   n=112 win= 34% IN +10,401 OUT  +5,911 tot +16,312 DD  7,712 0.44/s  44%days | dIN -16,693 dOUT -15,243
+   LHM alone SENSEX 15:00 adr0.3 stop2                     n=106 win= 39% IN  +9,529 OUT  +6,131 tot +15,660 DD  6,836 0.42/s  42%days | dIN -17,565 dOUT -15,023
+   LHM alone SENSEX 15:00 adr0.4 stop1                     n= 74 win= 23% IN  +8,605 OUT  -3,218 tot  +5,387 DD  6,346 0.29/s  29%days | dIN -18,489 dOUT -24,373
+   LHM alone SENSEX 15:00 adr0.4 stop1.5                   n= 95 win= 33% IN +10,253 OUT  +4,474 tot +14,727 DD  8,413 0.37/s  37%days | dIN -16,841 dOUT -16,680
+   LHM alone SENSEX 15:00 adr0.4 stop2                     n= 90 win= 39% IN +10,657 OUT  +5,025 tot +15,682 DD  6,548 0.35/s  35%days | dIN -16,437 dOUT -16,129
+   LHM alone SENSEX 15:00 adr0.5 stop1                     n= 66 win= 24% IN +11,162 OUT  -3,140 tot  +8,023 DD  5,889 0.26/s  26%days | dIN -15,932 dOUT -24,294
+   LHM alone SENSEX 15:00 adr0.5 stop1.5                   n= 83 win= 31% IN +11,745 OUT  -5,073 tot  +6,671 DD  6,892 0.33/s  33%days | dIN -15,349 dOUT -26,228
+   LHM alone SENSEX 15:00 adr0.5 stop2                     n= 78 win= 38% IN +12,117 OUT  -4,414 tot  +7,704 DD  6,431 0.31/s  31%days | dIN -14,977 dOUT -25,568
+   LHM alone SENSEX 15:05 adr0.3 stop1                     n= 89 win= 25% IN  -7,502 OUT  -5,000 tot -12,502 DD 13,723 0.35/s  35%days | dIN -34,596 dOUT -26,155
+   LHM alone SENSEX 15:05 adr0.3 stop1.5                   n=107 win= 36% IN  -6,908 OUT  -8,159 tot -15,068 DD 16,686 0.42/s  42%days | dIN -34,002 dOUT -29,314
+   LHM alone SENSEX 15:05 adr0.3 stop2                     n= 99 win= 36% IN  -8,146 OUT  -9,415 tot -17,561 DD 18,104 0.39/s  39%days | dIN -35,240 dOUT -30,569
+   LHM alone SENSEX 15:05 adr0.4 stop1                     n= 80 win= 22% IN  -6,105 OUT  -7,804 tot -13,910 DD 15,674 0.31/s  31%days | dIN -33,199 dOUT -28,958
+   LHM alone SENSEX 15:05 adr0.4 stop1.5                   n= 98 win= 34% IN  -6,003 OUT -10,228 tot -16,231 DD 18,174 0.39/s  39%days | dIN -33,097 dOUT -31,383
+   LHM alone SENSEX 15:05 adr0.4 stop2                     n= 91 win= 34% IN  -7,276 OUT -10,627 tot -17,903 DD 19,073 0.36/s  36%days | dIN -34,370 dOUT -31,782
+   LHM alone SENSEX 15:05 adr0.5 stop1                     n= 70 win= 21% IN  -5,719 OUT  -7,351 tot -13,070 DD 13,622 0.28/s  28%days | dIN -32,813 dOUT -28,506
+   LHM alone SENSEX 15:05 adr0.5 stop1.5                   n= 85 win= 33% IN  -5,873 OUT -10,019 tot -15,892 DD 16,438 0.33/s  33%days | dIN -32,967 dOUT -31,173
+   LHM alone SENSEX 15:05 adr0.5 stop2                     n= 78 win= 33% IN  -6,911 OUT -10,423 tot -17,334 DD 17,732 0.31/s  31%days | dIN -34,005 dOUT -31,577
+   LHM alone SENSEX 15:10 adr0.3 stop1                     n= 93 win= 26% IN -11,686 OUT  -8,139 tot -19,825 DD 19,993 0.37/s  37%days | dIN -38,780 dOUT -29,294
+   LHM alone SENSEX 15:10 adr0.3 stop1.5                   n=106 win= 25% IN -10,470 OUT -11,135 tot -21,605 DD 22,010 0.42/s  42%days | dIN -37,564 dOUT -32,289
+   LHM alone SENSEX 15:10 adr0.3 stop2                     n= 96 win= 26% IN  -5,918 OUT  -9,663 tot -15,581 DD 16,214 0.38/s  38%days | dIN -33,012 dOUT -30,817
+   LHM alone SENSEX 15:10 adr0.4 stop1                     n= 88 win= 25% IN -11,012 OUT  -7,748 tot -18,760 DD 18,928 0.35/s  35%days | dIN -38,106 dOUT -28,903
+   LHM alone SENSEX 15:10 adr0.4 stop1.5                   n=101 win= 25% IN  -9,716 OUT -10,894 tot -20,611 DD 21,015 0.40/s  40%days | dIN -36,810 dOUT -32,049
+   LHM alone SENSEX 15:10 adr0.4 stop2                     n= 92 win= 26% IN  -5,454 OUT  -9,385 tot -14,839 DD 15,472 0.36/s  36%days | dIN -32,548 dOUT -30,539
+   LHM alone SENSEX 15:10 adr0.5 stop1                     n= 74 win= 26% IN  -9,791 OUT  -5,772 tot -15,564 DD 15,871 0.29/s  29%days | dIN -36,885 dOUT -26,927
+   LHM alone SENSEX 15:10 adr0.5 stop1.5                   n= 84 win= 26% IN  -8,187 OUT  -8,821 tot -17,008 DD 17,024 0.33/s  33%days | dIN -35,281 dOUT -29,975
+   LHM alone SENSEX 15:10 adr0.5 stop2                     n= 78 win= 27% IN  -4,925 OUT  -7,833 tot -12,759 DD 13,081 0.31/s  31%days | dIN -32,019 dOUT -28,988
+   -- book = OB + LHM[N]
+OB+LHM[N] 14:45 adr0.3 stop1                               n=118 win= 44% IN    +525 OUT  +7,454 tot  +7,979 DD  6,330 0.46/s  35%days | dIN -26,569 dOUT -13,700
+OB+LHM[N] 14:45 adr0.3 stop1.5                             n=178 win= 39% IN +15,134 OUT +13,808 tot +28,942 DD  6,507 0.70/s  55%days | dIN -11,960 dOUT  -7,346
+OB+LHM[N] 14:45 adr0.3 stop2                               n=198 win= 42% IN +21,692 OUT +11,837 tot +33,528 DD  7,690 0.78/s  62%days | dIN  -5,402 dOUT  -9,318
+OB+LHM[N] 14:45 adr0.4 stop1                               n=112 win= 46% IN  +2,838 OUT  +7,071 tot  +9,909 DD  4,769 0.44/s  34%days | dIN -24,256 dOUT -14,083
+OB+LHM[N] 14:45 adr0.4 stop1.5                             n=165 win= 39% IN +14,167 OUT +13,238 tot +27,405 DD  6,820 0.65/s  51%days | dIN -12,927 dOUT  -7,916
+OB+LHM[N] 14:45 adr0.4 stop2                               n=184 win= 41% IN +20,198 OUT  +9,088 tot +29,286 DD  8,275 0.72/s  58%days | dIN  -6,896 dOUT -12,066
+OB+LHM[N] 14:45 adr0.5 stop1                               n=112 win= 46% IN  +2,838 OUT  +7,071 tot  +9,909 DD  4,769 0.44/s  34%days | dIN -24,256 dOUT -14,083
+OB+LHM[N] 14:45 adr0.5 stop1.5                             n=160 win= 40% IN +14,825 OUT +14,413 tot +29,237 DD  6,162 0.63/s  49%days | dIN -12,269 dOUT  -6,741
+OB+LHM[N] 14:45 adr0.5 stop2                               n=173 win= 43% IN +21,766 OUT +10,136 tot +31,902 DD  7,289 0.68/s  54%days | dIN  -5,328 dOUT -11,019
+OB+LHM[N] 15:00 adr0.3 stop1                               n=124 win= 48% IN +17,591 OUT  +6,045 tot +23,636 DD  3,974 0.49/s  37%days | dIN  -9,503 dOUT -15,109
+OB+LHM[N] 15:00 adr0.3 stop1.5                             n=178 win= 48% IN +27,417 OUT +20,745 tot +48,163 DD  4,275 0.70/s  54%days | dIN    +323 dOUT    -409
+OB+LHM[N] 15:00 adr0.3 stop2                               n=200 win= 48% IN +24,371 OUT +15,316 tot +39,688 DD  5,031 0.79/s  61%days | dIN  -2,723 dOUT  -5,838
+OB+LHM[N] 15:00 adr0.4 stop1                               n=118 win= 49% IN +16,299 OUT  +6,649 tot +22,948 DD  3,469 0.46/s  37%days | dIN -10,795 dOUT -14,505
+OB+LHM[N] 15:00 adr0.4 stop1.5                             n=166 win= 49% IN +27,347 OUT +20,947 tot +48,294 DD  4,390 0.65/s  52%days | dIN    +253 dOUT    -207
+OB+LHM[N] 15:00 adr0.4 stop2                               n=185 win= 49% IN +25,993 OUT +14,423 tot +40,415 DD  5,080 0.73/s  58%days | dIN  -1,101 dOUT  -6,732
+OB+LHM[N] 15:00 adr0.5 stop1                               n=113 win= 50% IN +15,205 OUT  +7,226 tot +22,431 DD  3,134 0.44/s  35%days | dIN -11,889 dOUT -13,928
+      (baseline)
+OB+LHM[N] 15:00 adr0.5 stop2                               n=174 win= 51% IN +27,313 OUT +15,811 tot +43,124 DD  3,527 0.69/s  54%days | dIN    +219 dOUT  -5,343
+OB+LHM[N] 15:05 adr0.3 stop1                               n=135 win= 49% IN  +4,173 OUT  +6,466 tot +10,640 DD  4,797 0.53/s  43%days | dIN -22,921 dOUT -14,688
+OB+LHM[N] 15:05 adr0.3 stop1.5                             n=184 win= 49% IN  +4,705 OUT  +2,400 tot  +7,105 DD  6,349 0.72/s  57%days | dIN -22,389 dOUT -18,754
+OB+LHM[N] 15:05 adr0.3 stop2                               n=199 win= 48% IN  +3,011 OUT  +1,260 tot  +4,271 DD  6,422 0.78/s  62%days | dIN -24,083 dOUT -19,895
+OB+LHM[N] 15:05 adr0.4 stop1                               n=130 win= 49% IN  +4,206 OUT  +4,879 tot  +9,084 DD  5,300 0.51/s  41%days | dIN -22,888 dOUT -16,276
+OB+LHM[N] 15:05 adr0.4 stop1.5                             n=173 win= 50% IN  +4,246 OUT  +1,306 tot  +5,552 DD  6,763 0.68/s  53%days | dIN -22,848 dOUT -19,848
+OB+LHM[N] 15:05 adr0.4 stop2                               n=187 win= 49% IN  +3,263 OUT     -59 tot  +3,203 DD  6,393 0.74/s  57%days | dIN -23,831 dOUT -21,214
+OB+LHM[N] 15:05 adr0.5 stop1                               n=127 win= 50% IN  +5,314 OUT  +4,276 tot  +9,591 DD  5,300 0.50/s  40%days | dIN -21,780 dOUT -16,878
+OB+LHM[N] 15:05 adr0.5 stop1.5                             n=163 win= 49% IN  +5,232 OUT    +969 tot  +6,201 DD  6,439 0.64/s  50%days | dIN -21,862 dOUT -20,186
+OB+LHM[N] 15:05 adr0.5 stop2                               n=174 win= 48% IN  +5,060 OUT     -93 tot  +4,967 DD  5,592 0.69/s  53%days | dIN -22,034 dOUT -21,248
+OB+LHM[N] 15:10 adr0.3 stop1                               n=136 win= 49% IN  -1,071 OUT  +4,278 tot  +3,207 DD  7,683 0.54/s  43%days | dIN -28,165 dOUT -16,876
+OB+LHM[N] 15:10 adr0.3 stop1.5                             n=184 win= 43% IN  -2,032 OUT  -1,449 tot  -3,481 DD  9,026 0.72/s  57%days | dIN -29,126 dOUT -22,603
+OB+LHM[N] 15:10 adr0.3 stop2                               n=197 win= 41% IN  -2,281 OUT  -2,847 tot  -5,128 DD 10,655 0.78/s  61%days | dIN -29,375 dOUT -24,001
+OB+LHM[N] 15:10 adr0.4 stop1                               n=132 win= 48% IN    -640 OUT  +4,278 tot  +3,638 DD  7,167 0.52/s  41%days | dIN -27,734 dOUT -16,876
+OB+LHM[N] 15:10 adr0.4 stop1.5                             n=176 win= 44% IN  -1,545 OUT  -1,037 tot  -2,583 DD  8,205 0.69/s  54%days | dIN -28,639 dOUT -22,192
+OB+LHM[N] 15:10 adr0.4 stop2                               n=187 win= 42% IN  -1,272 OUT  -2,427 tot  -3,700 DD  8,996 0.74/s  58%days | dIN -28,366 dOUT -23,582
+OB+LHM[N] 15:10 adr0.5 stop1                               n=129 win= 48% IN    -933 OUT  +4,814 tot  +3,881 DD  7,167 0.51/s  40%days | dIN -28,027 dOUT -16,340
+OB+LHM[N] 15:10 adr0.5 stop1.5                             n=166 win= 45% IN  -1,013 OUT  +1,092 tot     +79 DD  6,967 0.65/s  51%days | dIN -28,107 dOUT -20,063
+OB+LHM[N] 15:10 adr0.5 stop2                               n=174 win= 43% IN    -904 OUT    -768 tot  -1,672 DD  7,168 0.69/s  54%days | dIN -27,998 dOUT -21,922
+   -- book = OB + LHM[B]
+OB+LHM[B] 14:45 adr0.3 stop1                               n=123 win= 43% IN  -2,221 OUT  +9,232 tot  +7,011 DD  6,618 0.48/s  39%days | dIN -29,315 dOUT -11,922
+OB+LHM[B] 14:45 adr0.3 stop1.5                             n=134 win= 43% IN  -3,647 OUT  +5,815 tot  +2,168 DD  8,626 0.53/s  43%days | dIN -30,741 dOUT -15,340
+OB+LHM[B] 14:45 adr0.3 stop2                               n=134 win= 44% IN  -4,451 OUT  +5,874 tot  +1,423 DD 10,158 0.53/s  43%days | dIN -31,545 dOUT -15,280
+OB+LHM[B] 14:45 adr0.4 stop1                               n=119 win= 44% IN  -2,659 OUT  +9,316 tot  +6,657 DD  7,056 0.47/s  38%days | dIN -29,753 dOUT -11,838
+OB+LHM[B] 14:45 adr0.4 stop1.5                             n=128 win= 43% IN  -2,617 OUT  +6,394 tot  +3,777 DD  7,596 0.50/s  41%days | dIN -29,711 dOUT -14,761
+OB+LHM[B] 14:45 adr0.4 stop2                               n=128 win= 45% IN  -3,214 OUT  +6,149 tot  +2,935 DD  8,921 0.50/s  41%days | dIN -30,308 dOUT -15,005
+OB+LHM[B] 14:45 adr0.5 stop1                               n=114 win= 44% IN  -4,577 OUT  +9,316 tot  +4,739 DD  6,789 0.45/s  36%days | dIN -31,671 dOUT -11,838
+OB+LHM[B] 14:45 adr0.5 stop1.5                             n=120 win= 44% IN  -3,510 OUT  +6,833 tot  +3,323 DD  6,305 0.47/s  39%days | dIN -30,604 dOUT -14,321
+OB+LHM[B] 14:45 adr0.5 stop2                               n=120 win= 46% IN  -3,103 OUT  +6,694 tot  +3,591 DD  6,893 0.47/s  39%days | dIN -30,197 dOUT -14,460
+OB+LHM[B] 15:00 adr0.3 stop1                               n=119 win= 44% IN  -6,231 OUT  +7,932 tot  +1,701 DD  8,423 0.47/s  37%days | dIN -33,325 dOUT -13,222
+OB+LHM[B] 15:00 adr0.3 stop1.5                             n=135 win= 45% IN  -3,157 OUT  +4,525 tot  +1,368 DD  7,369 0.53/s  43%days | dIN -30,251 dOUT -16,629
+OB+LHM[B] 15:00 adr0.3 stop2                               n=132 win= 48% IN    -387 OUT  +3,355 tot  +2,968 DD  6,958 0.52/s  43%days | dIN -27,481 dOUT -17,800
+OB+LHM[B] 15:00 adr0.4 stop1                               n=115 win= 45% IN  -4,714 OUT  +7,932 tot  +3,218 DD  6,906 0.45/s  36%days | dIN -31,808 dOUT -13,222
+OB+LHM[B] 15:00 adr0.4 stop1.5                             n=129 win= 47% IN  -1,948 OUT  +5,452 tot  +3,504 DD  6,160 0.51/s  41%days | dIN -29,042 dOUT -15,702
+OB+LHM[B] 15:00 adr0.4 stop2                               n=126 win= 51% IN    +798 OUT  +4,501 tot  +5,299 DD  5,774 0.50/s  41%days | dIN -26,296 dOUT -16,653
+OB+LHM[B] 15:00 adr0.5 stop1                               n=111 win= 47% IN  -3,631 OUT  +8,318 tot  +4,688 DD  5,822 0.44/s  35%days | dIN -30,725 dOUT -12,836
+OB+LHM[B] 15:00 adr0.5 stop1.5                             n=121 win= 49% IN  -1,308 OUT  +5,992 tot  +4,684 DD  4,271 0.48/s  39%days | dIN -28,402 dOUT -15,163
+OB+LHM[B] 15:00 adr0.5 stop2                               n=118 win= 52% IN    +628 OUT  +5,173 tot  +5,800 DD  4,487 0.46/s  38%days | dIN -26,466 dOUT -15,982
+OB+LHM[B] 15:05 adr0.3 stop1                               n=117 win= 49% IN  +2,542 OUT  +7,176 tot  +9,718 DD  5,165 0.46/s  37%days | dIN -24,552 dOUT -13,978
+OB+LHM[B] 15:05 adr0.3 stop1.5                             n=131 win= 48% IN  +1,229 OUT  +4,964 tot  +6,193 DD  5,726 0.52/s  42%days | dIN -25,865 dOUT -16,191
+OB+LHM[B] 15:05 adr0.3 stop2                               n=128 win= 50% IN  +2,912 OUT  +5,332 tot  +8,243 DD  3,947 0.50/s  41%days | dIN -24,182 dOUT -15,823
+OB+LHM[B] 15:05 adr0.4 stop1                               n=115 win= 50% IN  +3,548 OUT  +7,176 tot +10,724 DD  5,165 0.45/s  36%days | dIN -23,546 dOUT -13,978
+OB+LHM[B] 15:05 adr0.4 stop1.5                             n=127 win= 50% IN  +2,463 OUT  +5,411 tot  +7,875 DD  5,726 0.50/s  41%days | dIN -24,631 dOUT -15,743
+OB+LHM[B] 15:05 adr0.4 stop2                               n=124 win= 52% IN  +4,080 OUT  +5,886 tot  +9,966 DD  3,502 0.49/s  40%days | dIN -23,014 dOUT -15,269
+OB+LHM[B] 15:05 adr0.5 stop1                               n=112 win= 50% IN  +3,476 OUT  +7,573 tot +11,050 DD  5,165 0.44/s  35%days | dIN -23,618 dOUT -13,581
+OB+LHM[B] 15:05 adr0.5 stop1.5                             n=121 win= 50% IN  +3,339 OUT  +5,508 tot  +8,847 DD  5,726 0.48/s  38%days | dIN -23,755 dOUT -15,646
+OB+LHM[B] 15:05 adr0.5 stop2                               n=118 win= 53% IN  +4,743 OUT  +6,125 tot +10,869 DD  2,995 0.46/s  38%days | dIN -22,351 dOUT -15,029
+OB+LHM[B] 15:10 adr0.3 stop1                               n=118 win= 47% IN    +410 OUT  +5,143 tot  +5,553 DD  4,119 0.46/s  37%days | dIN -26,684 dOUT -16,011
+OB+LHM[B] 15:10 adr0.3 stop1.5                             n=131 win= 47% IN  +1,723 OUT  +4,085 tot  +5,808 DD  4,262 0.52/s  42%days | dIN -25,371 dOUT -17,069
+OB+LHM[B] 15:10 adr0.3 stop2                               n=130 win= 48% IN  +1,917 OUT  +5,365 tot  +7,281 DD  4,023 0.51/s  41%days | dIN -25,177 dOUT -15,790
+OB+LHM[B] 15:10 adr0.4 stop1                               n=115 win= 49% IN  +1,155 OUT  +5,590 tot  +6,745 DD  3,767 0.45/s  36%days | dIN -25,939 dOUT -15,565
+OB+LHM[B] 15:10 adr0.4 stop1.5                             n=126 win= 48% IN  +2,623 OUT  +5,011 tot  +7,633 DD  3,362 0.50/s  40%days | dIN -24,471 dOUT -16,144
+OB+LHM[B] 15:10 adr0.4 stop2                               n=125 win= 49% IN  +2,477 OUT  +6,108 tot  +8,586 DD  3,462 0.49/s  40%days | dIN -24,617 dOUT -15,046
+OB+LHM[B] 15:10 adr0.5 stop1                               n=113 win= 49% IN  +1,382 OUT  +5,590 tot  +6,972 DD  3,767 0.44/s  35%days | dIN -25,712 dOUT -15,565
+OB+LHM[B] 15:10 adr0.5 stop1.5                             n=121 win= 49% IN  +3,022 OUT  +4,858 tot  +7,879 DD  2,840 0.48/s  38%days | dIN -24,072 dOUT -16,296
+OB+LHM[B] 15:10 adr0.5 stop2                               n=120 win= 49% IN  +2,976 OUT  +5,956 tot  +8,932 DD  2,916 0.47/s  38%days | dIN -24,118 dOUT -15,199
+   -- book = OB + LHM[S]
+OB+LHM[S] 14:45 adr0.3 stop1                               n=163 win= 36% IN  +8,961 OUT  +4,432 tot +13,393 DD  7,278 0.64/s  49%days | dIN -18,133 dOUT -16,722
+OB+LHM[S] 14:45 adr0.3 stop1.5                             n=188 win= 35% IN +12,797 OUT  +8,730 tot +21,526 DD  8,833 0.74/s  58%days | dIN -14,297 dOUT -12,425
+OB+LHM[S] 14:45 adr0.3 stop2                               n=190 win= 40% IN +13,258 OUT +10,835 tot +24,093 DD 10,118 0.75/s  59%days | dIN -13,836 dOUT -10,319
+OB+LHM[S] 14:45 adr0.4 stop1                               n=151 win= 38% IN +10,952 OUT  +5,081 tot +16,033 DD  6,584 0.59/s  46%days | dIN -16,142 dOUT -16,073
+OB+LHM[S] 14:45 adr0.4 stop1.5                             n=174 win= 36% IN +13,361 OUT  +9,084 tot +22,445 DD  8,626 0.69/s  54%days | dIN -13,733 dOUT -12,070
+OB+LHM[S] 14:45 adr0.4 stop2                               n=175 win= 41% IN +15,479 OUT  +8,782 tot +24,261 DD  9,214 0.69/s  54%days | dIN -11,615 dOUT -12,373
+OB+LHM[S] 14:45 adr0.5 stop1                               n=146 win= 39% IN +13,346 OUT  +5,556 tot +18,902 DD  5,449 0.57/s  44%days | dIN -13,748 dOUT -15,598
+OB+LHM[S] 14:45 adr0.5 stop1.5                             n=165 win= 36% IN +14,753 OUT    +261 tot +15,015 DD  6,862 0.65/s  51%days | dIN -12,341 dOUT -20,893
+OB+LHM[S] 14:45 adr0.5 stop2                               n=166 win= 40% IN +12,933 OUT    +175 tot +13,108 DD  9,176 0.65/s  52%days | dIN -14,161 dOUT -20,979
+OB+LHM[S] 15:00 adr0.3 stop1                               n=171 win= 39% IN +13,076 OUT  +2,593 tot +15,670 DD  5,864 0.67/s  51%days | dIN -14,018 dOUT -18,561
+OB+LHM[S] 15:00 adr0.3 stop1.5                             n=197 win= 43% IN +14,150 OUT +12,146 tot +26,296 DD  7,544 0.78/s  59%days | dIN -12,944 dOUT  -9,008
+OB+LHM[S] 15:00 adr0.3 stop2                               n=191 win= 46% IN +13,425 OUT +12,456 tot +25,881 DD  4,886 0.75/s  58%days | dIN -13,669 dOUT  -8,699
+OB+LHM[S] 15:00 adr0.4 stop1                               n=159 win= 40% IN +12,883 OUT  +4,280 tot +17,163 DD  6,039 0.63/s  48%days | dIN -14,211 dOUT -16,874
+OB+LHM[S] 15:00 adr0.4 stop1.5                             n=181 win= 43% IN +14,002 OUT +11,973 tot +25,975 DD  6,984 0.71/s  55%days | dIN -13,092 dOUT  -9,182
+OB+LHM[S] 15:00 adr0.4 stop2                               n=176 win= 47% IN +14,553 OUT +12,523 tot +27,077 DD  4,992 0.69/s  54%days | dIN -12,541 dOUT  -8,631
+OB+LHM[S] 15:00 adr0.5 stop1                               n=151 win= 42% IN +15,440 OUT  +4,359 tot +19,799 DD  4,949 0.59/s  46%days | dIN -11,654 dOUT -16,795
+OB+LHM[S] 15:00 adr0.5 stop1.5                             n=169 win= 43% IN +15,494 OUT  +2,425 tot +17,919 DD  5,567 0.67/s  52%days | dIN -11,600 dOUT -18,729
+OB+LHM[S] 15:00 adr0.5 stop2                               n=164 win= 47% IN +16,013 OUT  +3,085 tot +19,098 DD  4,889 0.65/s  51%days | dIN -11,081 dOUT -18,069
+OB+LHM[S] 15:05 adr0.3 stop1                               n=174 win= 40% IN  -3,966 OUT  +3,078 tot    -888 DD 10,038 0.69/s  53%days | dIN -31,060 dOUT -18,076
+OB+LHM[S] 15:05 adr0.3 stop1.5                             n=193 win= 44% IN  -3,727 OUT     +92 tot  -3,634 DD 12,809 0.76/s  59%days | dIN -30,821 dOUT -21,062
+OB+LHM[S] 15:05 adr0.3 stop2                               n=185 win= 45% IN  -4,964 OUT  -1,148 tot  -6,112 DD 13,934 0.73/s  57%days | dIN -32,058 dOUT -22,302
+OB+LHM[S] 15:05 adr0.4 stop1                               n=165 win= 39% IN  -2,569 OUT    +274 tot  -2,295 DD 12,279 0.65/s  50%days | dIN -29,663 dOUT -20,880
+OB+LHM[S] 15:05 adr0.4 stop1.5                             n=184 win= 43% IN  -2,821 OUT  -1,977 tot  -4,798 DD 14,738 0.72/s  56%days | dIN -29,915 dOUT -23,131
+OB+LHM[S] 15:05 adr0.4 stop2                               n=177 win= 44% IN  -4,094 OUT  -2,360 tot  -6,455 DD 15,355 0.70/s  54%days | dIN -31,188 dOUT -23,515
+OB+LHM[S] 15:05 adr0.5 stop1                               n=155 win= 40% IN  -2,183 OUT    +727 tot  -1,456 DD 10,145 0.61/s  47%days | dIN -29,277 dOUT -20,428
+OB+LHM[S] 15:05 adr0.5 stop1.5                             n=171 win= 44% IN  -2,692 OUT  -1,767 tot  -4,459 DD 12,341 0.67/s  52%days | dIN -29,786 dOUT -22,921
+OB+LHM[S] 15:05 adr0.5 stop2                               n=164 win= 45% IN  -3,730 OUT  -2,156 tot  -5,886 DD 13,352 0.65/s  50%days | dIN -30,824 dOUT -23,310
+OB+LHM[S] 15:10 adr0.3 stop1                               n=179 win= 40% IN  -8,504 OUT     -48 tot  -8,552 DD 16,352 0.70/s  54%days | dIN -35,598 dOUT -21,203
+OB+LHM[S] 15:10 adr0.3 stop1.5                             n=192 win= 39% IN  -7,289 OUT  -2,919 tot -10,208 DD 16,219 0.76/s  59%days | dIN -34,383 dOUT -24,073
+OB+LHM[S] 15:10 adr0.3 stop2                               n=182 win= 40% IN  -2,736 OUT  -1,717 tot  -4,453 DD 10,562 0.72/s  56%days | dIN -29,830 dOUT -22,871
+OB+LHM[S] 15:10 adr0.4 stop1                               n=174 win= 40% IN  -7,830 OUT    +343 tot  -7,487 DD 15,679 0.69/s  52%days | dIN -34,924 dOUT -20,812
+OB+LHM[S] 15:10 adr0.4 stop1.5                             n=187 win= 39% IN  -6,535 OUT  -2,679 tot  -9,213 DD 15,403 0.74/s  57%days | dIN -33,629 dOUT -23,833
+OB+LHM[S] 15:10 adr0.4 stop2                               n=178 win= 40% IN  -2,273 OUT  -1,439 tot  -3,712 DD  9,906 0.70/s  54%days | dIN -29,367 dOUT -22,593
+OB+LHM[S] 15:10 adr0.5 stop1                               n=160 win= 41% IN  -6,610 OUT  +2,318 tot  -4,291 DD 13,306 0.63/s  48%days | dIN -33,704 dOUT -18,836
+OB+LHM[S] 15:10 adr0.5 stop1.5                             n=170 win= 41% IN  -5,005 OUT    -605 tot  -5,610 DD 12,409 0.67/s  52%days | dIN -32,099 dOUT -21,760
+OB+LHM[S] 15:10 adr0.5 stop2                               n=164 win= 41% IN  -1,744 OUT    +113 tot  -1,631 DD  8,657 0.65/s  50%days | dIN -28,838 dOUT -21,042
+   -- book = OB + LHM[N>B]
+OB+LHM[N>B] 14:45 adr0.3 stop1                             n=145 win= 39% IN  -2,254 OUT  +9,774 tot  +7,520 DD 11,294 0.57/s  44%days | dIN -29,348 dOUT -11,380 {'LHM_B': 27, 'LHM_N': 31, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.3 stop1.5                           n=195 win= 37% IN +13,762 OUT +11,185 tot +24,946 DD  8,452 0.77/s  61%days | dIN -13,332 dOUT  -9,970 {'LHM_B': 17, 'LHM_N': 91, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.3 stop2                             n=208 win= 41% IN +21,020 OUT +10,329 tot +31,349 DD 10,185 0.82/s  65%days | dIN  -6,074 dOUT -10,826 {'LHM_B': 10, 'LHM_N': 111, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.4 stop1                             n=136 win= 40% IN  -1,064 OUT  +9,475 tot  +8,411 DD 10,767 0.54/s  42%days | dIN -28,158 dOUT -11,679 {'LHM_B': 24, 'LHM_N': 25, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.4 stop1.5                           n=180 win= 37% IN +13,982 OUT +11,194 tot +25,176 DD  8,192 0.71/s  56%days | dIN -13,112 dOUT  -9,960 {'LHM_B': 15, 'LHM_N': 78, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.4 stop2                             n=192 win= 41% IN +20,743 OUT  +7,855 tot +28,598 DD  9,270 0.76/s  60%days | dIN  -6,351 dOUT -13,299 {'LHM_B': 8, 'LHM_N': 97, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.5 stop1                             n=132 win= 41% IN  -1,895 OUT  +9,475 tot  +7,580 DD  9,413 0.52/s  41%days | dIN -28,989 dOUT -11,679 {'LHM_B': 20, 'LHM_N': 25, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.5 stop1.5                           n=173 win= 38% IN +12,593 OUT +12,369 tot +24,961 DD  7,510 0.68/s  54%days | dIN -14,501 dOUT  -8,786 {'LHM_B': 13, 'LHM_N': 73, 'OB': 87}
+OB+LHM[N>B] 14:45 adr0.5 stop2                             n=181 win= 41% IN +20,369 OUT  +8,600 tot +28,969 DD  8,250 0.71/s  56%days | dIN  -6,725 dOUT -12,555 {'LHM_B': 8, 'LHM_N': 86, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.3 stop1                             n=147 win= 44% IN +12,482 OUT  +6,935 tot +19,417 DD  5,744 0.58/s  44%days | dIN -14,612 dOUT -14,219 {'LHM_B': 23, 'LHM_N': 37, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.3 stop1.5                           n=191 win= 45% IN +24,104 OUT +17,205 tot +41,310 DD  6,046 0.75/s  57%days | dIN  -2,990 dOUT  -3,949 {'LHM_B': 13, 'LHM_N': 91, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.3 stop2                             n=207 win= 47% IN +23,244 OUT +13,433 tot +36,677 DD  6,055 0.81/s  63%days | dIN  -3,850 dOUT  -7,721 {'LHM_B': 7, 'LHM_N': 113, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.4 stop1                             n=140 win= 45% IN +10,766 OUT  +7,539 tot +18,306 DD  5,141 0.55/s  43%days | dIN -16,328 dOUT -13,615 {'LHM_B': 22, 'LHM_N': 31, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.4 stop1.5                           n=180 win= 46% IN +22,780 OUT +17,888 tot +40,668 DD  6,555 0.71/s  56%days | dIN  -4,314 dOUT  -3,266 {'LHM_B': 14, 'LHM_N': 79, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.4 stop2                             n=194 win= 47% IN +23,058 OUT +13,135 tot +36,193 DD  5,848 0.76/s  61%days | dIN  -4,036 dOUT  -8,019 {'LHM_B': 9, 'LHM_N': 98, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.5 stop1                             n=132 win= 47% IN +10,737 OUT  +8,502 tot +19,239 DD  3,957 0.52/s  41%days | dIN -16,357 dOUT -12,652 {'LHM_B': 19, 'LHM_N': 26, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.5 stop1.5                           n=170 win= 48% IN +23,752 OUT +18,635 tot +42,387 DD  4,907 0.67/s  53%days | dIN  -3,342 dOUT  -2,519 {'LHM_B': 11, 'LHM_N': 72, 'OB': 87}
+OB+LHM[N>B] 15:00 adr0.5 stop2                             n=181 win= 50% IN +25,712 OUT +14,575 tot +40,287 DD  4,069 0.71/s  57%days | dIN  -1,382 dOUT  -6,580 {'LHM_B': 7, 'LHM_N': 87, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.3 stop1                             n=155 win= 46% IN  +2,582 OUT  +6,307 tot  +8,889 DD  7,147 0.61/s  48%days | dIN -24,512 dOUT -14,847 {'LHM_B': 20, 'LHM_N': 48, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.3 stop1.5                           n=198 win= 47% IN  +3,667 OUT  -1,159 tot  +2,508 DD  7,611 0.78/s  61%days | dIN -23,427 dOUT -22,313 {'LHM_B': 14, 'LHM_N': 97, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.3 stop2                             n=207 win= 48% IN  +4,193 OUT    -695 tot  +3,498 DD  6,622 0.81/s  64%days | dIN -22,901 dOUT -21,849 {'LHM_B': 8, 'LHM_N': 112, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.4 stop1                             n=150 win= 47% IN  +3,154 OUT  +4,719 tot  +7,874 DD  6,492 0.59/s  46%days | dIN -23,940 dOUT -16,435 {'LHM_B': 20, 'LHM_N': 43, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.4 stop1.5                           n=187 win= 48% IN  +3,629 OUT  -1,805 tot  +1,824 DD  8,126 0.74/s  57%days | dIN -23,465 dOUT -22,959 {'LHM_B': 14, 'LHM_N': 86, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.4 stop2                             n=196 win= 49% IN  +4,564 OUT  -1,460 tot  +3,104 DD  6,642 0.77/s  61%days | dIN -22,530 dOUT -22,614 {'LHM_B': 9, 'LHM_N': 100, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.5 stop1                             n=144 win= 47% IN  +4,192 OUT  +4,514 tot  +8,706 DD  6,253 0.57/s  44%days | dIN -22,902 dOUT -16,640 {'LHM_B': 17, 'LHM_N': 40, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.5 stop1.5                           n=175 win= 47% IN  +4,782 OUT  -2,155 tot  +2,628 DD  7,801 0.69/s  53%days | dIN -22,312 dOUT -23,309 {'LHM_B': 12, 'LHM_N': 76, 'OB': 87}
+OB+LHM[N>B] 15:05 adr0.5 stop2                             n=182 win= 48% IN  +6,080 OUT  -1,094 tot  +4,985 DD  4,982 0.72/s  56%days | dIN -21,014 dOUT -22,249 {'LHM_B': 8, 'LHM_N': 87, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.3 stop1                             n=154 win= 47% IN    -399 OUT  +2,929 tot  +2,530 DD  7,196 0.61/s  48%days | dIN -27,493 dOUT -18,226 {'LHM_B': 18, 'LHM_N': 49, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.3 stop1.5                           n=200 win= 42% IN  -1,784 OUT  -3,784 tot  -5,568 DD 10,957 0.79/s  62%days | dIN -28,878 dOUT -24,938 {'LHM_B': 16, 'LHM_N': 97, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.3 stop2                             n=207 win= 41% IN  -1,242 OUT  -4,068 tot  -5,310 DD 10,838 0.81/s  64%days | dIN -28,336 dOUT -25,223 {'LHM_B': 10, 'LHM_N': 110, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.4 stop1                             n=149 win= 48% IN    +955 OUT  +3,375 tot  +4,330 DD  6,049 0.59/s  46%days | dIN -26,139 dOUT -17,779 {'LHM_B': 17, 'LHM_N': 45, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.4 stop1.5                           n=191 win= 43% IN    -229 OUT  -2,950 tot  -3,179 DD  8,237 0.75/s  59%days | dIN -27,323 dOUT -24,104 {'LHM_B': 15, 'LHM_N': 89, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.4 stop2                             n=196 win= 42% IN    +475 OUT  -3,458 tot  -2,984 DD  8,247 0.77/s  61%days | dIN -26,619 dOUT -24,612 {'LHM_B': 9, 'LHM_N': 100, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.5 stop1                             n=144 win= 47% IN    +889 OUT  +3,912 tot  +4,800 DD  6,049 0.57/s  44%days | dIN -26,205 dOUT -17,243 {'LHM_B': 15, 'LHM_N': 42, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.5 stop1.5                           n=178 win= 43% IN    +554 OUT    -974 tot    -420 DD  6,317 0.70/s  55%days | dIN -26,540 dOUT -22,128 {'LHM_B': 12, 'LHM_N': 79, 'OB': 87}
+OB+LHM[N>B] 15:10 adr0.5 stop2                             n=183 win= 43% IN    +481 OUT  -1,799 tot  -1,318 DD  6,781 0.72/s  57%days | dIN -26,613 dOUT -22,953 {'LHM_B': 9, 'LHM_N': 87, 'OB': 87}
+   -- book = OB + LHM[N>S]
+OB+LHM[N>S] 14:45 adr0.3 stop1                             n=169 win= 35% IN  +2,231 OUT  +4,364 tot  +6,595 DD  9,741 0.67/s  52%days | dIN -24,863 dOUT -16,791 {'LHM_N': 31, 'LHM_S': 51, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.3 stop1.5                           n=203 win= 35% IN +10,653 OUT  +9,816 tot +20,469 DD  8,478 0.80/s  63%days | dIN -16,441 dOUT -11,338 {'LHM_N': 91, 'LHM_S': 25, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.3 stop2                             n=208 win= 41% IN +20,870 OUT  +9,367 tot +30,237 DD  8,390 0.82/s  65%days | dIN  -6,224 dOUT -11,787 {'LHM_N': 111, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.4 stop1                             n=155 win= 36% IN  +5,425 OUT  +4,630 tot +10,055 DD  8,958 0.61/s  47%days | dIN -21,669 dOUT -16,524 {'LHM_N': 25, 'LHM_S': 43, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.4 stop1.5                           n=186 win= 35% IN +10,948 OUT  +9,662 tot +20,610 DD  8,203 0.73/s  58%days | dIN -16,146 dOUT -11,493 {'LHM_N': 78, 'LHM_S': 21, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.4 stop2                             n=192 win= 41% IN +20,098 OUT  +7,130 tot +27,228 DD  8,275 0.76/s  60%days | dIN  -6,996 dOUT -14,024 {'LHM_N': 97, 'LHM_S': 8, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.5 stop1                             n=152 win= 37% IN  +6,560 OUT  +5,105 tot +11,665 DD  7,822 0.60/s  46%days | dIN -20,534 dOUT -16,049 {'LHM_N': 25, 'LHM_S': 40, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.5 stop1.5                           n=179 win= 36% IN  +9,788 OUT +11,662 tot +21,450 DD  7,913 0.70/s  56%days | dIN -17,306 dOUT  -9,492 {'LHM_N': 73, 'LHM_S': 19, 'OB': 87}
+OB+LHM[N>S] 14:45 adr0.5 stop2                             n=182 win= 41% IN +19,848 OUT  +8,809 tot +28,657 DD  7,657 0.72/s  57%days | dIN  -7,246 dOUT -12,346 {'LHM_N': 86, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.3 stop1                             n=176 win= 40% IN +16,500 OUT  +3,428 tot +19,928 DD  5,351 0.69/s  53%days | dIN -10,594 dOUT -17,726 {'LHM_N': 37, 'LHM_S': 52, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.3 stop1.5                           n=211 win= 46% IN +28,085 OUT +16,823 tot +44,909 DD  5,024 0.83/s  63%days | dIN    +991 dOUT  -4,331 {'LHM_N': 91, 'LHM_S': 33, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.3 stop2                             n=214 win= 47% IN +24,172 OUT +13,450 tot +37,622 DD  5,031 0.84/s  65%days | dIN  -2,922 dOUT  -7,704 {'LHM_N': 113, 'LHM_S': 14, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.4 stop1                             n=162 win= 41% IN +15,027 OUT  +5,023 tot +20,050 DD  5,681 0.64/s  50%days | dIN -12,067 dOUT -16,131 {'LHM_N': 31, 'LHM_S': 44, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.4 stop1.5                           n=192 win= 47% IN +26,796 OUT +17,044 tot +43,840 DD  5,067 0.76/s  59%days | dIN    -298 dOUT  -4,110 {'LHM_N': 79, 'LHM_S': 26, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.4 stop2                             n=197 win= 48% IN +24,572 OUT +13,531 tot +38,103 DD  5,080 0.78/s  61%days | dIN  -2,522 dOUT  -7,624 {'LHM_N': 98, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.5 stop1                             n=151 win= 42% IN +15,372 OUT  +5,678 tot +21,050 DD  4,943 0.59/s  46%days | dIN -11,722 dOUT -15,476 {'LHM_N': 26, 'LHM_S': 38, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.5 stop1.5                           n=180 win= 47% IN +25,371 OUT +17,498 tot +42,869 DD  4,833 0.71/s  56%days | dIN  -1,723 dOUT  -3,656 {'LHM_N': 72, 'LHM_S': 21, 'OB': 87}
+OB+LHM[N>S] 15:00 adr0.5 stop2                             n=184 win= 49% IN +24,327 OUT +14,541 tot +38,868 DD  3,936 0.72/s  57%days | dIN  -2,767 dOUT  -6,613 {'LHM_N': 87, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.3 stop1                             n=180 win= 42% IN  -3,213 OUT  +3,130 tot     -83 DD  9,890 0.71/s  56%days | dIN -30,307 dOUT -18,024 {'LHM_N': 48, 'LHM_S': 45, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.3 stop1.5                           n=208 win= 49% IN  +3,226 OUT    +641 tot  +3,867 DD  7,507 0.82/s  64%days | dIN -23,868 dOUT -20,513 {'LHM_N': 97, 'LHM_S': 24, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.3 stop2                             n=209 win= 48% IN  +1,591 OUT  +1,584 tot  +3,174 DD  6,542 0.82/s  64%days | dIN -25,503 dOUT -19,571 {'LHM_N': 112, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.4 stop1                             n=171 win= 42% IN  -2,269 OUT  +1,091 tot  -1,178 DD 11,583 0.67/s  52%days | dIN -29,363 dOUT -20,063 {'LHM_N': 43, 'LHM_S': 41, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.4 stop1.5                           n=197 win= 49% IN  +3,284 OUT    -453 tot  +2,831 DD  8,480 0.78/s  60%days | dIN -23,810 dOUT -21,607 {'LHM_N': 86, 'LHM_S': 24, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.4 stop2                             n=198 win= 48% IN  +2,314 OUT    +265 tot  +2,578 DD  7,125 0.78/s  61%days | dIN -24,780 dOUT -20,890 {'LHM_N': 100, 'LHM_S': 11, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.5 stop1                             n=161 win= 43% IN     +95 OUT    +941 tot  +1,036 DD  9,317 0.63/s  49%days | dIN -26,999 dOUT -20,213 {'LHM_N': 40, 'LHM_S': 34, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.5 stop1.5                           n=183 win= 49% IN  +4,279 OUT  -1,205 tot  +3,074 DD  7,742 0.72/s  56%days | dIN -22,815 dOUT -22,359 {'LHM_N': 76, 'LHM_S': 20, 'OB': 87}
+OB+LHM[N>S] 15:05 adr0.5 stop2                             n=184 win= 48% IN  +4,344 OUT    -382 tot  +3,962 DD  6,000 0.72/s  56%days | dIN -22,750 dOUT -21,536 {'LHM_N': 87, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.3 stop1                             n=187 win= 42% IN  -9,118 OUT  -1,658 tot -10,776 DD 17,733 0.74/s  57%days | dIN -36,212 dOUT -22,812 {'LHM_N': 49, 'LHM_S': 51, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.3 stop1.5                           n=211 win= 40% IN  -6,401 OUT  -4,950 tot -11,351 DD 16,499 0.83/s  65%days | dIN -33,495 dOUT -26,104 {'LHM_N': 97, 'LHM_S': 27, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.3 stop2                             n=209 win= 40% IN  -3,742 OUT  -4,179 tot  -7,921 DD 13,449 0.82/s  65%days | dIN -30,836 dOUT -25,333 {'LHM_N': 110, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.4 stop1                             n=180 win= 42% IN  -8,350 OUT  -1,267 tot  -9,617 DD 16,647 0.71/s  54%days | dIN -35,444 dOUT -22,421 {'LHM_N': 45, 'LHM_S': 48, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.4 stop1.5                           n=204 win= 40% IN  -5,722 OUT  -4,613 tot -10,335 DD 15,165 0.80/s  62%days | dIN -32,816 dOUT -25,767 {'LHM_N': 89, 'LHM_S': 28, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.4 stop2                             n=199 win= 40% IN  -2,689 OUT  -3,833 tot  -6,523 DD 11,819 0.78/s  61%days | dIN -29,783 dOUT -24,988 {'LHM_N': 100, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.5 stop1                             n=164 win= 43% IN  -7,000 OUT  +1,245 tot  -5,755 DD 14,464 0.65/s  50%days | dIN -34,094 dOUT -19,909 {'LHM_N': 42, 'LHM_S': 35, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.5 stop1.5                           n=186 win= 41% IN  -3,958 OUT  -2,043 tot  -6,001 DD 11,318 0.73/s  57%days | dIN -31,052 dOUT -23,197 {'LHM_N': 79, 'LHM_S': 20, 'OB': 87}
+OB+LHM[N>S] 15:10 adr0.5 stop2                             n=183 win= 42% IN  -1,700 OUT  -1,822 tot  -3,522 DD  9,017 0.72/s  56%days | dIN -28,794 dOUT -22,976 {'LHM_N': 87, 'LHM_S': 9, 'OB': 87}
+   -- book = OB + LHM[N>B>S]
+OB+LHM[N>B>S] 14:45 adr0.3 stop1                           n=181 win= 34% IN  +2,687 OUT  +5,266 tot  +7,953 DD 11,458 0.71/s  56%days | dIN -24,407 dOUT -15,888 {'LHM_B': 27, 'LHM_N': 31, 'LHM_S': 36, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.3 stop1.5                         n=212 win= 34% IN +10,605 OUT  +8,385 tot +18,989 DD  9,878 0.83/s  66%days | dIN -16,489 dOUT -12,770 {'LHM_B': 17, 'LHM_N': 91, 'LHM_S': 17, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.3 stop2                           n=216 win= 40% IN +20,920 OUT  +8,515 tot +29,435 DD 10,185 0.85/s  67%days | dIN  -6,174 dOUT -12,640 {'LHM_B': 10, 'LHM_N': 111, 'LHM_S': 8, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.4 stop1                           n=167 win= 35% IN  +4,646 OUT  +5,616 tot +10,262 DD 10,334 0.66/s  52%days | dIN -22,448 dOUT -15,538 {'LHM_B': 24, 'LHM_N': 25, 'LHM_S': 31, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.4 stop1.5                         n=195 win= 35% IN +11,406 OUT  +8,809 tot +20,215 DD  8,933 0.77/s  61%days | dIN -15,688 dOUT -12,345 {'LHM_B': 15, 'LHM_N': 78, 'LHM_S': 15, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.4 stop2                           n=199 win= 40% IN +20,642 OUT  +6,553 tot +27,196 DD  9,270 0.78/s  63%days | dIN  -6,452 dOUT -14,601 {'LHM_B': 8, 'LHM_N': 97, 'LHM_S': 7, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.5 stop1                           n=162 win= 36% IN  +4,229 OUT  +6,091 tot +10,319 DD  8,567 0.64/s  50%days | dIN -22,865 dOUT -15,064 {'LHM_B': 20, 'LHM_N': 25, 'LHM_S': 30, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.5 stop1.5                         n=187 win= 35% IN  +8,199 OUT +10,633 tot +18,832 DD  8,618 0.74/s  59%days | dIN -18,895 dOUT -10,521 {'LHM_B': 13, 'LHM_N': 73, 'LHM_S': 14, 'OB': 87}
+OB+LHM[N>B>S] 14:45 adr0.5 stop2                           n=188 win= 40% IN +18,451 OUT  +7,996 tot +26,447 DD  8,618 0.74/s  59%days | dIN  -8,643 dOUT -13,158 {'LHM_B': 8, 'LHM_N': 86, 'LHM_S': 7, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.3 stop1                           n=186 win= 39% IN +13,325 OUT  +2,071 tot +15,396 DD  7,552 0.73/s  56%days | dIN -13,769 dOUT -19,083 {'LHM_B': 23, 'LHM_N': 37, 'LHM_S': 39, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.3 stop1.5                         n=217 win= 45% IN +26,625 OUT +15,659 tot +42,284 DD  6,294 0.85/s  65%days | dIN    -469 dOUT  -5,495 {'LHM_B': 13, 'LHM_N': 91, 'LHM_S': 26, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.3 stop2                           n=220 win= 46% IN +23,600 OUT +11,567 tot +35,166 DD  6,057 0.87/s  66%days | dIN  -3,494 dOUT  -9,588 {'LHM_B': 7, 'LHM_N': 113, 'LHM_S': 13, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.4 stop1                           n=171 win= 40% IN +11,869 OUT  +3,666 tot +15,535 DD  6,617 0.67/s  53%days | dIN -15,225 dOUT -17,488 {'LHM_B': 22, 'LHM_N': 31, 'LHM_S': 31, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.4 stop1.5                         n=200 win= 46% IN +23,642 OUT +16,361 tot +40,003 DD  6,108 0.79/s  62%days | dIN  -3,452 dOUT  -4,793 {'LHM_B': 14, 'LHM_N': 79, 'LHM_S': 20, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.4 stop2                           n=205 win= 47% IN +22,356 OUT +12,243 tot +34,599 DD  5,848 0.81/s  64%days | dIN  -4,738 dOUT  -8,911 {'LHM_B': 9, 'LHM_N': 98, 'LHM_S': 11, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.5 stop1                           n=159 win= 42% IN +12,165 OUT  +4,708 tot +16,873 DD  5,674 0.63/s  49%days | dIN -14,929 dOUT -16,447 {'LHM_B': 19, 'LHM_N': 26, 'LHM_S': 27, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.5 stop1.5                         n=187 win= 46% IN +22,705 OUT +16,730 tot +39,435 DD  5,414 0.74/s  58%days | dIN  -4,389 dOUT  -4,425 {'LHM_B': 11, 'LHM_N': 72, 'LHM_S': 17, 'OB': 87}
+OB+LHM[N>B>S] 15:00 adr0.5 stop2                           n=191 win= 48% IN +22,726 OUT +13,305 tot +36,031 DD  4,704 0.75/s  59%days | dIN  -4,368 dOUT  -7,850 {'LHM_B': 7, 'LHM_N': 87, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.3 stop1                           n=190 win= 41% IN  -3,464 OUT  +3,982 tot    +518 DD 10,200 0.75/s  59%days | dIN -30,558 dOUT -17,172 {'LHM_B': 20, 'LHM_N': 48, 'LHM_S': 35, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.3 stop1.5                         n=216 win= 47% IN  +2,141 OUT    -488 tot  +1,654 DD  8,143 0.85/s  66%days | dIN -24,953 dOUT -21,642 {'LHM_B': 14, 'LHM_N': 97, 'LHM_S': 18, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.3 stop2                           n=216 win= 48% IN  +2,741 OUT    -371 tot  +2,370 DD  6,774 0.85/s  66%days | dIN -24,353 dOUT -21,525 {'LHM_B': 8, 'LHM_N': 112, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.4 stop1                           n=181 win= 41% IN  -1,981 OUT  +1,943 tot     -38 DD 10,209 0.71/s  56%days | dIN -29,075 dOUT -19,211 {'LHM_B': 20, 'LHM_N': 43, 'LHM_S': 31, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.4 stop1.5                         n=204 win= 49% IN  +2,841 OUT  -1,134 tot  +1,708 DD  9,116 0.80/s  63%days | dIN -24,253 dOUT -22,288 {'LHM_B': 14, 'LHM_N': 86, 'LHM_S': 17, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.4 stop2                           n=205 win= 49% IN  +3,778 OUT  -1,136 tot  +2,643 DD  6,130 0.81/s  63%days | dIN -23,316 dOUT -22,290 {'LHM_B': 9, 'LHM_N': 100, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.5 stop1                           n=169 win= 42% IN    -168 OUT  +2,191 tot  +2,023 DD  8,493 0.67/s  52%days | dIN -27,262 dOUT -18,963 {'LHM_B': 17, 'LHM_N': 40, 'LHM_S': 25, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.5 stop1.5                         n=189 win= 48% IN  +3,798 OUT  -1,428 tot  +2,369 DD  8,378 0.74/s  58%days | dIN -23,296 dOUT -22,582 {'LHM_B': 12, 'LHM_N': 76, 'LHM_S': 14, 'OB': 87}
+OB+LHM[N>B>S] 15:05 adr0.5 stop2                           n=190 win= 48% IN  +5,332 OUT    -770 tot  +4,562 DD  5,319 0.75/s  58%days | dIN -21,762 dOUT -21,924 {'LHM_B': 8, 'LHM_N': 87, 'LHM_S': 8, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.3 stop1                           n=195 win= 41% IN  -7,873 OUT  -2,271 tot -10,144 DD 15,872 0.77/s  60%days | dIN -34,967 dOUT -23,426 {'LHM_B': 18, 'LHM_N': 49, 'LHM_S': 41, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.3 stop1.5                         n=218 win= 40% IN  -4,981 OUT  -5,353 tot -10,334 DD 15,724 0.86/s  67%days | dIN -32,075 dOUT -26,508 {'LHM_B': 16, 'LHM_N': 97, 'LHM_S': 18, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.3 stop2                           n=216 win= 40% IN  -2,392 OUT  -4,630 tot  -7,022 DD 12,550 0.85/s  67%days | dIN -29,486 dOUT -25,785 {'LHM_B': 10, 'LHM_N': 110, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.4 stop1                           n=188 win= 41% IN  -6,828 OUT  -1,433 tot  -8,262 DD 14,507 0.74/s  57%days | dIN -33,922 dOUT -22,588 {'LHM_B': 17, 'LHM_N': 45, 'LHM_S': 39, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.4 stop1.5                         n=210 win= 41% IN  -3,960 OUT  -4,241 tot  -8,201 DD 13,260 0.83/s  64%days | dIN -31,054 dOUT -25,395 {'LHM_B': 15, 'LHM_N': 89, 'LHM_S': 19, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.4 stop2                           n=205 win= 40% IN  -1,058 OUT  -3,742 tot  -4,799 DD 10,063 0.81/s  63%days | dIN -28,152 dOUT -24,896 {'LHM_B': 9, 'LHM_N': 100, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.5 stop1                           n=172 win= 42% IN  -5,370 OUT    +672 tot  -4,698 DD 12,216 0.68/s  52%days | dIN -32,464 dOUT -20,482 {'LHM_B': 15, 'LHM_N': 42, 'LHM_S': 28, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.5 stop1.5                         n=193 win= 41% IN  -2,323 OUT  -2,265 tot  -4,588 DD  9,892 0.76/s  59%days | dIN -29,417 dOUT -23,419 {'LHM_B': 12, 'LHM_N': 79, 'LHM_S': 15, 'OB': 87}
+OB+LHM[N>B>S] 15:10 adr0.5 stop2                           n=190 win= 42% IN    -430 OUT  -2,083 tot  -2,513 DD  7,975 0.75/s  59%days | dIN -27,524 dOUT -23,237 {'LHM_B': 9, 'LHM_N': 87, 'LHM_S': 7, 'OB': 87}
+   -- book = OB + LHM[N>S>B]
+OB+LHM[N>S>B] 14:45 adr0.3 stop1                           n=181 win= 34% IN  +3,166 OUT  +5,611 tot  +8,777 DD 10,990 0.71/s  56%days | dIN -23,928 dOUT -15,544 {'LHM_B': 12, 'LHM_N': 31, 'LHM_S': 51, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.3 stop1.5                         n=212 win= 34% IN +10,513 OUT  +8,360 tot +18,873 DD 10,046 0.83/s  66%days | dIN -16,581 dOUT -12,795 {'LHM_B': 9, 'LHM_N': 91, 'LHM_S': 25, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.3 stop2                           n=216 win= 40% IN +20,886 OUT  +8,382 tot +29,268 DD 10,219 0.85/s  67%days | dIN  -6,208 dOUT -12,772 {'LHM_B': 8, 'LHM_N': 111, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.4 stop1                           n=167 win= 35% IN  +5,265 OUT  +5,961 tot +11,226 DD 10,618 0.66/s  52%days | dIN -21,829 dOUT -15,194 {'LHM_B': 12, 'LHM_N': 25, 'LHM_S': 43, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.4 stop1.5                         n=195 win= 35% IN +11,334 OUT  +8,784 tot +20,118 DD  9,004 0.77/s  61%days | dIN -15,760 dOUT -12,370 {'LHM_B': 9, 'LHM_N': 78, 'LHM_S': 21, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.4 stop2                           n=199 win= 40% IN +20,642 OUT  +6,421 tot +27,063 DD  9,270 0.78/s  63%days | dIN  -6,452 dOUT -14,733 {'LHM_B': 7, 'LHM_N': 97, 'LHM_S': 8, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.5 stop1                           n=162 win= 36% IN  +4,780 OUT  +6,436 tot +11,216 DD  8,918 0.64/s  50%days | dIN -22,314 dOUT -14,719 {'LHM_B': 10, 'LHM_N': 25, 'LHM_S': 40, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.5 stop1.5                         n=187 win= 35% IN  +8,127 OUT +10,280 tot +18,407 DD  8,690 0.74/s  59%days | dIN -18,967 dOUT -10,874 {'LHM_B': 8, 'LHM_N': 73, 'LHM_S': 19, 'OB': 87}
+OB+LHM[N>S>B] 14:45 adr0.5 stop2                           n=188 win= 40% IN +18,451 OUT  +8,099 tot +26,551 DD  8,618 0.74/s  59%days | dIN  -8,643 dOUT -13,055 {'LHM_B': 6, 'LHM_N': 86, 'LHM_S': 9, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.3 stop1                           n=186 win= 39% IN +13,602 OUT  +3,833 tot +17,435 DD  7,263 0.73/s  56%days | dIN -13,492 dOUT -17,322 {'LHM_B': 10, 'LHM_N': 37, 'LHM_S': 52, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.3 stop1.5                         n=217 win= 45% IN +26,384 OUT +15,310 tot +41,694 DD  6,695 0.85/s  65%days | dIN    -710 dOUT  -5,844 {'LHM_B': 6, 'LHM_N': 91, 'LHM_S': 33, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.3 stop2                           n=220 win= 45% IN +22,401 OUT +11,567 tot +33,967 DD  6,057 0.87/s  66%days | dIN  -4,693 dOUT  -9,588 {'LHM_B': 6, 'LHM_N': 113, 'LHM_S': 14, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.4 stop1                           n=171 win= 40% IN +12,258 OUT  +5,427 tot +17,686 DD  6,353 0.67/s  53%days | dIN -14,836 dOUT -15,727 {'LHM_B': 9, 'LHM_N': 31, 'LHM_S': 44, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.4 stop1.5                         n=200 win= 46% IN +23,536 OUT +16,011 tot +39,547 DD  6,242 0.79/s  62%days | dIN  -3,558 dOUT  -5,143 {'LHM_B': 8, 'LHM_N': 79, 'LHM_S': 26, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.4 stop2                           n=205 win= 47% IN +22,396 OUT +12,243 tot +34,639 DD  5,848 0.81/s  64%days | dIN  -4,698 dOUT  -8,911 {'LHM_B': 8, 'LHM_N': 98, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.5 stop1                           n=159 win= 42% IN +12,603 OUT  +6,469 tot +19,072 DD  5,532 0.63/s  49%days | dIN -14,491 dOUT -14,685 {'LHM_B': 8, 'LHM_N': 26, 'LHM_S': 38, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.5 stop1.5                         n=187 win= 46% IN +22,572 OUT +16,508 tot +39,080 DD  5,548 0.74/s  58%days | dIN  -4,522 dOUT  -4,646 {'LHM_B': 7, 'LHM_N': 72, 'LHM_S': 21, 'OB': 87}
+OB+LHM[N>S>B] 15:00 adr0.5 stop2                           n=191 win= 48% IN +22,726 OUT +13,305 tot +36,031 DD  4,704 0.75/s  59%days | dIN  -4,368 dOUT  -7,850 {'LHM_B': 7, 'LHM_N': 87, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.3 stop1                           n=190 win= 42% IN  -3,928 OUT  +2,524 tot  -1,404 DD 11,025 0.75/s  59%days | dIN -31,022 dOUT -18,630 {'LHM_B': 10, 'LHM_N': 48, 'LHM_S': 45, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.3 stop1.5                         n=216 win= 48% IN  +2,392 OUT    -917 tot  +1,475 DD  8,157 0.85/s  66%days | dIN -24,702 dOUT -22,071 {'LHM_B': 8, 'LHM_N': 97, 'LHM_S': 24, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.3 stop2                           n=216 win= 48% IN  +2,527 OUT    -371 tot  +2,156 DD  6,988 0.85/s  66%days | dIN -24,567 dOUT -21,525 {'LHM_B': 7, 'LHM_N': 112, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.4 stop1                           n=181 win= 42% IN  -2,445 OUT    +485 tot  -1,959 DD 11,087 0.71/s  56%days | dIN -29,539 dOUT -20,669 {'LHM_B': 10, 'LHM_N': 43, 'LHM_S': 41, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.4 stop1.5                         n=204 win= 49% IN  +2,892 OUT  -1,563 tot  +1,329 DD  9,129 0.80/s  63%days | dIN -24,202 dOUT -22,717 {'LHM_B': 7, 'LHM_N': 86, 'LHM_S': 24, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.4 stop2                           n=205 win= 49% IN  +3,391 OUT  -1,136 tot  +2,255 DD  6,341 0.81/s  63%days | dIN -23,703 dOUT -22,290 {'LHM_B': 7, 'LHM_N': 100, 'LHM_S': 11, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.5 stop1                           n=169 win= 43% IN    -209 OUT    +733 tot    +523 DD  8,949 0.67/s  52%days | dIN -27,303 dOUT -20,422 {'LHM_B': 8, 'LHM_N': 40, 'LHM_S': 34, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.5 stop1.5                         n=189 win= 48% IN  +3,584 OUT  -1,773 tot  +1,810 DD  8,392 0.74/s  58%days | dIN -23,510 dOUT -22,928 {'LHM_B': 6, 'LHM_N': 76, 'LHM_S': 20, 'OB': 87}
+OB+LHM[N>S>B] 15:05 adr0.5 stop2                           n=190 win= 48% IN  +5,118 OUT  -1,099 tot  +4,020 DD  5,319 0.75/s  58%days | dIN -21,976 dOUT -22,253 {'LHM_B': 6, 'LHM_N': 87, 'LHM_S': 10, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.3 stop1                           n=195 win= 42% IN  -7,479 OUT  -2,760 tot -10,240 DD 15,816 0.77/s  60%days | dIN -34,573 dOUT -23,915 {'LHM_B': 8, 'LHM_N': 49, 'LHM_S': 51, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.3 stop1.5                         n=218 win= 40% IN  -4,909 OUT  -5,966 tot -10,875 DD 16,023 0.86/s  67%days | dIN -32,003 dOUT -27,121 {'LHM_B': 7, 'LHM_N': 97, 'LHM_S': 27, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.3 stop2                           n=216 win= 40% IN  -2,512 OUT  -4,744 tot  -7,256 DD 12,784 0.85/s  67%days | dIN -29,606 dOUT -25,898 {'LHM_B': 7, 'LHM_N': 110, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.4 stop1                           n=188 win= 42% IN  -6,367 OUT  -1,922 tot  -8,290 DD 14,383 0.74/s  57%days | dIN -33,461 dOUT -23,077 {'LHM_B': 8, 'LHM_N': 45, 'LHM_S': 48, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.4 stop1.5                         n=210 win= 40% IN  -3,894 OUT  -5,186 tot  -9,080 DD 13,898 0.83/s  64%days | dIN -30,988 dOUT -26,340 {'LHM_B': 6, 'LHM_N': 89, 'LHM_S': 28, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.4 stop2                           n=205 win= 40% IN  -1,151 OUT  -4,187 tot  -5,338 DD 10,602 0.81/s  63%days | dIN -28,245 dOUT -25,342 {'LHM_B': 6, 'LHM_N': 100, 'LHM_S': 12, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.5 stop1                           n=172 win= 43% IN  -5,197 OUT    +569 tot  -4,628 DD 12,380 0.68/s  52%days | dIN -32,291 dOUT -20,585 {'LHM_B': 8, 'LHM_N': 42, 'LHM_S': 35, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.5 stop1.5                         n=193 win= 41% IN  -2,493 OUT  -2,637 tot  -5,130 DD 10,434 0.76/s  59%days | dIN -29,587 dOUT -23,791 {'LHM_B': 7, 'LHM_N': 79, 'LHM_S': 20, 'OB': 87}
+OB+LHM[N>S>B] 15:10 adr0.5 stop2                           n=190 win= 42% IN    -524 OUT  -2,196 tot  -2,720 DD  8,182 0.75/s  59%days | dIN -27,618 dOUT -23,351 {'LHM_B': 7, 'LHM_N': 87, 'LHM_S': 9, 'OB': 87}
+   -- staggered entry times (needs a per-index lhm_entry_at; not in the engine today)
+OB+LHM stag N15:00 S15:05 adr0.4                           n=195 win= 49% IN +25,577 OUT +19,184 tot +44,761 DD  4,347 0.77/s  60%days | dIN  -1,517 dOUT  -1,970 {'LHM_N': 79, 'LHM_S': 29, 'OB': 87}
+OB+LHM stag N15:00 S15:05 adr0.5                           n=182 win= 49% IN +24,944 OUT +19,446 tot +44,390 DD  3,618 0.72/s  56%days | dIN  -2,150 dOUT  -1,708 {'LHM_N': 72, 'LHM_S': 23, 'OB': 87}
+OB+LHM stag N15:00 B15:05 adr0.4                           n=178 win= 49% IN +27,769 OUT +18,693 tot +46,462 DD  4,191 0.70/s  56%days | dIN    +675 dOUT  -2,461 {'LHM_B': 12, 'LHM_N': 79, 'OB': 87}
+OB+LHM stag N15:00 B15:05 adr0.5                           n=168 win= 49% IN +27,388 OUT +18,997 tot +46,385 DD  3,578 0.66/s  52%days | dIN    +294 dOUT  -2,157 {'LHM_B': 9, 'LHM_N': 72, 'OB': 87}
+OB+LHM stag N15:00 S15:05 B15:10 adr0.4                    n=201 win= 49% IN +27,417 OUT +18,764 tot +46,181 DD  4,166 0.79/s  62%days | dIN    +323 dOUT  -2,391 {'LHM_B': 6, 'LHM_N': 79, 'LHM_S': 29, 'OB': 87}
+OB+LHM stag N15:00 S15:05 B15:10 adr0.5                    n=187 win= 49% IN +26,422 OUT +18,873 tot +45,295 DD  3,800 0.74/s  57%days | dIN    -672 dOUT  -2,281 {'LHM_B': 5, 'LHM_N': 72, 'LHM_S': 23, 'OB': 87}
+OB+LHM stag S14:45 N15:00 adr0.4                           n=189 win= 36% IN +20,052 OUT  +7,980 tot +28,032 DD  8,850 0.74/s  59%days | dIN  -7,042 dOUT -13,174 {'LHM_N': 15, 'LHM_S': 87, 'OB': 87}
+OB+LHM stag S14:45 N15:00 adr0.5                           n=180 win= 37% IN +20,579 OUT +11,714 tot +32,293 DD  7,085 0.71/s  56%days | dIN  -6,515 dOUT  -9,440 {'LHM_N': 15, 'LHM_S': 78, 'OB': 87}
+OB+LHM stag B14:45 N15:00 adr0.4                           n=180 win= 43% IN +20,213 OUT +18,757 tot +38,970 DD  9,793 0.71/s  56%days | dIN  -6,881 dOUT  -2,397 {'LHM_B': 41, 'LHM_N': 52, 'OB': 87}
+OB+LHM stag B14:45 N15:00 adr0.5                           n=170 win= 44% IN +19,130 OUT +18,905 tot +38,035 DD  6,503 0.67/s  53%days | dIN  -7,964 dOUT  -2,249 {'LHM_B': 33, 'LHM_N': 50, 'OB': 87}
+
+== 2. Other playbooks in arb/playbooks.py, live gates (per-index pace + 4h trend), added to the book
+   registry: ['choch_bos', 'sweep_bos', 'fib_pullback', 'psych_reaction', 'ob_fvg_retest', 'ib_breakout', 'vwap_pullback']  (live: ['ob_fvg_retest'])
+   choch_bos: raw 10108 priced 6600 after live gates 296
+   choch_bos alone                                         n=152 win= 39% IN -16,754 OUT  -9,380 tot -26,134 DD 26,170 0.60/s  44%days | dIN -43,848 dOUT -30,534
+OB+LHM + choch_bos [alone n=152 -26,134]                   n=283 win= 45% IN +10,061 OUT +12,036 tot +22,097 DD  7,193 1.11/s  69%days | dIN -17,033 dOUT  -9,118 {'LHM': 68, 'OB': 71, 'choch_bos': 144}
+OB+LHM + choch_bos NIFTY only                              n=176 win= 49% IN +26,906 OUT +18,104 tot +45,010 DD  3,880 0.69/s  53%days | dIN    -188 dOUT  -3,050 {'LHM': 72, 'OB': 83, 'choch_bos': 21}
+OB+LHM + choch_bos BANKNIFTY only                          n=166 win= 49% IN +25,835 OUT +20,541 tot +46,376 DD  4,723 0.65/s  50%days | dIN  -1,259 dOUT    -613 {'LHM': 72, 'OB': 87, 'choch_bos': 7}
+OB+LHM + choch_bos SENSEX only                             n=271 win= 45% IN +12,130 OUT +11,750 tot +23,880 DD  7,068 1.07/s  68%days | dIN -14,964 dOUT  -9,404 {'LHM': 68, 'OB': 74, 'choch_bos': 129}
+   fib_pullback: raw 272 priced 147 after live gates 17
+   fib_pullback alone                                      n= 16 win= 31% IN  -1,995 OUT  -1,003 tot  -2,998 DD  3,958 0.06/s   6%days | dIN -29,089 dOUT -22,157
+OB+LHM + fib_pullback [alone n=16 -2,998]                  n=170 win= 49% IN +25,365 OUT +20,677 tot +46,042 DD  3,649 0.67/s  52%days | dIN  -1,729 dOUT    -477 {'LHM': 72, 'OB': 84, 'fib_pullback': 14}
+OB+LHM + fib_pullback NIFTY only                           n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + fib_pullback BANKNIFTY only                       n=161 win= 50% IN +27,087 OUT +21,154 tot +48,241 DD  3,649 0.63/s  50%days | dIN      -7 dOUT      +0 {'LHM': 72, 'OB': 87, 'fib_pullback': 2}
+OB+LHM + fib_pullback SENSEX only                          n=168 win= 49% IN +25,372 OUT +20,677 tot +46,049 DD  3,922 0.66/s  52%days | dIN  -1,722 dOUT    -477 {'LHM': 72, 'OB': 84, 'fib_pullback': 12}
+   ib_breakout: raw 0 candidates at the live config - nothing to add
+   ib_breakout@ib_stop=edge: raw 632 priced 358 after live gates 55
+   ib_breakout@ib_stop=edge alone                          n= 26 win= 38% IN  -1,735 OUT  -2,137 tot  -3,872 DD  4,198 0.10/s   9%days | dIN -28,829 dOUT -23,292
+OB+LHM + ib_breakout@ib_stop=edge [alone n=26 -3,872]      n=182 win= 48% IN +24,044 OUT +19,082 tot +43,126 DD  3,649 0.72/s  55%days | dIN  -3,050 dOUT  -2,072 {'LHM': 72, 'OB': 84, 'ib_breakout@ib_stop=edge': 26}
+OB+LHM + ib_breakout@ib_stop=edge NIFTY only               n=165 win= 49% IN +24,966 OUT +21,107 tot +46,073 DD  3,649 0.65/s  51%days | dIN  -2,128 dOUT     -47 {'LHM': 72, 'OB': 87, 'ib_breakout@ib_stop=edge': 6}
+OB+LHM + ib_breakout@ib_stop=edge BANKNIFTY only           n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ib_breakout@ib_stop=edge SENSEX only              n=176 win= 49% IN +26,172 OUT +19,130 tot +45,302 DD  3,649 0.69/s  54%days | dIN    -922 dOUT  -2,024 {'LHM': 72, 'OB': 84, 'ib_breakout@ib_stop=edge': 20}
+   psych_reaction: raw 0 candidates at the live config - nothing to add
+   sweep_bos: raw 6649 priced 4362 after live gates 235
+   sweep_bos alone                                         n= 87 win= 47% IN  -4,152 OUT  -2,525 tot  -6,677 DD  6,677 0.34/s  28%days | dIN -31,246 dOUT -23,679
+OB+LHM + sweep_bos [alone n=87 -6,677]                     n=236 win= 49% IN +20,982 OUT +19,258 tot +40,240 DD  6,989 0.93/s  64%days | dIN  -6,112 dOUT  -1,896 {'LHM': 70, 'OB': 82, 'sweep_bos': 84}
+OB+LHM + sweep_bos NIFTY only                              n=175 win= 49% IN +24,235 OUT +21,066 tot +45,301 DD  5,139 0.69/s  53%days | dIN  -2,859 dOUT     -88 {'LHM': 72, 'OB': 85, 'sweep_bos': 18}
+OB+LHM + sweep_bos BANKNIFTY only                          n=162 win= 51% IN +26,940 OUT +21,656 tot +48,597 DD  4,318 0.64/s  50%days | dIN    -153 dOUT    +502 {'LHM': 72, 'OB': 87, 'sweep_bos': 3}
+OB+LHM + sweep_bos SENSEX only                             n=226 win= 49% IN +21,184 OUT +18,051 tot +39,235 DD  6,505 0.89/s  62%days | dIN  -5,910 dOUT  -3,103 {'LHM': 70, 'OB': 83, 'sweep_bos': 73}
+   vwap_pullback: raw 0 candidates at the live config - nothing to add
+
+== 3. Opening-session momentum (4h trend with the trade; 'pace' = also the live per-index pace gate)
+   -- ORB: opening range 09:15+orm, first close beyond it by `until`, stop mid/far/1.5ATR (floor 1 ATR), target rR or squareoff 15:00 (r=0)
+OB+LHM + ORB 4h or15 mid 1.5R <=10:30 [alone n=56 -12,938] n=209 win= 45% IN +29,412 OUT  +7,899 tot +37,310 DD  9,234 0.82/s  60%days | dIN  +2,318 dOUT -13,256 {'LHM': 71, 'OB': 83, 'ORB': 55}
+OB+LHM + ORB 4h or15 mid 1.5R <=11:00 [alone n=60 -14,394] n=212 win= 45% IN +30,823 OUT  +5,730 tot +36,553 DD  9,721 0.83/s  60%days | dIN  +3,729 dOUT -15,424 {'LHM': 71, 'OB': 82, 'ORB': 59}
+OB+LHM + ORB 4h or15 mid 2R <=10:30 [alone n=56 -12,051]   n=208 win= 43% IN +29,878 OUT  +7,437 tot +37,315 DD  9,509 0.82/s  60%days | dIN  +2,784 dOUT -13,717 {'LHM': 70, 'OB': 83, 'ORB': 55}
+OB+LHM + ORB 4h or15 mid 2R <=11:00 [alone n=60 -13,364]   n=211 win= 43% IN +31,432 OUT  +5,269 tot +36,701 DD 10,734 0.83/s  60%days | dIN  +4,338 dOUT -15,885 {'LHM': 70, 'OB': 82, 'ORB': 59}
+OB+LHM + ORB 4h or15 mid 3R <=10:30 [alone n=56 -18,156]   n=205 win= 42% IN +29,678 OUT  +4,992 tot +34,670 DD  9,941 0.81/s  60%days | dIN  +2,584 dOUT -16,162 {'LHM': 68, 'OB': 82, 'ORB': 55}
+OB+LHM + ORB 4h or15 mid 3R <=11:00 [alone n=60 -19,469]   n=208 win= 42% IN +31,233 OUT  +2,824 tot +34,056 DD 11,419 0.82/s  60%days | dIN  +4,139 dOUT -18,331 {'LHM': 68, 'OB': 81, 'ORB': 59}
+OB+LHM + ORB 4h or15 mid 0R <=10:30 [alone n=56 -15,941]   n=203 win= 42% IN +32,884 OUT  +4,992 tot +37,876 DD  9,941 0.80/s  60%days | dIN  +5,790 dOUT -16,162 {'LHM': 66, 'OB': 82, 'ORB': 55}
+OB+LHM + ORB 4h or15 mid 0R <=11:00 [alone n=60 -17,254]   n=206 win= 42% IN +34,438 OUT  +2,824 tot +37,262 DD 11,419 0.81/s  60%days | dIN  +7,344 dOUT -18,331 {'LHM': 66, 'OB': 81, 'ORB': 59}
+OB+LHM + ORB 4h or15 far 1.5R <=10:30 [alone n=9 -2,670]   n=167 win= 49% IN +27,241 OUT +17,799 tot +45,040 DD  5,083 0.66/s  51%days | dIN    +147 dOUT  -3,356 {'LHM': 72, 'OB': 86, 'ORB': 9}
+OB+LHM + ORB 4h or15 far 1.5R <=11:00 [alone n=10 -3,403]  n=168 win= 48% IN +27,241 OUT +17,066 tot +44,307 DD  5,083 0.66/s  52%days | dIN    +147 dOUT  -4,088 {'LHM': 72, 'OB': 86, 'ORB': 10}
+OB+LHM + ORB 4h or15 far 2R <=10:30 [alone n=9 -2,015]     n=166 win= 49% IN +28,481 OUT +17,799 tot +46,279 DD  5,083 0.65/s  51%days | dIN  +1,387 dOUT  -3,356 {'LHM': 71, 'OB': 86, 'ORB': 9}
+OB+LHM + ORB 4h or15 far 2R <=11:00 [alone n=10 -2,748]    n=167 win= 49% IN +28,481 OUT +17,066 tot +45,547 DD  5,083 0.66/s  52%days | dIN  +1,387 dOUT  -4,088 {'LHM': 71, 'OB': 86, 'ORB': 10}
+OB+LHM + ORB 4h or15 far 3R <=10:30 [alone n=9 -2,017]     n=165 win= 48% IN +27,230 OUT +17,799 tot +45,028 DD  5,083 0.65/s  51%days | dIN    +136 dOUT  -3,356 {'LHM': 70, 'OB': 86, 'ORB': 9}
+OB+LHM + ORB 4h or15 far 3R <=11:00 [alone n=10 -2,749]    n=166 win= 48% IN +27,230 OUT +17,066 tot +44,296 DD  5,083 0.65/s  52%days | dIN    +136 dOUT  -4,088 {'LHM': 70, 'OB': 86, 'ORB': 10}
+OB+LHM + ORB 4h or15 far 0R <=10:30 [alone n=9 -2,017]     n=165 win= 48% IN +27,230 OUT +17,799 tot +45,028 DD  5,083 0.65/s  51%days | dIN    +136 dOUT  -3,356 {'LHM': 70, 'OB': 86, 'ORB': 9}
+OB+LHM + ORB 4h or15 far 0R <=11:00 [alone n=10 -2,749]    n=166 win= 48% IN +27,230 OUT +17,066 tot +44,296 DD  5,083 0.65/s  52%days | dIN    +136 dOUT  -4,088 {'LHM': 70, 'OB': 86, 'ORB': 10}
+OB+LHM + ORB 4h or15 atr 1.5R <=10:30 [alone n=129 -24,299] n=277 win= 42% IN +10,947 OUT +13,993 tot +24,940 DD 10,307 1.09/s  72%days | dIN -16,147 dOUT  -7,161 {'LHM': 72, 'OB': 76, 'ORB': 129}
+OB+LHM + ORB 4h or15 atr 1.5R <=11:00 [alone n=134 -25,132] n=282 win= 41% IN +10,139 OUT +13,968 tot +24,107 DD 10,885 1.11/s  72%days | dIN -16,955 dOUT  -7,187 {'LHM': 72, 'OB': 76, 'ORB': 134}
+OB+LHM + ORB 4h or15 atr 2R <=10:30 [alone n=127 -29,466]  n=271 win= 37% IN  +6,879 OUT +13,426 tot +20,305 DD 14,343 1.07/s  72%days | dIN -20,215 dOUT  -7,729 {'LHM': 72, 'OB': 72, 'ORB': 127}
+OB+LHM + ORB 4h or15 atr 2R <=11:00 [alone n=132 -30,054]  n=276 win= 36% IN  +6,316 OUT +13,400 tot +19,716 DD 14,525 1.09/s  72%days | dIN -20,778 dOUT  -7,754 {'LHM': 72, 'OB': 72, 'ORB': 132}
+OB+LHM + ORB 4h or15 atr 3R <=10:30 [alone n=125 -26,348]  n=267 win= 34% IN +11,351 OUT +11,490 tot +22,841 DD 12,859 1.05/s  72%days | dIN -15,743 dOUT  -9,664 {'LHM': 72, 'OB': 70, 'ORB': 125}
+OB+LHM + ORB 4h or15 atr 3R <=11:00 [alone n=130 -26,424]  n=272 win= 33% IN +11,301 OUT +11,465 tot +22,765 DD 12,398 1.07/s  72%days | dIN -15,793 dOUT  -9,690 {'LHM': 72, 'OB': 70, 'ORB': 130}
+OB+LHM + ORB 4h or15 atr 0R <=10:30 [alone n=124 -26,674]  n=258 win= 29% IN  +7,869 OUT +15,120 tot +22,989 DD 17,917 1.02/s  72%days | dIN -19,225 dOUT  -6,035 {'LHM': 68, 'OB': 66, 'ORB': 124}
+OB+LHM + ORB 4h or15 atr 0R <=11:00 [alone n=129 -21,870]  n=262 win= 29% IN +13,437 OUT +15,094 tot +28,531 DD 18,354 1.03/s  72%days | dIN -13,657 dOUT  -6,060 {'LHM': 67, 'OB': 66, 'ORB': 129}
+OB+LHM + ORB 4h or30 mid 1.5R <=10:30 [alone n=36 -4,751]  n=191 win= 46% IN +31,312 OUT  +8,715 tot +40,027 DD  6,965 0.75/s  54%days | dIN  +4,218 dOUT -12,439 {'LHM': 70, 'OB': 86, 'ORB': 35}
+OB+LHM + ORB 4h or30 mid 1.5R <=11:00 [alone n=41 -5,459]  n=195 win= 46% IN +33,506 OUT  +6,513 tot +40,019 DD  7,730 0.77/s  55%days | dIN  +6,412 dOUT -14,642 {'LHM': 70, 'OB': 85, 'ORB': 40}
+OB+LHM + ORB 4h or30 mid 2R <=10:30 [alone n=36 -3,727]    n=189 win= 46% IN +32,951 OUT  +8,715 tot +41,666 DD  6,965 0.74/s  54%days | dIN  +5,857 dOUT -12,439 {'LHM': 68, 'OB': 86, 'ORB': 35}
+OB+LHM + ORB 4h or30 mid 2R <=11:00 [alone n=41 -3,907]    n=193 win= 46% IN +35,673 OUT  +6,513 tot +42,186 DD  7,730 0.76/s  55%days | dIN  +8,579 dOUT -14,642 {'LHM': 68, 'OB': 85, 'ORB': 40}
+OB+LHM + ORB 4h or30 mid 3R <=10:30 [alone n=36 -5,959]    n=185 win= 45% IN +31,579 OUT  +8,715 tot +40,294 DD  6,965 0.73/s  54%days | dIN  +4,485 dOUT -12,439 {'LHM': 65, 'OB': 85, 'ORB': 35}
+OB+LHM + ORB 4h or30 mid 3R <=11:00 [alone n=41 -6,465]    n=188 win= 45% IN +34,679 OUT  +6,513 tot +41,192 DD  7,730 0.74/s  55%days | dIN  +7,585 dOUT -14,642 {'LHM': 64, 'OB': 84, 'ORB': 40}
+OB+LHM + ORB 4h or30 mid 0R <=10:30 [alone n=36 -4,372]    n=184 win= 45% IN +33,697 OUT  +8,715 tot +42,413 DD  6,965 0.72/s  54%days | dIN  +6,604 dOUT -12,439 {'LHM': 64, 'OB': 85, 'ORB': 35}
+OB+LHM + ORB 4h or30 mid 0R <=11:00 [alone n=41 -4,878]    n=187 win= 45% IN +36,798 OUT  +6,513 tot +43,310 DD  7,730 0.74/s  55%days | dIN  +9,704 dOUT -14,642 {'LHM': 63, 'OB': 84, 'ORB': 40}
+OB+LHM + ORB 4h or30 far 1.5R <=10:30 [alone n=2 +474]     n=161 win= 50% IN +28,053 OUT +20,669 tot +48,723 DD  3,649 0.63/s  50%days | dIN    +959 dOUT    -485 {'LHM': 72, 'OB': 87, 'ORB': 2}
+OB+LHM + ORB 4h or30 far 1.5R <=11:00 [alone n=4 -1,071]   n=163 win= 50% IN +28,053 OUT +19,124 tot +47,177 DD  3,649 0.64/s  50%days | dIN    +959 dOUT  -2,031 {'LHM': 72, 'OB': 87, 'ORB': 4}
+OB+LHM + ORB 4h or30 far 2R <=10:30 [alone n=2 +513]       n=160 win= 51% IN +28,677 OUT +20,669 tot +49,346 DD  3,649 0.63/s  50%days | dIN  +1,583 dOUT    -485 {'LHM': 71, 'OB': 87, 'ORB': 2}
+OB+LHM + ORB 4h or30 far 2R <=11:00 [alone n=4 -1,033]     n=162 win= 50% IN +28,677 OUT +19,124 tot +47,800 DD  3,649 0.64/s  50%days | dIN  +1,583 dOUT  -2,031 {'LHM': 71, 'OB': 87, 'ORB': 4}
+OB+LHM + ORB 4h or30 far 3R <=10:30 [alone n=2 +513]       n=160 win= 51% IN +28,677 OUT +20,669 tot +49,346 DD  3,649 0.63/s  50%days | dIN  +1,583 dOUT    -485 {'LHM': 71, 'OB': 87, 'ORB': 2}
+OB+LHM + ORB 4h or30 far 3R <=11:00 [alone n=4 -1,033]     n=162 win= 50% IN +28,677 OUT +19,124 tot +47,800 DD  3,649 0.64/s  50%days | dIN  +1,583 dOUT  -2,031 {'LHM': 71, 'OB': 87, 'ORB': 4}
+OB+LHM + ORB 4h or30 far 0R <=10:30 [alone n=2 +513]       n=160 win= 51% IN +28,677 OUT +20,669 tot +49,346 DD  3,649 0.63/s  50%days | dIN  +1,583 dOUT    -485 {'LHM': 71, 'OB': 87, 'ORB': 2}
+OB+LHM + ORB 4h or30 far 0R <=11:00 [alone n=4 -1,033]     n=162 win= 50% IN +28,677 OUT +19,124 tot +47,800 DD  3,649 0.64/s  50%days | dIN  +1,583 dOUT  -2,031 {'LHM': 71, 'OB': 87, 'ORB': 4}
+OB+LHM + ORB 4h or30 atr 1.5R <=10:30 [alone n=125 -30,132] n=271 win= 41% IN +15,994 OUT  +3,974 tot +19,967 DD  9,740 1.07/s  70%days | dIN -11,100 dOUT -17,181 {'LHM': 72, 'OB': 79, 'ORB': 120}
+OB+LHM + ORB 4h or30 atr 1.5R <=11:00 [alone n=135 -30,671] n=281 win= 41% IN +15,973 OUT  +3,455 tot +19,428 DD 10,258 1.11/s  71%days | dIN -11,121 dOUT -17,699 {'LHM': 72, 'OB': 79, 'ORB': 130}
+OB+LHM + ORB 4h or30 atr 2R <=10:30 [alone n=123 -27,381]  n=269 win= 38% IN +18,249 OUT  +4,583 tot +22,832 DD  9,439 1.06/s  70%days | dIN  -8,845 dOUT -16,571 {'LHM': 72, 'OB': 79, 'ORB': 118}
+OB+LHM + ORB 4h or30 atr 2R <=11:00 [alone n=133 -29,582]  n=278 win= 37% IN +15,931 OUT  +3,620 tot +19,551 DD 10,402 1.09/s  71%days | dIN -11,163 dOUT -17,534 {'LHM': 72, 'OB': 78, 'ORB': 128}
+OB+LHM + ORB 4h or30 atr 3R <=10:30 [alone n=119 -19,722]  n=265 win= 37% IN +24,558 OUT  +5,388 tot +29,946 DD  9,846 1.04/s  70%days | dIN  -2,536 dOUT -15,766 {'LHM': 72, 'OB': 79, 'ORB': 114}
+OB+LHM + ORB 4h or30 atr 3R <=11:00 [alone n=128 -20,246]  n=274 win= 36% IN +24,997 OUT  +4,425 tot +29,422 DD 10,809 1.08/s  71%days | dIN  -2,097 dOUT -16,729 {'LHM': 72, 'OB': 79, 'ORB': 123}
+OB+LHM + ORB 4h or30 atr 0R <=10:30 [alone n=118 -26,118]  n=257 win= 31% IN  -1,491 OUT +18,924 tot +17,432 DD 14,096 1.01/s  70%days | dIN -28,585 dOUT  -2,231 {'LHM': 70, 'OB': 74, 'ORB': 113}
+OB+LHM + ORB 4h or30 atr 0R <=11:00 [alone n=127 -22,904]  n=265 win= 30% IN  +3,424 OUT +17,961 tot +21,385 DD 15,375 1.04/s  71%days | dIN -23,670 dOUT  -3,194 {'LHM': 69, 'OB': 74, 'ORB': 122}
+OB+LHM + ORB pace or15 mid 1.5R <=10:30 [alone n=44 -9,203] n=197 win= 46% IN +26,879 OUT +14,119 tot +40,998 DD  7,062 0.78/s  58%days | dIN    -215 dOUT  -7,035 {'LHM': 71, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 1.5R <=11:00 [alone n=44 -9,203] n=197 win= 46% IN +26,879 OUT +14,119 tot +40,998 DD  7,062 0.78/s  58%days | dIN    -215 dOUT  -7,035 {'LHM': 71, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 2R <=10:30 [alone n=44 -8,237]  n=196 win= 45% IN +27,424 OUT +13,657 tot +41,081 DD  7,113 0.77/s  58%days | dIN    +330 dOUT  -7,497 {'LHM': 70, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 2R <=11:00 [alone n=44 -8,237]  n=196 win= 45% IN +27,424 OUT +13,657 tot +41,081 DD  7,113 0.77/s  58%days | dIN    +330 dOUT  -7,497 {'LHM': 70, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 3R <=10:30 [alone n=44 -12,840] n=194 win= 44% IN +28,069 OUT +11,212 tot +39,281 DD  7,113 0.76/s  58%days | dIN    +975 dOUT  -9,942 {'LHM': 68, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 3R <=11:00 [alone n=44 -12,840] n=194 win= 44% IN +28,069 OUT +11,212 tot +39,281 DD  7,113 0.76/s  58%days | dIN    +975 dOUT  -9,942 {'LHM': 68, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 0R <=10:30 [alone n=44 -10,103] n=193 win= 44% IN +31,427 OUT +11,212 tot +42,639 DD  7,113 0.76/s  58%days | dIN  +4,333 dOUT  -9,942 {'LHM': 67, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 mid 0R <=11:00 [alone n=44 -10,103] n=193 win= 44% IN +31,427 OUT +11,212 tot +42,639 DD  7,113 0.76/s  58%days | dIN  +4,333 dOUT  -9,942 {'LHM': 67, 'OB': 83, 'ORB': 43}
+OB+LHM + ORB pace or15 far 1.5R <=10:30 [alone n=6 -2,435] n=164 win= 49% IN +26,282 OUT +18,993 tot +45,275 DD  5,083 0.65/s  51%days | dIN    -812 dOUT  -2,161 {'LHM': 72, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 1.5R <=11:00 [alone n=6 -2,435] n=164 win= 49% IN +26,282 OUT +18,993 tot +45,275 DD  5,083 0.65/s  51%days | dIN    -812 dOUT  -2,161 {'LHM': 72, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 2R <=10:30 [alone n=6 -1,819]   n=164 win= 49% IN +26,898 OUT +18,993 tot +45,891 DD  5,083 0.65/s  51%days | dIN    -196 dOUT  -2,161 {'LHM': 72, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 2R <=11:00 [alone n=6 -1,819]   n=164 win= 49% IN +26,898 OUT +18,993 tot +45,891 DD  5,083 0.65/s  51%days | dIN    -196 dOUT  -2,161 {'LHM': 72, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 3R <=10:30 [alone n=6 -1,820]   n=163 win= 48% IN +25,647 OUT +18,993 tot +44,640 DD  5,083 0.64/s  51%days | dIN  -1,447 dOUT  -2,161 {'LHM': 71, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 3R <=11:00 [alone n=6 -1,820]   n=163 win= 48% IN +25,647 OUT +18,993 tot +44,640 DD  5,083 0.64/s  51%days | dIN  -1,447 dOUT  -2,161 {'LHM': 71, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 0R <=10:30 [alone n=6 -1,820]   n=163 win= 48% IN +25,647 OUT +18,993 tot +44,640 DD  5,083 0.64/s  51%days | dIN  -1,447 dOUT  -2,161 {'LHM': 71, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 far 0R <=11:00 [alone n=6 -1,820]   n=163 win= 48% IN +25,647 OUT +18,993 tot +44,640 DD  5,083 0.64/s  51%days | dIN  -1,447 dOUT  -2,161 {'LHM': 71, 'OB': 86, 'ORB': 6}
+OB+LHM + ORB pace or15 atr 1.5R <=10:30 [alone n=96 -13,666] n=244 win= 44% IN +14,078 OUT +21,304 tot +35,382 DD  9,001 0.96/s  68%days | dIN -13,016 dOUT    +150 {'LHM': 72, 'OB': 76, 'ORB': 96}
+OB+LHM + ORB pace or15 atr 1.5R <=11:00 [alone n=97 -13,860] n=245 win= 44% IN +13,884 OUT +21,304 tot +35,188 DD  9,001 0.96/s  69%days | dIN -13,210 dOUT    +150 {'LHM': 72, 'OB': 76, 'ORB': 97}
+OB+LHM + ORB pace or15 atr 2R <=10:30 [alone n=96 -16,704] n=240 win= 40% IN +12,371 OUT +20,505 tot +32,875 DD 10,835 0.94/s  68%days | dIN -14,723 dOUT    -650 {'LHM': 72, 'OB': 72, 'ORB': 96}
+OB+LHM + ORB pace or15 atr 2R <=11:00 [alone n=97 -16,898] n=241 win= 40% IN +12,177 OUT +20,505 tot +32,682 DD 10,835 0.95/s  69%days | dIN -14,917 dOUT    -650 {'LHM': 72, 'OB': 72, 'ORB': 97}
+OB+LHM + ORB pace or15 atr 3R <=10:30 [alone n=95 -14,767] n=237 win= 37% IN +14,763 OUT +19,469 tot +34,232 DD  8,917 0.93/s  68%days | dIN -12,331 dOUT  -1,686 {'LHM': 72, 'OB': 70, 'ORB': 95}
+OB+LHM + ORB pace or15 atr 3R <=11:00 [alone n=96 -14,960] n=238 win= 37% IN +14,570 OUT +19,469 tot +34,038 DD  8,917 0.94/s  69%days | dIN -12,524 dOUT  -1,686 {'LHM': 72, 'OB': 70, 'ORB': 96}
+OB+LHM + ORB pace or15 atr 0R <=10:30 [alone n=94 -6,110]  n=228 win= 34% IN +20,176 OUT +23,098 tot +43,274 DD 12,982 0.90/s  68%days | dIN  -6,918 dOUT  +1,944 {'LHM': 67, 'OB': 67, 'ORB': 94}
+OB+LHM + ORB pace or15 atr 0R <=11:00 [alone n=95 -6,304]  n=229 win= 34% IN +19,982 OUT +23,098 tot +43,080 DD 12,982 0.90/s  69%days | dIN  -7,112 dOUT  +1,944 {'LHM': 67, 'OB': 67, 'ORB': 95}
+OB+LHM + ORB pace or30 mid 1.5R <=10:30 [alone n=18 -106]  n=174 win= 48% IN +29,456 OUT +15,488 tot +44,944 DD  4,750 0.69/s  52%days | dIN  +2,362 dOUT  -5,666 {'LHM': 71, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 1.5R <=11:00 [alone n=18 -106]  n=174 win= 48% IN +29,456 OUT +15,488 tot +44,944 DD  4,750 0.69/s  52%days | dIN  +2,362 dOUT  -5,666 {'LHM': 71, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 2R <=10:30 [alone n=18 +1,514]  n=172 win= 49% IN +31,691 OUT +15,488 tot +47,179 DD  4,750 0.68/s  52%days | dIN  +4,597 dOUT  -5,666 {'LHM': 69, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 2R <=11:00 [alone n=18 +1,514]  n=172 win= 49% IN +31,691 OUT +15,488 tot +47,179 DD  4,750 0.68/s  52%days | dIN  +4,597 dOUT  -5,666 {'LHM': 69, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 3R <=10:30 [alone n=18 +961]    n=170 win= 48% IN +30,970 OUT +15,488 tot +46,458 DD  4,750 0.67/s  52%days | dIN  +3,876 dOUT  -5,666 {'LHM': 67, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 3R <=11:00 [alone n=18 +961]    n=170 win= 48% IN +30,970 OUT +15,488 tot +46,458 DD  4,750 0.67/s  52%days | dIN  +3,876 dOUT  -5,666 {'LHM': 67, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 0R <=10:30 [alone n=18 +1,121]  n=170 win= 48% IN +31,042 OUT +15,488 tot +46,530 DD  4,750 0.67/s  52%days | dIN  +3,948 dOUT  -5,666 {'LHM': 67, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 mid 0R <=11:00 [alone n=18 +1,121]  n=170 win= 48% IN +31,042 OUT +15,488 tot +46,530 DD  4,750 0.67/s  52%days | dIN  +3,948 dOUT  -5,666 {'LHM': 67, 'OB': 86, 'ORB': 17}
+OB+LHM + ORB pace or30 far 1.5R <=10:30 [alone n=0 +0]     n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 1.5R <=11:00 [alone n=0 +0]     n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 2R <=10:30 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 2R <=11:00 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 3R <=10:30 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 3R <=11:00 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 0R <=10:30 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 far 0R <=11:00 [alone n=0 +0]       n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+OB+LHM + ORB pace or30 atr 1.5R <=10:30 [alone n=72 -19,004] n=219 win= 43% IN +19,986 OUT +11,496 tot +31,482 DD  5,849 0.86/s  63%days | dIN  -7,108 dOUT  -9,658 {'LHM': 72, 'OB': 79, 'ORB': 68}
+OB+LHM + ORB pace or30 atr 1.5R <=11:00 [alone n=74 -19,839] n=221 win= 43% IN +19,151 OUT +11,496 tot +30,647 DD  6,490 0.87/s  64%days | dIN  -7,943 dOUT  -9,658 {'LHM': 72, 'OB': 79, 'ORB': 70}
+OB+LHM + ORB pace or30 atr 2R <=10:30 [alone n=72 -16,853] n=219 win= 42% IN +22,038 OUT +11,306 tot +33,344 DD  5,163 0.86/s  63%days | dIN  -5,056 dOUT  -9,848 {'LHM': 72, 'OB': 79, 'ORB': 68}
+OB+LHM + ORB pace or30 atr 2R <=11:00 [alone n=74 -17,688] n=221 win= 42% IN +21,204 OUT +11,306 tot +32,510 DD  5,804 0.87/s  64%days | dIN  -5,890 dOUT  -9,848 {'LHM': 72, 'OB': 79, 'ORB': 70}
+OB+LHM + ORB pace or30 atr 3R <=10:30 [alone n=71 -12,203] n=218 win= 41% IN +25,968 OUT +11,482 tot +37,450 DD  5,047 0.86/s  63%days | dIN  -1,126 dOUT  -9,672 {'LHM': 72, 'OB': 79, 'ORB': 67}
+OB+LHM + ORB pace or30 atr 3R <=11:00 [alone n=73 -13,038] n=220 win= 40% IN +25,134 OUT +11,482 tot +36,616 DD  5,363 0.87/s  64%days | dIN  -1,960 dOUT  -9,672 {'LHM': 72, 'OB': 79, 'ORB': 69}
+OB+LHM + ORB pace or30 atr 0R <=10:30 [alone n=70 -5,560]  n=213 win= 38% IN +13,753 OUT +25,181 tot +38,934 DD  5,846 0.84/s  63%days | dIN -13,341 dOUT  +4,027 {'LHM': 70, 'OB': 77, 'ORB': 66}
+OB+LHM + ORB pace or30 atr 0R <=11:00 [alone n=72 -6,394]  n=215 win= 37% IN +12,918 OUT +25,181 tot +38,099 DD  6,487 0.85/s  64%days | dIN -14,176 dOUT  +4,027 {'LHM': 70, 'OB': 77, 'ORB': 68}
+   -- First-hour continuation: at `at`, move from the open >= frac x ADR(10), with it; stop minr ATR; target 2R or none; exit by `last`
+OB+LHM + FHC 4h 09:45 0.2ADR stop1 2R/15:00 [alone n=84 -7,216] n=227 win= 44% IN +23,786 OUT +17,129 tot +40,916 DD  5,153 0.89/s  63%days | dIN  -3,308 dOUT  -4,025 {'FHC': 77, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC 4h 09:45 0.2ADR stop1 0R/12:15 [alone n=84 +508] n=225 win= 36% IN +22,589 OUT +19,208 tot +41,797 DD  7,461 0.89/s  63%days | dIN  -4,505 dOUT  -1,946 {'FHC': 77, 'LHM': 72, 'OB': 76}
+OB+LHM + FHC 4h 09:45 0.2ADR stop1 0R/15:00 [alone n=84 -7,634] n=222 win= 36% IN +14,274 OUT +25,391 tot +39,665 DD  7,461 0.87/s  63%days | dIN -12,820 dOUT  +4,237 {'FHC': 77, 'LHM': 70, 'OB': 75}
+OB+LHM + FHC 4h 09:45 0.2ADR stop1.5 2R/15:00 [alone n=86 -18,805] n=229 win= 40% IN +20,513 OUT +10,149 tot +30,662 DD  7,972 0.90/s  63%days | dIN  -6,581 dOUT -11,005 {'FHC': 79, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC 4h 09:45 0.2ADR stop1.5 0R/12:15 [alone n=86 -8,628] n=228 win= 36% IN +22,803 OUT +13,292 tot +36,095 DD  5,481 0.90/s  63%days | dIN  -4,291 dOUT  -7,862 {'FHC': 79, 'LHM': 72, 'OB': 77}
+OB+LHM + FHC 4h 09:45 0.2ADR stop1.5 0R/15:00 [alone n=86 -17,833] n=225 win= 36% IN +11,663 OUT +19,193 tot +30,856 DD  7,536 0.89/s  63%days | dIN -15,431 dOUT  -1,961 {'FHC': 79, 'LHM': 70, 'OB': 76}
+OB+LHM + FHC 4h 09:45 0.2ADR stop2 2R/15:00 [alone n=75 -15,088] n=218 win= 42% IN +23,128 OUT +11,274 tot +34,401 DD  8,579 0.86/s  61%days | dIN  -3,966 dOUT  -9,881 {'FHC': 68, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC 4h 09:45 0.2ADR stop2 0R/12:15 [alone n=75 -1,248] n=217 win= 41% IN +28,039 OUT +16,117 tot +44,155 DD  6,139 0.85/s  61%days | dIN    +945 dOUT  -5,037 {'FHC': 68, 'LHM': 72, 'OB': 77}
+OB+LHM + FHC 4h 09:45 0.2ADR stop2 0R/15:00 [alone n=75 -7,353] n=214 win= 37% IN +21,835 OUT +21,973 tot +43,809 DD  7,208 0.84/s  61%days | dIN  -5,259 dOUT    +819 {'FHC': 68, 'LHM': 70, 'OB': 76}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1 2R/15:00 [alone n=59 -7,210] n=207 win= 45% IN +24,140 OUT +18,528 tot +42,668 DD  5,923 0.81/s  59%days | dIN  -2,954 dOUT  -2,626 {'FHC': 54, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1 0R/12:15 [alone n=59 -108] n=205 win= 40% IN +24,700 OUT +18,496 tot +43,196 DD  8,176 0.81/s  59%days | dIN  -2,394 dOUT  -2,658 {'FHC': 54, 'LHM': 72, 'OB': 79}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1 0R/15:00 [alone n=59 -7,182] n=202 win= 40% IN +17,715 OUT +23,605 tot +41,320 DD  8,176 0.80/s  59%days | dIN  -9,379 dOUT  +2,451 {'FHC': 54, 'LHM': 70, 'OB': 78}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1.5 2R/15:00 [alone n=57 -11,250] n=205 win= 44% IN +25,728 OUT +14,070 tot +39,798 DD  4,818 0.81/s  58%days | dIN  -1,366 dOUT  -7,084 {'FHC': 52, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1.5 0R/12:15 [alone n=57 -1,883] n=204 win= 41% IN +27,871 OUT +14,477 tot +42,348 DD  4,874 0.80/s  58%days | dIN    +777 dOUT  -6,677 {'FHC': 52, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 09:45 0.3ADR stop1.5 0R/15:00 [alone n=57 -12,065] n=201 win= 40% IN +18,061 OUT +19,303 tot +37,365 DD  7,566 0.79/s  58%days | dIN  -9,033 dOUT  -1,851 {'FHC': 52, 'LHM': 70, 'OB': 79}
+OB+LHM + FHC 4h 09:45 0.3ADR stop2 2R/15:00 [alone n=51 -7,281] n=198 win= 46% IN +25,568 OUT +18,244 tot +43,813 DD  4,789 0.78/s  56%days | dIN  -1,526 dOUT  -2,910 {'FHC': 46, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 09:45 0.3ADR stop2 0R/12:15 [alone n=51 +452] n=197 win= 45% IN +26,276 OUT +19,966 tot +46,242 DD  4,789 0.78/s  56%days | dIN    -818 dOUT  -1,188 {'FHC': 46, 'LHM': 72, 'OB': 79}
+OB+LHM + FHC 4h 09:45 0.3ADR stop2 0R/15:00 [alone n=51 -10,058] n=196 win= 41% IN +17,378 OUT +24,560 tot +41,937 DD  7,202 0.77/s  56%days | dIN  -9,716 dOUT  +3,405 {'FHC': 46, 'LHM': 71, 'OB': 79}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1 2R/15:00 [alone n=36 -2,232] n=189 win= 48% IN +27,314 OUT +19,009 tot +46,323 DD  4,457 0.74/s  55%days | dIN    +220 dOUT  -2,145 {'FHC': 32, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1 0R/12:15 [alone n=36 +6,611] n=187 win= 44% IN +27,831 OUT +20,761 tot +48,593 DD  5,585 0.74/s  55%days | dIN    +737 dOUT    -393 {'FHC': 32, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1 0R/15:00 [alone n=36 +390] n=185 win= 44% IN +23,570 OUT +25,870 tot +49,440 DD  5,585 0.73/s  55%days | dIN  -3,524 dOUT  +4,716 {'FHC': 32, 'LHM': 71, 'OB': 82}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1.5 2R/15:00 [alone n=35 -5,933] n=187 win= 45% IN +26,333 OUT +16,570 tot +42,903 DD  4,165 0.74/s  55%days | dIN    -761 dOUT  -4,584 {'FHC': 31, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1.5 0R/12:15 [alone n=35 +4,995] n=186 win= 44% IN +28,832 OUT +18,183 tot +47,014 DD  5,150 0.73/s  55%days | dIN  +1,738 dOUT  -2,972 {'FHC': 31, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 09:45 0.4ADR stop1.5 0R/15:00 [alone n=35 -1,587] n=184 win= 44% IN +24,493 OUT +23,009 tot +47,501 DD  5,150 0.72/s  55%days | dIN  -2,601 dOUT  +1,855 {'FHC': 31, 'LHM': 71, 'OB': 82}
+OB+LHM + FHC 4h 09:45 0.4ADR stop2 2R/15:00 [alone n=30 -5,178] n=181 win= 46% IN +23,507 OUT +20,171 tot +43,678 DD  5,156 0.71/s  54%days | dIN  -3,587 dOUT    -983 {'FHC': 26, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 09:45 0.4ADR stop2 0R/12:15 [alone n=30 +2,604] n=180 win= 47% IN +23,398 OUT +22,758 tot +46,156 DD  5,156 0.71/s  54%days | dIN  -3,696 dOUT  +1,604 {'FHC': 26, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC 4h 09:45 0.4ADR stop2 0R/15:00 [alone n=30 +397] n=179 win= 45% IN +22,541 OUT +27,613 tot +50,154 DD  5,156 0.70/s  54%days | dIN  -4,553 dOUT  +6,459 {'FHC': 26, 'LHM': 71, 'OB': 82}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1 2R/15:00 [alone n=75 -10,423] n=220 win= 45% IN +22,220 OUT +20,321 tot +42,540 DD  4,799 0.87/s  61%days | dIN  -4,874 dOUT    -834 {'FHC': 67, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1 0R/12:15 [alone n=75 +1,542] n=219 win= 40% IN +37,708 OUT +17,933 tot +55,641 DD  4,866 0.86/s  61%days | dIN +10,614 dOUT  -3,221 {'FHC': 67, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1 0R/15:00 [alone n=75 +552] n=215 win= 38% IN +37,479 OUT +17,917 tot +55,396 DD  5,595 0.85/s  61%days | dIN +10,385 dOUT  -3,237 {'FHC': 67, 'LHM': 69, 'OB': 79}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1.5 2R/15:00 [alone n=86 -21,185] n=231 win= 41% IN +15,770 OUT +15,347 tot +31,117 DD  6,209 0.91/s  63%days | dIN -11,324 dOUT  -5,807 {'FHC': 78, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1.5 0R/12:15 [alone n=86 -12,322] n=230 win= 38% IN +28,236 OUT +13,524 tot +41,760 DD  6,299 0.91/s  63%days | dIN  +1,142 dOUT  -7,631 {'FHC': 78, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 10:00 0.2ADR stop1.5 0R/15:00 [alone n=86 -17,871] n=226 win= 36% IN +24,170 OUT +13,289 tot +37,460 DD  8,145 0.89/s  63%days | dIN  -2,924 dOUT  -7,865 {'FHC': 78, 'LHM': 69, 'OB': 79}
+OB+LHM + FHC 4h 10:00 0.2ADR stop2 2R/15:00 [alone n=81 -19,714] n=227 win= 41% IN +17,051 OUT +14,643 tot +31,694 DD  6,914 0.89/s  62%days | dIN -10,043 dOUT  -6,511 {'FHC': 73, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC 4h 10:00 0.2ADR stop2 0R/12:15 [alone n=81 -12,211] n=225 win= 40% IN +28,319 OUT +13,289 tot +41,608 DD  4,862 0.89/s  62%days | dIN  +1,225 dOUT  -7,865 {'FHC': 73, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 10:00 0.2ADR stop2 0R/15:00 [alone n=81 -10,345] n=219 win= 38% IN +28,955 OUT +17,020 tot +45,975 DD 10,118 0.86/s  62%days | dIN  +1,861 dOUT  -4,134 {'FHC': 73, 'LHM': 67, 'OB': 79}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1 2R/15:00 [alone n=56 -8,197] n=205 win= 46% IN +23,031 OUT +21,674 tot +44,705 DD  4,197 0.81/s  57%days | dIN  -4,063 dOUT    +519 {'FHC': 50, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1 0R/12:15 [alone n=56 +2] n=204 win= 42% IN +34,274 OUT +19,286 tot +53,560 DD  3,513 0.80/s  57%days | dIN  +7,180 dOUT  -1,868 {'FHC': 50, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1 0R/15:00 [alone n=56 +1,148] n=200 win= 40% IN +36,181 OUT +19,270 tot +55,451 DD  5,725 0.79/s  57%days | dIN  +9,087 dOUT  -1,885 {'FHC': 50, 'LHM': 69, 'OB': 81}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1.5 2R/15:00 [alone n=64 -15,287] n=213 win= 44% IN +18,872 OUT +19,639 tot +38,511 DD  5,691 0.84/s  59%days | dIN  -8,222 dOUT  -1,515 {'FHC': 58, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1.5 0R/12:15 [alone n=64 -8,587] n=212 win= 41% IN +27,732 OUT +18,135 tot +45,866 DD  5,403 0.83/s  59%days | dIN    +638 dOUT  -3,020 {'FHC': 58, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC 4h 10:00 0.3ADR stop1.5 0R/15:00 [alone n=64 -12,157] n=208 win= 39% IN +26,480 OUT +16,561 tot +43,041 DD  9,056 0.82/s  59%days | dIN    -614 dOUT  -4,593 {'FHC': 58, 'LHM': 69, 'OB': 81}
+OB+LHM + FHC 4h 10:00 0.3ADR stop2 2R/15:00 [alone n=60 -16,241] n=209 win= 44% IN +19,037 OUT +18,806 tot +37,844 DD  6,481 0.82/s  59%days | dIN  -8,057 dOUT  -2,348 {'FHC': 54, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:00 0.3ADR stop2 0R/12:15 [alone n=60 -11,437] n=207 win= 43% IN +25,583 OUT +17,747 tot +43,330 DD  6,491 0.81/s  59%days | dIN  -1,511 dOUT  -3,407 {'FHC': 54, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 10:00 0.3ADR stop2 0R/15:00 [alone n=60 -12,162] n=202 win= 41% IN +23,931 OUT +20,139 tot +44,069 DD 10,314 0.80/s  59%days | dIN  -3,163 dOUT  -1,016 {'FHC': 54, 'LHM': 68, 'OB': 80}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1 2R/15:00 [alone n=42 -8,444] n=193 win= 47% IN +22,550 OUT +21,262 tot +43,812 DD  4,783 0.76/s  56%days | dIN  -4,544 dOUT    +108 {'FHC': 37, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1 0R/12:15 [alone n=42 -10,627] n=193 win= 42% IN +23,183 OUT +18,445 tot +41,629 DD  3,388 0.76/s  56%days | dIN  -3,911 dOUT  -2,709 {'FHC': 37, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1 0R/15:00 [alone n=42 -11,866] n=192 win= 42% IN +20,255 OUT +20,129 tot +40,385 DD  5,329 0.76/s  56%days | dIN  -6,839 dOUT  -1,025 {'FHC': 37, 'LHM': 71, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1.5 2R/15:00 [alone n=48 -11,963] n=199 win= 45% IN +20,581 OUT +19,949 tot +40,531 DD  5,266 0.78/s  57%days | dIN  -6,513 dOUT  -1,205 {'FHC': 43, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1.5 0R/12:15 [alone n=48 -13,054] n=199 win= 42% IN +21,886 OUT +17,554 tot +39,439 DD  3,562 0.78/s  57%days | dIN  -5,208 dOUT  -3,601 {'FHC': 43, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop1.5 0R/15:00 [alone n=48 -17,956] n=198 win= 40% IN +16,852 OUT +17,680 tot +34,532 DD  6,768 0.78/s  57%days | dIN -10,242 dOUT  -3,474 {'FHC': 43, 'LHM': 71, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop2 2R/15:00 [alone n=45 -15,663] n=196 win= 44% IN +19,167 OUT +17,911 tot +37,078 DD  5,921 0.77/s  56%days | dIN  -7,927 dOUT  -3,244 {'FHC': 40, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:00 0.4ADR stop2 0R/12:15 [alone n=45 -14,550] n=195 win= 44% IN +20,223 OUT +17,994 tot +38,217 DD  4,385 0.77/s  56%days | dIN  -6,871 dOUT  -3,160 {'FHC': 40, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:00 0.4ADR stop2 0R/15:00 [alone n=45 -16,162] n=193 win= 42% IN +15,642 OUT +21,678 tot +37,319 DD  7,763 0.76/s  56%days | dIN -11,452 dOUT    +523 {'FHC': 40, 'LHM': 70, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1 2R/15:00 [alone n=72 -8,920] n=222 win= 45% IN +25,022 OUT +17,466 tot +42,487 DD  5,077 0.87/s  61%days | dIN  -2,072 dOUT  -3,689 {'FHC': 67, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1 0R/12:15 [alone n=72 -11,092] n=220 win= 38% IN +21,520 OUT +18,434 tot +39,955 DD  5,077 0.87/s  61%days | dIN  -5,574 dOUT  -2,720 {'FHC': 67, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1 0R/15:00 [alone n=72 -648] n=216 win= 37% IN +30,148 OUT +21,561 tot +51,709 DD  6,798 0.85/s  61%days | dIN  +3,054 dOUT    +407  BETTER BOTH {'FHC': 67, 'LHM': 69, 'OB': 80}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1.5 2R/15:00 [alone n=96 -3,661] n=245 win= 44% IN +26,931 OUT +19,884 tot +46,816 DD  4,328 0.96/s  65%days | dIN    -163 dOUT  -1,270 {'FHC': 89, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1.5 0R/12:15 [alone n=96 -3,239] n=241 win= 38% IN +20,720 OUT +22,583 tot +43,303 DD  5,237 0.95/s  65%days | dIN  -6,373 dOUT  +1,428 {'FHC': 89, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 10:15 0.2ADR stop1.5 0R/15:00 [alone n=96 -4,402] n=237 win= 35% IN +19,796 OUT +22,068 tot +41,863 DD  5,237 0.93/s  65%days | dIN  -7,298 dOUT    +913 {'FHC': 89, 'LHM': 68, 'OB': 80}
+OB+LHM + FHC 4h 10:15 0.2ADR stop2 2R/15:00 [alone n=96 -4,450] n=244 win= 43% IN +22,234 OUT +22,736 tot +44,970 DD  5,082 0.96/s  66%days | dIN  -4,860 dOUT  +1,581 {'FHC': 89, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.2ADR stop2 0R/12:15 [alone n=96 -7,869] n=241 win= 39% IN +18,250 OUT +20,880 tot +39,130 DD  6,937 0.95/s  66%days | dIN  -8,844 dOUT    -274 {'FHC': 89, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC 4h 10:15 0.2ADR stop2 0R/15:00 [alone n=96 -10,703] n=237 win= 35% IN +15,879 OUT +20,256 tot +36,135 DD  6,527 0.93/s  66%days | dIN -11,215 dOUT    -899 {'FHC': 89, 'LHM': 68, 'OB': 80}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1 2R/15:00 [alone n=54 -7,226] n=206 win= 47% IN +23,892 OUT +19,733 tot +43,625 DD  4,070 0.81/s  58%days | dIN  -3,202 dOUT  -1,421 {'FHC': 49, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1 0R/12:15 [alone n=54 -5,651] n=205 win= 42% IN +24,525 OUT +20,702 tot +45,227 DD  4,385 0.81/s  58%days | dIN  -2,569 dOUT    -452 {'FHC': 49, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1 0R/15:00 [alone n=54 +4,793] n=201 win= 41% IN +33,152 OUT +23,829 tot +56,981 DD  6,557 0.79/s  58%days | dIN  +6,058 dOUT  +2,675  BETTER BOTH {'FHC': 49, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1.5 2R/15:00 [alone n=68 -6,983] n=219 win= 46% IN +20,408 OUT +22,569 tot +42,977 DD  5,737 0.86/s  60%days | dIN  -6,686 dOUT  +1,415 {'FHC': 61, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1.5 0R/12:15 [alone n=68 -3,088] n=216 win= 42% IN +19,076 OUT +24,382 tot +43,458 DD  7,362 0.85/s  60%days | dIN  -8,018 dOUT  +3,228 {'FHC': 61, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.3ADR stop1.5 0R/15:00 [alone n=68 -3,992] n=213 win= 38% IN +17,962 OUT +23,730 tot +41,692 DD  9,560 0.84/s  60%days | dIN  -9,132 dOUT  +2,576 {'FHC': 61, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.3ADR stop2 2R/15:00 [alone n=68 -2,333] n=219 win= 47% IN +21,579 OUT +26,061 tot +47,639 DD  5,563 0.86/s  61%days | dIN  -5,515 dOUT  +4,906 {'FHC': 61, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:15 0.3ADR stop2 0R/12:15 [alone n=68 -5,551] n=216 win= 42% IN +18,268 OUT +23,731 tot +41,999 DD  8,013 0.85/s  61%days | dIN  -8,826 dOUT  +2,577 {'FHC': 61, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.3ADR stop2 0R/15:00 [alone n=68 -7,865] n=213 win= 39% IN +15,970 OUT +22,970 tot +38,940 DD 10,211 0.84/s  61%days | dIN -11,124 dOUT  +1,815 {'FHC': 61, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1 2R/15:00 [alone n=37 -3,508] n=192 win= 48% IN +27,038 OUT +18,948 tot +45,986 DD  2,862 0.76/s  54%days | dIN     -56 dOUT  -2,206 {'FHC': 35, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1 0R/12:15 [alone n=37 +2,255] n=190 win= 45% IN +31,636 OUT +20,796 tot +52,432 DD  3,875 0.75/s  54%days | dIN  +4,542 dOUT    -358 {'FHC': 35, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1 0R/15:00 [alone n=37 +3,700] n=187 win= 43% IN +30,695 OUT +23,923 tot +54,618 DD  5,395 0.74/s  54%days | dIN  +3,601 dOUT  +2,769  BETTER BOTH {'FHC': 35, 'LHM': 70, 'OB': 82}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1.5 2R/15:00 [alone n=44 -4,588] n=200 win= 48% IN +23,886 OUT +21,235 tot +45,121 DD  4,240 0.79/s  56%days | dIN  -3,208 dOUT     +81 {'FHC': 42, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1.5 0R/12:15 [alone n=44 -1,364] n=197 win= 45% IN +26,778 OUT +22,315 tot +49,094 DD  5,292 0.78/s  56%days | dIN    -316 dOUT  +1,161 {'FHC': 42, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.4ADR stop1.5 0R/15:00 [alone n=44 +66] n=194 win= 42% IN +25,128 OUT +26,135 tot +51,264 DD  7,490 0.76/s  56%days | dIN  -1,966 dOUT  +4,981 {'FHC': 42, 'LHM': 70, 'OB': 82}
+OB+LHM + FHC 4h 10:15 0.4ADR stop2 2R/15:00 [alone n=44 +1,579] n=200 win= 48% IN +26,085 OUT +25,190 tot +51,275 DD  3,224 0.79/s  56%days | dIN  -1,009 dOUT  +4,036 {'FHC': 42, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:15 0.4ADR stop2 0R/12:15 [alone n=44 -823] n=197 win= 45% IN +27,164 OUT +22,458 tot +49,622 DD  4,964 0.78/s  56%days | dIN     +70 dOUT  +1,304  BETTER BOTH {'FHC': 42, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC 4h 10:15 0.4ADR stop2 0R/15:00 [alone n=44 -248] n=194 win= 43% IN +24,768 OUT +26,169 tot +50,937 DD  7,162 0.76/s  56%days | dIN  -2,326 dOUT  +5,015 {'FHC': 42, 'LHM': 70, 'OB': 82}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1 2R/15:00 [alone n=74 -7,440] n=229 win= 44% IN +22,152 OUT +19,284 tot +41,436 DD  3,876 0.90/s  63%days | dIN  -4,942 dOUT  -1,871 {'FHC': 71, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1 0R/12:15 [alone n=74 -16,347] n=227 win= 37% IN +17,297 OUT +15,367 tot +32,665 DD  7,266 0.89/s  63%days | dIN  -9,797 dOUT  -5,787 {'FHC': 71, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1 0R/15:00 [alone n=74 -24,546] n=227 win= 35% IN  +9,588 OUT +14,878 tot +24,466 DD  8,650 0.89/s  63%days | dIN -17,506 dOUT  -6,276 {'FHC': 71, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1.5 2R/15:00 [alone n=100 -9,090] n=255 win= 42% IN +24,969 OUT +13,970 tot +38,939 DD  4,965 1.00/s  67%days | dIN  -2,125 dOUT  -7,185 {'FHC': 97, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1.5 0R/12:15 [alone n=100 -20,119] n=253 win= 36% IN +18,408 OUT +10,220 tot +28,628 DD  6,273 1.00/s  67%days | dIN  -8,686 dOUT -10,935 {'FHC': 97, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.2ADR stop1.5 0R/15:00 [alone n=100 -29,314] n=251 win= 32% IN +11,374 OUT  +7,394 tot +18,768 DD  7,707 0.99/s  67%days | dIN -15,720 dOUT -13,760 {'FHC': 97, 'LHM': 70, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.2ADR stop2 2R/15:00 [alone n=102 -24,556] n=256 win= 39% IN +12,245 OUT +10,562 tot +22,807 DD  7,830 1.01/s  67%days | dIN -14,849 dOUT -10,592 {'FHC': 99, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.2ADR stop2 0R/12:15 [alone n=102 -28,883] n=255 win= 35% IN +13,074 OUT  +6,062 tot +19,136 DD  8,064 1.00/s  67%days | dIN -14,020 dOUT -15,092 {'FHC': 99, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.2ADR stop2 0R/15:00 [alone n=102 -35,342] n=252 win= 32% IN  +7,840 OUT  +4,693 tot +12,533 DD 10,726 0.99/s  67%days | dIN -19,254 dOUT -16,461 {'FHC': 99, 'LHM': 69, 'OB': 84}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1 2R/15:00 [alone n=57 -3,460] n=213 win= 45% IN +23,745 OUT +21,161 tot +44,906 DD  3,379 0.84/s  60%days | dIN  -3,349 dOUT      +7 {'FHC': 55, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1 0R/12:15 [alone n=57 -8,911] n=212 win= 40% IN +23,425 OUT +17,245 tot +40,670 DD  5,886 0.83/s  60%days | dIN  -3,669 dOUT  -3,910 {'FHC': 55, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1 0R/15:00 [alone n=57 -17,110] n=212 win= 38% IN +15,716 OUT +16,755 tot +32,472 DD  7,269 0.83/s  60%days | dIN -11,378 dOUT  -4,399 {'FHC': 55, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1.5 2R/15:00 [alone n=70 -8,122] n=226 win= 44% IN +22,892 OUT +18,105 tot +40,997 DD  3,726 0.89/s  62%days | dIN  -4,202 dOUT  -3,049 {'FHC': 68, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1.5 0R/12:15 [alone n=70 -12,969] n=225 win= 40% IN +22,451 OUT +14,355 tot +36,806 DD  6,021 0.89/s  62%days | dIN  -4,643 dOUT  -6,799 {'FHC': 68, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.3ADR stop1.5 0R/15:00 [alone n=70 -23,117] n=224 win= 36% IN +13,879 OUT +11,530 tot +25,409 DD  7,405 0.88/s  62%days | dIN -13,215 dOUT  -9,625 {'FHC': 68, 'LHM': 71, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.3ADR stop2 2R/15:00 [alone n=71 -12,592] n=227 win= 42% IN +20,333 OUT +15,451 tot +35,784 DD  4,611 0.89/s  63%days | dIN  -6,761 dOUT  -5,703 {'FHC': 69, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.3ADR stop2 0R/12:15 [alone n=71 -17,217] n=226 win= 39% IN +20,265 OUT +11,550 tot +31,815 DD  5,958 0.89/s  63%days | dIN  -6,829 dOUT  -9,604 {'FHC': 69, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.3ADR stop2 0R/15:00 [alone n=71 -25,084] n=225 win= 36% IN +12,516 OUT +10,181 tot +22,698 DD  8,411 0.89/s  63%days | dIN -14,578 dOUT -10,973 {'FHC': 69, 'LHM': 71, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1 2R/15:00 [alone n=40 -2,599] n=196 win= 46% IN +24,192 OUT +21,575 tot +45,767 DD  3,902 0.77/s  55%days | dIN  -2,902 dOUT    +420 {'FHC': 38, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1 0R/12:15 [alone n=40 -6,156] n=195 win= 43% IN +25,299 OUT +18,126 tot +43,425 DD  4,151 0.77/s  55%days | dIN  -1,795 dOUT  -3,028 {'FHC': 38, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1 0R/15:00 [alone n=40 -11,780] n=195 win= 41% IN +20,165 OUT +17,637 tot +37,802 DD  5,534 0.77/s  55%days | dIN  -6,929 dOUT  -3,517 {'FHC': 38, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1.5 2R/15:00 [alone n=50 -7,040] n=206 win= 45% IN +24,268 OUT +17,811 tot +42,079 DD  3,908 0.81/s  57%days | dIN  -2,826 dOUT  -3,343 {'FHC': 48, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1.5 0R/12:15 [alone n=50 -7,704] n=205 win= 42% IN +26,604 OUT +15,467 tot +42,071 DD  4,350 0.81/s  57%days | dIN    -490 dOUT  -5,687 {'FHC': 48, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop1.5 0R/15:00 [alone n=50 -14,874] n=204 win= 39% IN +19,553 OUT +14,098 tot +33,651 DD  5,733 0.80/s  57%days | dIN  -7,541 dOUT  -7,056 {'FHC': 48, 'LHM': 71, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop2 2R/15:00 [alone n=51 -5,611] n=207 win= 44% IN +26,074 OUT +16,691 tot +42,765 DD  3,834 0.81/s  57%days | dIN  -1,020 dOUT  -4,463 {'FHC': 49, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC 4h 10:30 0.4ADR stop2 0R/12:15 [alone n=51 -3,920] n=206 win= 43% IN +30,381 OUT +14,730 tot +45,111 DD  4,782 0.81/s  57%days | dIN  +3,287 dOUT  -6,424 {'FHC': 49, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC 4h 10:30 0.4ADR stop2 0R/15:00 [alone n=51 -5,423] n=203 win= 39% IN +29,019 OUT +13,362 tot +42,380 DD  6,165 0.80/s  57%days | dIN  +1,925 dOUT  -7,793 {'FHC': 49, 'LHM': 70, 'OB': 84}
+OB+LHM + FHC pace 09:45 0.2ADR stop1 2R/15:00 [alone n=72 -5,948] n=217 win= 45% IN +23,723 OUT +19,573 tot +43,296 DD  4,639 0.85/s  61%days | dIN  -3,371 dOUT  -1,582 {'FHC': 65, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.2ADR stop1 0R/12:15 [alone n=72 -600] n=215 win= 38% IN +20,149 OUT +21,652 tot +41,801 DD  5,886 0.85/s  61%days | dIN  -6,945 dOUT    +498 {'FHC': 65, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC pace 09:45 0.2ADR stop1 0R/15:00 [alone n=72 -3,852] n=214 win= 37% IN +14,393 OUT +31,998 tot +46,391 DD  5,886 0.84/s  61%days | dIN -12,701 dOUT +10,844 {'FHC': 65, 'LHM': 71, 'OB': 78}
+OB+LHM + FHC pace 09:45 0.2ADR stop1.5 2R/15:00 [alone n=72 -14,655] n=215 win= 42% IN +21,225 OUT +13,587 tot +34,812 DD  6,265 0.85/s  61%days | dIN  -5,869 dOUT  -7,567 {'FHC': 65, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC pace 09:45 0.2ADR stop1.5 0R/12:15 [alone n=72 -6,015] n=214 win= 38% IN +20,971 OUT +17,737 tot +38,708 DD  5,194 0.84/s  61%days | dIN  -6,123 dOUT  -3,417 {'FHC': 65, 'LHM': 72, 'OB': 77}
+OB+LHM + FHC pace 09:45 0.2ADR stop1.5 0R/15:00 [alone n=72 -10,466] n=213 win= 37% IN +11,971 OUT +28,084 tot +40,055 DD  6,311 0.84/s  61%days | dIN -15,123 dOUT  +6,929 {'FHC': 65, 'LHM': 71, 'OB': 77}
+OB+LHM + FHC pace 09:45 0.2ADR stop2 2R/15:00 [alone n=63 -11,234] n=206 win= 43% IN +22,437 OUT +15,819 tot +38,256 DD  6,521 0.81/s  59%days | dIN  -4,657 dOUT  -5,335 {'FHC': 56, 'LHM': 72, 'OB': 78}
+OB+LHM + FHC pace 09:45 0.2ADR stop2 0R/12:15 [alone n=63 -1,216] n=205 win= 42% IN +25,498 OUT +18,689 tot +44,187 DD  5,333 0.81/s  59%days | dIN  -1,596 dOUT  -2,465 {'FHC': 56, 'LHM': 72, 'OB': 77}
+OB+LHM + FHC pace 09:45 0.2ADR stop2 0R/15:00 [alone n=63 -622] n=202 win= 40% IN +24,340 OUT +26,199 tot +50,539 DD  5,542 0.80/s  59%days | dIN  -2,754 dOUT  +5,045 {'FHC': 56, 'LHM': 70, 'OB': 76}
+OB+LHM + FHC pace 09:45 0.3ADR stop1 2R/15:00 [alone n=50 -6,837] n=199 win= 46% IN +24,660 OUT +19,111 tot +43,771 DD  4,550 0.78/s  57%days | dIN  -2,434 dOUT  -2,044 {'FHC': 45, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC pace 09:45 0.3ADR stop1 0R/12:15 [alone n=50 -2,406] n=197 win= 41% IN +21,790 OUT +19,839 tot +41,629 DD  6,239 0.78/s  57%days | dIN  -5,304 dOUT  -1,315 {'FHC': 45, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.3ADR stop1 0R/15:00 [alone n=50 -4,589] n=196 win= 41% IN +17,364 OUT +29,111 tot +46,475 DD  6,239 0.77/s  57%days | dIN  -9,730 dOUT  +7,957 {'FHC': 45, 'LHM': 71, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.3ADR stop1.5 2R/15:00 [alone n=47 -9,747] n=195 win= 45% IN +25,403 OUT +15,898 tot +41,302 DD  4,818 0.77/s  57%days | dIN  -1,691 dOUT  -5,256 {'FHC': 42, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 09:45 0.3ADR stop1.5 0R/12:15 [alone n=47 -806] n=194 win= 42% IN +26,114 OUT +17,312 tot +43,426 DD  4,818 0.76/s  57%days | dIN    -980 dOUT  -3,843 {'FHC': 42, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.3ADR stop1.5 0R/15:00 [alone n=47 -6,234] n=193 win= 41% IN +18,444 OUT +26,584 tot +45,028 DD  6,306 0.76/s  57%days | dIN  -8,650 dOUT  +5,429 {'FHC': 42, 'LHM': 71, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.3ADR stop2 2R/15:00 [alone n=41 -8,282] n=188 win= 46% IN +23,819 OUT +18,992 tot +42,811 DD  4,789 0.74/s  55%days | dIN  -3,275 dOUT  -2,162 {'FHC': 36, 'LHM': 72, 'OB': 80}
+OB+LHM + FHC pace 09:45 0.3ADR stop2 0R/12:15 [alone n=41 -2,197] n=187 win= 45% IN +23,987 OUT +19,606 tot +43,593 DD  4,789 0.74/s  55%days | dIN  -3,107 dOUT  -1,548 {'FHC': 36, 'LHM': 72, 'OB': 79}
+OB+LHM + FHC pace 09:45 0.3ADR stop2 0R/15:00 [alone n=41 -5,746] n=186 win= 43% IN +20,134 OUT +26,114 tot +46,249 DD  6,232 0.73/s  55%days | dIN  -6,960 dOUT  +4,960 {'FHC': 36, 'LHM': 71, 'OB': 79}
+OB+LHM + FHC pace 09:45 0.4ADR stop1 2R/15:00 [alone n=33 -2,827] n=186 win= 48% IN +26,701 OUT +19,027 tot +45,728 DD  4,010 0.73/s  54%days | dIN    -393 dOUT  -2,127 {'FHC': 29, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 09:45 0.4ADR stop1 0R/12:15 [alone n=33 +4,079] n=184 win= 44% IN +24,520 OUT +21,540 tot +46,060 DD  5,071 0.72/s  54%days | dIN  -2,574 dOUT    +386 {'FHC': 29, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 09:45 0.4ADR stop1 0R/15:00 [alone n=33 +1,895] n=183 win= 44% IN +20,094 OUT +30,812 tot +50,907 DD  5,071 0.72/s  54%days | dIN  -7,000 dOUT  +9,658 {'FHC': 29, 'LHM': 71, 'OB': 83}
+OB+LHM + FHC pace 09:45 0.4ADR stop1.5 2R/15:00 [alone n=31 -5,899] n=183 win= 46% IN +25,255 OUT +17,682 tot +42,937 DD  4,103 0.72/s  54%days | dIN  -1,839 dOUT  -3,472 {'FHC': 27, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 09:45 0.4ADR stop1.5 0R/12:15 [alone n=31 +4,513] n=182 win= 45% IN +26,230 OUT +20,302 tot +46,532 DD  5,037 0.72/s  54%days | dIN    -864 dOUT    -852 {'FHC': 27, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 09:45 0.4ADR stop1.5 0R/15:00 [alone n=31 +2,329] n=181 win= 44% IN +21,804 OUT +29,574 tot +51,378 DD  5,037 0.71/s  54%days | dIN  -5,290 dOUT  +8,420 {'FHC': 27, 'LHM': 71, 'OB': 83}
+OB+LHM + FHC pace 09:45 0.4ADR stop2 2R/15:00 [alone n=27 -5,071] n=178 win= 47% IN +23,611 OUT +20,173 tot +43,785 DD  5,044 0.70/s  53%days | dIN  -3,483 dOUT    -981 {'FHC': 23, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 09:45 0.4ADR stop2 0R/12:15 [alone n=27 +1,604] n=177 win= 47% IN +23,502 OUT +21,653 tot +45,155 DD  5,044 0.70/s  53%days | dIN  -3,592 dOUT    +499 {'FHC': 23, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC pace 09:45 0.4ADR stop2 0R/15:00 [alone n=27 +1,311] n=176 win= 45% IN +22,646 OUT +28,423 tot +51,068 DD  5,044 0.69/s  53%days | dIN  -4,448 dOUT  +7,268 {'FHC': 23, 'LHM': 71, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.2ADR stop1 2R/15:00 [alone n=47 -6,849] n=194 win= 47% IN +25,497 OUT +19,986 tot +45,483 DD  4,346 0.76/s  56%days | dIN  -1,597 dOUT  -1,168 {'FHC': 40, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.2ADR stop1 0R/12:15 [alone n=47 +1,969] n=193 win= 43% IN +39,363 OUT +16,074 tot +55,437 DD  4,597 0.76/s  56%days | dIN +12,269 dOUT  -5,080 {'FHC': 40, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:00 0.2ADR stop1 0R/15:00 [alone n=47 +6,889] n=190 win= 43% IN +45,033 OUT +16,074 tot +61,107 DD  4,597 0.75/s  56%days | dIN +17,939 dOUT  -5,080 {'FHC': 40, 'LHM': 70, 'OB': 80}
+OB+LHM + FHC pace 10:00 0.2ADR stop1.5 2R/15:00 [alone n=51 -5,687] n=198 win= 46% IN +25,424 OUT +20,554 tot +45,979 DD  4,565 0.78/s  57%days | dIN  -1,670 dOUT    -600 {'FHC': 44, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.2ADR stop1.5 0R/12:15 [alone n=51 -54] n=197 win= 43% IN +35,656 OUT +17,735 tot +53,392 DD  4,633 0.78/s  57%days | dIN  +8,562 dOUT  -3,419 {'FHC': 44, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:00 0.2ADR stop1.5 0R/15:00 [alone n=51 +3,489] n=193 win= 43% IN +40,273 OUT +17,912 tot +58,185 DD  4,633 0.76/s  57%days | dIN +13,179 dOUT  -3,243 {'FHC': 44, 'LHM': 69, 'OB': 80}
+OB+LHM + FHC pace 10:00 0.2ADR stop2 2R/15:00 [alone n=45 -4,635] n=193 win= 46% IN +25,052 OUT +20,784 tot +45,836 DD  5,061 0.76/s  56%days | dIN  -2,042 dOUT    -370 {'FHC': 38, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 10:00 0.2ADR stop2 0R/12:15 [alone n=45 -307] n=191 win= 45% IN +33,144 OUT +19,432 tot +52,576 DD  5,129 0.75/s  56%days | dIN  +6,050 dOUT  -1,722 {'FHC': 38, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:00 0.2ADR stop2 0R/15:00 [alone n=45 +8,491] n=186 win= 45% IN +36,961 OUT +26,344 tot +63,305 DD  5,129 0.73/s  56%days | dIN  +9,867 dOUT  +5,189  BETTER BOTH {'FHC': 38, 'LHM': 68, 'OB': 80}
+OB+LHM + FHC pace 10:00 0.3ADR stop1 2R/15:00 [alone n=36 -5,326] n=187 win= 48% IN +26,558 OUT +20,387 tot +46,945 DD  4,130 0.74/s  54%days | dIN    -536 dOUT    -768 {'FHC': 31, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:00 0.3ADR stop1 0R/12:15 [alone n=36 +121] n=186 win= 44% IN +36,573 OUT +16,474 tot +53,048 DD  4,381 0.73/s  54%days | dIN  +9,479 dOUT  -4,680 {'FHC': 31, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 10:00 0.3ADR stop1 0R/15:00 [alone n=36 +4,207] n=183 win= 44% IN +41,409 OUT +16,474 tot +57,883 DD  4,381 0.72/s  54%days | dIN +14,315 dOUT  -4,680 {'FHC': 31, 'LHM': 70, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.3ADR stop1.5 2R/15:00 [alone n=39 -6,369] n=190 win= 47% IN +24,906 OUT +21,887 tot +46,793 DD  4,196 0.75/s  54%days | dIN  -2,188 dOUT    +733 {'FHC': 34, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:00 0.3ADR stop1.5 0R/12:15 [alone n=39 -2,443] n=189 win= 44% IN +32,567 OUT +18,808 tot +51,374 DD  4,979 0.74/s  54%days | dIN  +5,473 dOUT  -2,347 {'FHC': 34, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 10:00 0.3ADR stop1.5 0R/15:00 [alone n=39 +770] n=185 win= 44% IN +36,349 OUT +18,984 tot +55,333 DD  4,979 0.73/s  54%days | dIN  +9,255 dOUT  -2,170 {'FHC': 34, 'LHM': 69, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.3ADR stop2 2R/15:00 [alone n=35 -6,669] n=186 win= 47% IN +24,893 OUT +21,586 tot +46,479 DD  4,335 0.73/s  54%days | dIN  -2,201 dOUT    +431 {'FHC': 30, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:00 0.3ADR stop2 0R/12:15 [alone n=35 -3,215] n=184 win= 46% IN +30,383 OUT +20,233 tot +50,616 DD  5,530 0.72/s  54%days | dIN  +3,289 dOUT    -921 {'FHC': 30, 'LHM': 72, 'OB': 82}
+OB+LHM + FHC pace 10:00 0.3ADR stop2 0R/15:00 [alone n=35 +5,162] n=179 win= 46% IN +33,312 OUT +27,145 tot +60,457 DD  5,530 0.70/s  54%days | dIN  +6,218 dOUT  +5,991  BETTER BOTH {'FHC': 30, 'LHM': 68, 'OB': 81}
+OB+LHM + FHC pace 10:00 0.4ADR stop1 2R/15:00 [alone n=26 -5,634] n=179 win= 48% IN +25,330 OUT +20,661 tot +45,991 DD  4,130 0.70/s  52%days | dIN  -1,764 dOUT    -493 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop1 0R/12:15 [alone n=26 -9,711] n=179 win= 45% IN +24,620 OUT +17,293 tot +41,913 DD  4,130 0.70/s  52%days | dIN  -2,474 dOUT  -3,861 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop1 0R/15:00 [alone n=26 -9,711] n=179 win= 45% IN +24,620 OUT +17,293 tot +41,913 DD  4,130 0.70/s  52%days | dIN  -2,474 dOUT  -3,861 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop1.5 2R/15:00 [alone n=28 -6,518] n=181 win= 48% IN +22,972 OUT +22,368 tot +45,339 DD  4,196 0.71/s  53%days | dIN  -4,122 dOUT  +1,213 {'FHC': 24, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop1.5 0R/12:15 [alone n=28 -11,066] n=181 win= 45% IN +22,972 OUT +17,820 tot +40,792 DD  4,196 0.71/s  53%days | dIN  -4,122 dOUT  -3,334 {'FHC': 24, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop1.5 0R/15:00 [alone n=28 -10,218] n=180 win= 44% IN +22,972 OUT +18,663 tot +41,634 DD  4,196 0.71/s  53%days | dIN  -4,122 dOUT  -2,492 {'FHC': 24, 'LHM': 71, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop2 2R/15:00 [alone n=26 -9,931] n=179 win= 46% IN +21,887 OUT +19,986 tot +41,873 DD  4,459 0.70/s  53%days | dIN  -5,207 dOUT  -1,168 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:00 0.4ADR stop2 0R/12:15 [alone n=26 -10,775] n=178 win= 46% IN +21,887 OUT +19,169 tot +41,056 DD  4,459 0.70/s  53%days | dIN  -5,207 dOUT  -1,985 {'FHC': 22, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:00 0.4ADR stop2 0R/15:00 [alone n=26 -3,892] n=176 win= 46% IN +21,887 OUT +26,767 tot +48,654 DD  4,459 0.69/s  53%days | dIN  -5,207 dOUT  +5,612 {'FHC': 22, 'LHM': 70, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.2ADR stop1 2R/15:00 [alone n=29 -736] n=183 win= 49% IN +28,719 OUT +20,520 tot +49,239 DD  4,395 0.72/s  54%days | dIN  +1,625 dOUT    -634 {'FHC': 27, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.2ADR stop1 0R/12:15 [alone n=29 -2,634] n=180 win= 45% IN +26,176 OUT +20,870 tot +47,046 DD  4,395 0.71/s  54%days | dIN    -918 dOUT    -284 {'FHC': 27, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:15 0.2ADR stop1 0R/15:00 [alone n=29 +12,188] n=176 win= 45% IN +32,142 OUT +30,461 tot +62,603 DD  4,395 0.69/s  54%days | dIN  +5,048 dOUT  +9,306  BETTER BOTH {'FHC': 27, 'LHM': 69, 'OB': 80}
+OB+LHM + FHC pace 10:15 0.2ADR stop1.5 2R/15:00 [alone n=32 +1,460] n=185 win= 49% IN +27,536 OUT +23,295 tot +50,832 DD  4,109 0.73/s  54%days | dIN    +442 dOUT  +2,141  BETTER BOTH {'FHC': 29, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.2ADR stop1.5 0R/12:15 [alone n=32 +4,809] n=182 win= 46% IN +24,014 OUT +25,256 tot +49,270 DD  4,591 0.72/s  54%days | dIN  -3,080 dOUT  +4,102 {'FHC': 29, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:15 0.2ADR stop1.5 0R/15:00 [alone n=32 +20,312] n=178 win= 46% IN +29,083 OUT +35,376 tot +64,460 DD  4,591 0.70/s  54%days | dIN  +1,989 dOUT +14,222  BETTER BOTH {'FHC': 29, 'LHM': 69, 'OB': 80}
+OB+LHM + FHC pace 10:15 0.2ADR stop2 2R/15:00 [alone n=30 +1,609] n=182 win= 48% IN +26,529 OUT +23,253 tot +49,782 DD  3,879 0.72/s  54%days | dIN    -565 dOUT  +2,099 {'FHC': 27, 'LHM': 72, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.2ADR stop2 0R/12:15 [alone n=30 +5,490] n=180 win= 47% IN +25,447 OUT +24,575 tot +50,023 DD  4,805 0.71/s  54%days | dIN  -1,647 dOUT  +3,421 {'FHC': 27, 'LHM': 72, 'OB': 81}
+OB+LHM + FHC pace 10:15 0.2ADR stop2 0R/15:00 [alone n=30 +17,870] n=176 win= 46% IN +28,895 OUT +33,312 tot +62,207 DD  4,805 0.69/s  54%days | dIN  +1,801 dOUT +12,158  BETTER BOTH {'FHC': 27, 'LHM': 69, 'OB': 80}
+OB+LHM + FHC pace 10:15 0.3ADR stop1 2R/15:00 [alone n=19 -168] n=175 win= 50% IN +27,879 OUT +21,314 tot +49,193 DD  3,538 0.69/s  51%days | dIN    +785 dOUT    +160  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.3ADR stop1 0R/12:15 [alone n=19 +1,085] n=173 win= 48% IN +28,874 OUT +21,665 tot +50,539 DD  4,329 0.68/s  51%days | dIN  +1,780 dOUT    +510  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.3ADR stop1 0R/15:00 [alone n=19 +15,907] n=169 win= 48% IN +34,841 OUT +31,255 tot +66,096 DD  4,329 0.67/s  51%days | dIN  +7,747 dOUT +10,101  BETTER BOTH {'FHC': 17, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.3ADR stop1.5 2R/15:00 [alone n=20 +20] n=175 win= 50% IN +25,824 OUT +22,872 tot +48,695 DD  3,884 0.69/s  51%days | dIN  -1,270 dOUT  +1,717 {'FHC': 17, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.3ADR stop1.5 0R/12:15 [alone n=20 +6,755] n=173 win= 49% IN +27,752 OUT +23,286 tot +51,039 DD  3,885 0.68/s  51%days | dIN    +658 dOUT  +2,132  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.3ADR stop1.5 0R/15:00 [alone n=20 +22,121] n=169 win= 49% IN +32,822 OUT +33,269 tot +66,091 DD  3,885 0.67/s  51%days | dIN  +5,728 dOUT +12,115  BETTER BOTH {'FHC': 17, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.3ADR stop2 2R/15:00 [alone n=18 +1,507] n=173 win= 50% IN +27,109 OUT +23,028 tot +50,137 DD  3,879 0.68/s  51%days | dIN     +15 dOUT  +1,873  BETTER BOTH {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.3ADR stop2 0R/12:15 [alone n=18 +5,987] n=171 win= 49% IN +27,905 OUT +23,072 tot +50,976 DD  3,885 0.67/s  51%days | dIN    +811 dOUT  +1,917  BETTER BOTH {'FHC': 15, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.3ADR stop2 0R/15:00 [alone n=18 +19,200] n=167 win= 49% IN +32,321 OUT +31,672 tot +63,993 DD  3,885 0.66/s  51%days | dIN  +5,227 dOUT +10,518  BETTER BOTH {'FHC': 15, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.4ADR stop1 2R/15:00 [alone n=18 +273] n=175 win= 50% IN +27,879 OUT +21,314 tot +49,193 DD  3,538 0.69/s  51%days | dIN    +785 dOUT    +160  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.4ADR stop1 0R/12:15 [alone n=18 +1,526] n=173 win= 48% IN +28,874 OUT +21,665 tot +50,539 DD  4,329 0.68/s  51%days | dIN  +1,780 dOUT    +510  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.4ADR stop1 0R/15:00 [alone n=18 +16,349] n=169 win= 48% IN +34,841 OUT +31,255 tot +66,096 DD  4,329 0.67/s  51%days | dIN  +7,747 dOUT +10,101  BETTER BOTH {'FHC': 17, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.4ADR stop1.5 2R/15:00 [alone n=18 -798] n=175 win= 50% IN +25,326 OUT +22,872 tot +48,197 DD  3,884 0.69/s  51%days | dIN  -1,768 dOUT  +1,717 {'FHC': 17, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.4ADR stop1.5 0R/12:15 [alone n=18 +1,453] n=173 win= 49% IN +27,255 OUT +23,286 tot +50,541 DD  4,383 0.68/s  51%days | dIN    +161 dOUT  +2,132  BETTER BOTH {'FHC': 17, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.4ADR stop1.5 0R/15:00 [alone n=18 +15,771] n=169 win= 49% IN +32,324 OUT +33,269 tot +65,593 DD  4,383 0.67/s  51%days | dIN  +5,230 dOUT +12,115  BETTER BOTH {'FHC': 17, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:15 0.4ADR stop2 2R/15:00 [alone n=16 +683] n=173 win= 50% IN +26,635 OUT +23,028 tot +49,662 DD  3,879 0.68/s  51%days | dIN    -459 dOUT  +1,873 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:15 0.4ADR stop2 0R/12:15 [alone n=16 +1,429] n=171 win= 49% IN +27,430 OUT +23,072 tot +50,502 DD  4,359 0.67/s  51%days | dIN    +336 dOUT  +1,917  BETTER BOTH {'FHC': 15, 'LHM': 72, 'OB': 84}
+OB+LHM + FHC pace 10:15 0.4ADR stop2 0R/15:00 [alone n=16 +13,711] n=167 win= 49% IN +31,847 OUT +31,672 tot +63,519 DD  4,359 0.66/s  51%days | dIN  +4,753 dOUT +10,518  BETTER BOTH {'FHC': 15, 'LHM': 69, 'OB': 83}
+OB+LHM + FHC pace 10:30 0.2ADR stop1 2R/15:00 [alone n=20 -555] n=178 win= 49% IN +27,391 OUT +20,367 tot +47,759 DD  3,649 0.70/s  54%days | dIN    +297 dOUT    -787 {'FHC': 20, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.2ADR stop1 0R/12:15 [alone n=20 -6,107] n=177 win= 45% IN +21,896 OUT +19,231 tot +41,127 DD  4,092 0.70/s  54%days | dIN  -5,198 dOUT  -1,923 {'FHC': 20, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop1 0R/15:00 [alone n=20 -6,320] n=177 win= 45% IN +21,683 OUT +19,231 tot +40,914 DD  4,305 0.70/s  54%days | dIN  -5,411 dOUT  -1,923 {'FHC': 20, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop1.5 2R/15:00 [alone n=24 -4,203] n=182 win= 47% IN +25,097 OUT +19,015 tot +44,111 DD  3,650 0.72/s  54%days | dIN  -1,997 dOUT  -2,140 {'FHC': 24, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.2ADR stop1.5 0R/12:15 [alone n=24 -10,061] n=181 win= 44% IN +20,072 OUT +17,101 tot +37,173 DD  5,067 0.71/s  54%days | dIN  -7,022 dOUT  -4,053 {'FHC': 24, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop1.5 0R/15:00 [alone n=24 -10,259] n=181 win= 44% IN +19,874 OUT +17,101 tot +36,975 DD  5,265 0.71/s  54%days | dIN  -7,220 dOUT  -4,053 {'FHC': 24, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop2 2R/15:00 [alone n=22 -11,273] n=179 win= 45% IN +18,086 OUT +17,875 tot +35,961 DD  4,922 0.70/s  53%days | dIN  -9,008 dOUT  -3,279 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop2 0R/12:15 [alone n=22 -12,495] n=179 win= 44% IN +18,086 OUT +16,653 tot +34,739 DD  4,922 0.70/s  53%days | dIN  -9,008 dOUT  -4,501 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.2ADR stop2 0R/15:00 [alone n=22 -12,495] n=179 win= 44% IN +18,086 OUT +16,653 tot +34,739 DD  4,922 0.70/s  53%days | dIN  -9,008 dOUT  -4,501 {'FHC': 22, 'LHM': 72, 'OB': 85}
+OB+LHM + FHC pace 10:30 0.3ADR stop1 2R/15:00 [alone n=14 -1,168] n=172 win= 49% IN +26,262 OUT +20,883 tot +47,146 DD  3,649 0.68/s  53%days | dIN    -832 dOUT    -271 {'FHC': 14, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop1 0R/12:15 [alone n=14 -3,759] n=172 win= 47% IN +24,808 OUT +19,747 tot +44,555 DD  3,656 0.68/s  53%days | dIN  -2,286 dOUT  -1,408 {'FHC': 14, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop1 0R/15:00 [alone n=14 -3,972] n=172 win= 47% IN +24,595 OUT +19,747 tot +44,342 DD  3,656 0.68/s  53%days | dIN  -2,499 dOUT  -1,408 {'FHC': 14, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop1.5 2R/15:00 [alone n=15 -2,528] n=173 win= 48% IN +25,454 OUT +20,332 tot +45,786 DD  3,650 0.68/s  53%days | dIN  -1,640 dOUT    -822 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop1.5 0R/12:15 [alone n=15 -5,508] n=173 win= 47% IN +24,388 OUT +18,419 tot +42,806 DD  3,650 0.68/s  53%days | dIN  -2,706 dOUT  -2,736 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop1.5 0R/15:00 [alone n=15 -5,706] n=173 win= 46% IN +24,189 OUT +18,419 tot +42,608 DD  3,650 0.68/s  53%days | dIN  -2,905 dOUT  -2,736 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop2 2R/15:00 [alone n=15 -7,191] n=173 win= 47% IN +22,499 OUT +18,623 tot +41,123 DD  4,922 0.68/s  53%days | dIN  -4,595 dOUT  -2,531 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop2 0R/12:15 [alone n=15 -8,413] n=173 win= 46% IN +22,499 OUT +17,401 tot +39,901 DD  4,922 0.68/s  53%days | dIN  -4,595 dOUT  -3,753 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.3ADR stop2 0R/15:00 [alone n=15 -8,413] n=173 win= 46% IN +22,499 OUT +17,401 tot +39,901 DD  4,922 0.68/s  53%days | dIN  -4,595 dOUT  -3,753 {'FHC': 15, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1 2R/15:00 [alone n=8 +21] n=166 win= 50% IN +27,036 OUT +21,300 tot +48,335 DD  3,649 0.65/s  51%days | dIN     -58 dOUT    +145 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1 0R/12:15 [alone n=8 -1,903] n=166 win= 48% IN +26,248 OUT +20,163 tot +46,411 DD  3,656 0.65/s  51%days | dIN    -846 dOUT    -991 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1 0R/15:00 [alone n=8 -1,903] n=166 win= 48% IN +26,248 OUT +20,163 tot +46,411 DD  3,656 0.65/s  51%days | dIN    -846 dOUT    -991 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1.5 2R/15:00 [alone n=8 -1,918] n=166 win= 49% IN +26,351 OUT +20,045 tot +46,396 DD  3,650 0.65/s  51%days | dIN    -743 dOUT  -1,109 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1.5 0R/12:15 [alone n=8 -2,812] n=166 win= 48% IN +26,351 OUT +19,151 tot +45,502 DD  3,650 0.65/s  51%days | dIN    -743 dOUT  -2,004 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop1.5 0R/15:00 [alone n=8 -2,812] n=166 win= 48% IN +26,351 OUT +19,151 tot +45,502 DD  3,650 0.65/s  51%days | dIN    -743 dOUT  -2,004 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop2 2R/15:00 [alone n=8 -3,318] n=166 win= 49% IN +25,514 OUT +19,482 tot +44,996 DD  4,159 0.65/s  51%days | dIN  -1,580 dOUT  -1,672 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop2 0R/12:15 [alone n=8 -4,540] n=166 win= 48% IN +25,514 OUT +18,260 tot +43,774 DD  4,159 0.65/s  51%days | dIN  -1,580 dOUT  -2,894 {'FHC': 8, 'LHM': 72, 'OB': 86}
+OB+LHM + FHC pace 10:30 0.4ADR stop2 0R/15:00 [alone n=8 -4,540] n=166 win= 48% IN +25,514 OUT +18,260 tot +43,774 DD  4,159 0.65/s  51%days | dIN  -1,580 dOUT  -2,894 {'FHC': 8, 'LHM': 72, 'OB': 86}
+
+== 3b. Opening window 09:15-09:30 (owner, 7 Oct 2026: a SEPARATE opening strategy; OB keeps its 15-min warmup). Priced the same way; '4h' = 4h trend with the trade, 'no4h' = no trend filter. Each row: the strategy ALONE (IN/OUT) and added to OB + LHM.
+   -- ORB: range 09:15+orm (5 -> first entry 09:20+, 15 -> 09:30+), first close beyond it by 10:30, stop mid/far/1.5ATR (floor 1 ATR), target rR or time exit
++ ORB 4h or5 mid 2R/15:00 [alone n=75 IN +2,988 OUT -8,230] n=222 win= 44% IN +31,477 OUT +12,445 tot +43,922 DD  7,772 0.87/s  61%days | dIN  +4,383 dOUT  -8,710
++ ORB 4h or5 mid 0R/11:00 [alone n=75 IN -1,951 OUT -8,874] n=220 win= 44% IN +26,632 OUT +11,578 tot +38,210 DD  8,323 0.87/s  61%days | dIN    -462 dOUT  -9,576
++ ORB 4h or5 mid 0R/15:00 [alone n=75 IN +10,002 OUT -9,769] n=207 win= 40% IN +37,765 OUT +11,929 tot +49,693 DD  8,462 0.81/s  61%days | dIN +10,671 dOUT  -9,226
++ ORB 4h or5 far 2R/15:00 [alone n=22 IN -1,193 OUT -6,064] n=178 win= 46% IN +25,676 OUT +15,090 tot +40,766 DD  7,536 0.70/s  54%days | dIN  -1,418 dOUT  -6,064
++ ORB 4h or5 far 0R/11:00 [alone n=22 IN -3,805 OUT -4,378] n=180 win= 47% IN +22,751 OUT +16,777 tot +39,528 DD  7,536 0.71/s  54%days | dIN  -4,343 dOUT  -4,378
++ ORB 4h or5 far 0R/15:00 [alone n=22 IN +261 OUT -6,064]  n=176 win= 46% IN +26,504 OUT +15,090 tot +41,594 DD  6,912 0.69/s  54%days | dIN    -590 dOUT  -6,064
++ ORB 4h or5 atr 2R/15:00 [alone n=134 IN -17,612 OUT -7,435] n=277 win= 36% IN +10,982 OUT +12,741 tot +23,723 DD 12,916 1.09/s  72%days | dIN -16,112 dOUT  -8,414
++ ORB 4h or5 atr 0R/11:00 [alone n=131 IN -3,870 OUT -7,369] n=269 win= 35% IN +25,806 OUT +13,148 tot +38,954 DD  9,661 1.06/s  72%days | dIN  -1,288 dOUT  -8,006
++ ORB 4h or5 atr 0R/15:00 [alone n=131 IN -1,408 OUT -1,774] n=258 win= 29% IN +23,939 OUT +17,915 tot +41,854 DD 12,062 1.02/s  72%days | dIN  -3,155 dOUT  -3,239
++ ORB 4h or15 mid 2R/15:00 [alone n=56 IN +2,539 OUT -14,590] n=208 win= 43% IN +29,878 OUT  +7,437 tot +37,315 DD  9,509 0.82/s  60%days | dIN  +2,784 dOUT -13,717
++ ORB 4h or15 mid 0R/11:00 [alone n=56 IN -6,553 OUT -10,386] n=210 win= 44% IN +21,617 OUT +10,460 tot +32,077 DD  8,756 0.83/s  60%days | dIN  -5,477 dOUT -10,694
++ ORB 4h or15 mid 0R/15:00 [alone n=56 IN +1,094 OUT -17,035] n=203 win= 42% IN +32,884 OUT  +4,992 tot +37,876 DD  9,941 0.80/s  60%days | dIN  +5,790 dOUT -16,162
++ ORB 4h or15 far 2R/15:00 [alone n=9 IN +1,340 OUT -3,356] n=166 win= 49% IN +28,481 OUT +17,799 tot +46,279 DD  5,083 0.65/s  51%days | dIN  +1,387 dOUT  -3,356
++ ORB 4h or15 far 0R/11:00 [alone n=9 IN -836 OUT -2,424]  n=167 win= 49% IN +25,719 OUT +18,730 tot +44,449 DD  5,083 0.66/s  51%days | dIN  -1,375 dOUT  -2,424
++ ORB 4h or15 far 0R/15:00 [alone n=9 IN +1,339 OUT -3,356] n=165 win= 48% IN +27,230 OUT +17,799 tot +45,028 DD  5,083 0.65/s  51%days | dIN    +136 dOUT  -3,356
++ ORB 4h or15 atr 2R/15:00 [alone n=127 IN -20,795 OUT -8,671] n=271 win= 37% IN  +6,879 OUT +13,426 tot +20,305 DD 14,343 1.07/s  72%days | dIN -20,215 dOUT  -7,729
++ ORB 4h or15 atr 0R/11:00 [alone n=124 IN -6,640 OUT -11,528] n=267 win= 35% IN +21,053 OUT +10,116 tot +31,168 DD 11,332 1.05/s  72%days | dIN  -6,041 dOUT -11,039
++ ORB 4h or15 atr 0R/15:00 [alone n=124 IN -20,978 OUT -5,695] n=258 win= 29% IN  +7,869 OUT +15,120 tot +22,989 DD 17,917 1.02/s  72%days | dIN -19,225 dOUT  -6,035
++ ORB no4h or5 mid 2R/15:00 [alone n=145 IN +4,325 OUT -15,685] n=287 win= 39% IN +32,013 OUT  +4,508 tot +36,520 DD 11,266 1.13/s  74%days | dIN  +4,919 dOUT -16,647
++ ORB no4h or5 mid 0R/11:00 [alone n=145 IN +354 OUT -15,194] n=285 win= 39% IN +28,136 OUT  +4,079 tot +32,215 DD  9,809 1.12/s  74%days | dIN  +1,042 dOUT -17,075
++ ORB no4h or5 mid 0R/15:00 [alone n=145 IN +9,845 OUT -12,336] n=266 win= 33% IN +35,470 OUT +10,126 tot +45,595 DD 10,685 1.05/s  74%days | dIN  +8,376 dOUT -11,029
++ ORB no4h or5 far 2R/15:00 [alone n=36 IN -1,855 OUT -4,654] n=190 win= 45% IN +24,346 OUT +16,500 tot +40,846 DD  8,536 0.75/s  57%days | dIN  -2,748 dOUT  -4,654
++ ORB no4h or5 far 0R/11:00 [alone n=36 IN -5,344 OUT -3,806] n=193 win= 45% IN +20,174 OUT +17,348 tot +37,522 DD  9,376 0.76/s  57%days | dIN  -6,920 dOUT  -3,806
++ ORB no4h or5 far 0R/15:00 [alone n=36 IN -3,503 OUT -2,516] n=187 win= 44% IN +21,914 OUT +18,638 tot +40,551 DD  7,912 0.74/s  57%days | dIN  -5,180 dOUT  -2,516
++ ORB no4h or5 atr 2R/15:00 [alone n=237 IN -18,611 OUT -9,878] n=376 win= 34% IN +10,219 OUT  +8,079 tot +18,298 DD 16,803 1.48/s  91%days | dIN -16,875 dOUT -13,075
++ ORB no4h or5 atr 0R/11:00 [alone n=233 IN -12,228 OUT -13,661] n=367 win= 29% IN +17,684 OUT  +4,637 tot +22,321 DD 15,217 1.44/s  91%days | dIN  -9,410 dOUT -16,517
++ ORB no4h or5 atr 0R/15:00 [alone n=233 IN -384 OUT -7,710] n=351 win= 23% IN +23,359 OUT +10,458 tot +33,817 DD 11,311 1.38/s  91%days | dIN  -3,735 dOUT -10,697
++ ORB no4h or15 mid 2R/15:00 [alone n=109 IN -2,505 OUT -17,600] n=255 win= 39% IN +25,201 OUT  +4,642 tot +29,843 DD 11,813 1.00/s  70%days | dIN  -1,893 dOUT -16,512
++ ORB no4h or15 mid 0R/11:00 [alone n=109 IN -10,770 OUT -12,557] n=259 win= 41% IN +17,107 OUT  +7,110 tot +24,217 DD 12,224 1.02/s  70%days | dIN  -9,987 dOUT -14,044
++ ORB no4h or15 mid 0R/15:00 [alone n=109 IN -7,013 OUT -16,235] n=249 win= 37% IN +25,144 OUT  +6,556 tot +31,700 DD  9,387 0.98/s  70%days | dIN  -1,950 dOUT -14,598
++ ORB no4h or15 far 2R/15:00 [alone n=21 IN -692 OUT -2,290] n=174 win= 48% IN +25,801 OUT +18,864 tot +44,665 DD  6,520 0.69/s  54%days | dIN  -1,293 dOUT  -2,290
++ ORB no4h or15 far 0R/11:00 [alone n=21 IN -3,459 OUT -2,003] n=178 win= 47% IN +22,059 OUT +19,151 tot +41,211 DD  6,217 0.70/s  54%days | dIN  -5,035 dOUT  -2,003
++ ORB no4h or15 far 0R/15:00 [alone n=21 IN -693 OUT -152] n=173 win= 47% IN +24,550 OUT +21,002 tot +45,552 DD  6,520 0.68/s  54%days | dIN  -2,544 dOUT    -152
++ ORB no4h or15 atr 2R/15:00 [alone n=230 IN -23,927 OUT -18,427] n=372 win= 33% IN  +3,828 OUT  +1,450 tot  +5,278 DD 16,701 1.46/s  92%days | dIN -23,266 dOUT -19,704
++ ORB no4h or15 atr 0R/11:00 [alone n=224 IN -19,158 OUT -20,815] n=364 win= 28% IN  +9,280 OUT  -1,390 tot  +7,889 DD 15,806 1.43/s  92%days | dIN -17,814 dOUT -22,545
++ ORB no4h or15 atr 0R/15:00 [alone n=224 IN -32,134 OUT -13,988] n=353 win= 22% IN  -3,362 OUT  +4,608 tot  +1,246 DD 19,257 1.39/s  92%days | dIN -30,456 dOUT -16,546
+   -- first-15-min continuation: at 09:30 (and 09:20), move from the open (or prev close) >= frac x ADR, with it; stop minr ATR; target 2R or time exit
++ F15 4h o 09:20 0.1ADR s1 2R/15:00 [alone n=96 IN -7,625 OUT -1,898] n=251 win= 41% IN +19,699 OUT +17,110 tot +36,809 DD  9,286 0.99/s  67%days | dIN  -7,395 dOUT  -4,044
++ F15 4h o 09:20 0.1ADR s1 0R/11:00 [alone n=96 IN -15,751 OUT +7,862] n=241 win= 36% IN +14,439 OUT +25,531 tot +39,971 DD  8,913 0.95/s  67%days | dIN -12,655 dOUT  +4,377
++ F15 4h o 09:20 0.1ADR s1 0R/15:00 [alone n=96 IN -16,111 OUT +17,647] n=234 win= 33% IN +13,808 OUT +35,486 tot +49,294 DD 10,909 0.92/s  67%days | dIN -13,286 dOUT +14,332
++ F15 4h o 09:20 0.1ADR s1.5 2R/15:00 [alone n=87 IN -6,319 OUT -4,323] n=238 win= 41% IN +22,989 OUT +13,005 tot +35,994 DD  8,272 0.94/s  66%days | dIN  -4,105 dOUT  -8,150
++ F15 4h o 09:20 0.1ADR s1.5 0R/11:00 [alone n=87 IN -15,316 OUT -1,648] n=231 win= 36% IN +14,428 OUT +16,021 tot +30,449 DD 10,315 0.91/s  66%days | dIN -12,666 dOUT  -5,133
++ F15 4h o 09:20 0.1ADR s1.5 0R/15:00 [alone n=87 IN -16,156 OUT -512] n=227 win= 34% IN +13,317 OUT +17,899 tot +31,216 DD 12,311 0.89/s  66%days | dIN -13,777 dOUT  -3,255
++ F15 4h o 09:20 0.15ADR s1 2R/15:00 [alone n=77 IN -4,965 OUT +4,825] n=233 win= 45% IN +22,359 OUT +23,990 tot +46,349 DD  7,650 0.92/s  63%days | dIN  -4,735 dOUT  +2,835
++ F15 4h o 09:20 0.15ADR s1 0R/11:00 [alone n=77 IN -12,568 OUT +13,317] n=224 win= 39% IN +18,003 OUT +31,144 tot +49,147 DD  7,277 0.88/s  63%days | dIN  -9,091 dOUT  +9,989
++ F15 4h o 09:20 0.15ADR s1 0R/15:00 [alone n=77 IN -12,928 OUT +23,102] n=217 win= 37% IN +17,371 OUT +41,099 tot +58,470 DD  9,274 0.85/s  63%days | dIN  -9,723 dOUT +19,944
++ F15 4h o 09:20 0.15ADR s1.5 2R/15:00 [alone n=69 IN -3,579 OUT +1,663] n=221 win= 44% IN +25,729 OUT +19,148 tot +44,877 DD  6,357 0.87/s  62%days | dIN  -1,365 dOUT  -2,006
++ F15 4h o 09:20 0.15ADR s1.5 0R/11:00 [alone n=69 IN -11,688 OUT +4,338] n=214 win= 40% IN +18,056 OUT +22,165 tot +40,221 DD  8,400 0.84/s  62%days | dIN  -9,038 dOUT  +1,011
++ F15 4h o 09:20 0.15ADR s1.5 0R/15:00 [alone n=69 IN -12,527 OUT +5,474] n=210 win= 37% IN +16,945 OUT +24,042 tot +40,987 DD 10,396 0.83/s  62%days | dIN -10,149 dOUT  +2,888
++ F15 4h o 09:20 0.2ADR s1 2R/15:00 [alone n=60 IN -1,937 OUT +4,628] n=217 win= 46% IN +24,643 OUT +23,792 tot +48,435 DD  6,210 0.85/s  59%days | dIN  -2,451 dOUT  +2,638
++ F15 4h o 09:20 0.2ADR s1 0R/11:00 [alone n=60 IN -5,649 OUT +14,734] n=208 win= 42% IN +23,731 OUT +31,810 tot +55,541 DD  6,373 0.82/s  59%days | dIN  -3,363 dOUT +10,655
++ F15 4h o 09:20 0.2ADR s1 0R/15:00 [alone n=60 IN -7,500 OUT +18,579] n=202 win= 39% IN +21,609 OUT +35,094 tot +56,703 DD  8,369 0.80/s  59%days | dIN  -5,485 dOUT +13,940
++ F15 4h o 09:20 0.2ADR s1.5 2R/15:00 [alone n=51 IN -1,639 OUT +1,699] n=205 win= 46% IN +27,370 OUT +19,184 tot +46,554 DD  5,565 0.81/s  57%days | dIN    +276 dOUT  -1,970
++ F15 4h o 09:20 0.2ADR s1.5 0R/11:00 [alone n=51 IN -5,995 OUT +6,860] n=198 win= 43% IN +23,005 OUT +23,936 tot +46,940 DD  7,057 0.78/s  57%days | dIN  -4,089 dOUT  +2,782
++ F15 4h o 09:20 0.2ADR s1.5 0R/15:00 [alone n=51 IN -7,491 OUT +7,996] n=194 win= 40% IN +21,237 OUT +25,813 tot +47,050 DD  9,053 0.76/s  57%days | dIN  -5,857 dOUT  +4,659
++ F15 4h o 09:20 0.3ADR s1 2R/15:00 [alone n=30 IN +2,559 OUT +4,585 POS-BOTH] n=187 win= 50% IN +31,332 OUT +23,749 tot +55,081 DD  4,129 0.74/s  53%days | dIN  +4,238 dOUT  +2,595  BETTER BOTH
++ F15 4h o 09:20 0.3ADR s1 0R/11:00 [alone n=30 IN -879 OUT +15,396] n=183 win= 48% IN +29,461 OUT +34,626 tot +64,087 DD  4,129 0.72/s  53%days | dIN  +2,367 dOUT +13,472  BETTER BOTH
++ F15 4h o 09:20 0.3ADR s1 0R/15:00 [alone n=30 IN -5,992 OUT +21,589] n=178 win= 46% IN +24,349 OUT +40,258 tot +64,607 DD  4,634 0.70/s  53%days | dIN  -2,745 dOUT +19,104
++ F15 4h o 09:20 0.3ADR s1.5 2R/15:00 [alone n=24 IN +1,106 OUT +4,421 POS-BOTH] n=180 win= 50% IN +30,630 OUT +23,586 tot +54,216 DD  4,103 0.71/s  52%days | dIN  +3,536 dOUT  +2,432  BETTER BOTH
++ F15 4h o 09:20 0.3ADR s1.5 0R/11:00 [alone n=24 IN -247 OUT +10,467] n=178 win= 49% IN +30,010 OUT +29,697 tot +59,707 DD  4,103 0.70/s  52%days | dIN  +2,916 dOUT  +8,543  BETTER BOTH
++ F15 4h o 09:20 0.3ADR s1.5 0R/15:00 [alone n=24 IN -4,403 OUT +14,232] n=175 win= 47% IN +25,854 OUT +34,203 tot +60,058 DD  4,103 0.69/s  52%days | dIN  -1,240 dOUT +13,049
++ F15 4h o 09:20 0.4ADR s1 2R/15:00 [alone n=16 IN +2,437 OUT +3,206 POS-BOTH] n=173 win= 51% IN +31,210 OUT +22,371 tot +53,580 DD  4,129 0.68/s  52%days | dIN  +4,116 dOUT  +1,216  BETTER BOTH
++ F15 4h o 09:20 0.4ADR s1 0R/11:00 [alone n=16 IN -2,858 OUT +13,502] n=171 win= 49% IN +25,998 OUT +32,732 tot +58,731 DD  4,550 0.67/s  52%days | dIN  -1,096 dOUT +11,578
++ F15 4h o 09:20 0.4ADR s1 0R/15:00 [alone n=16 IN -2,858 OUT +19,617] n=168 win= 49% IN +25,998 OUT +39,589 tot +65,587 DD  4,550 0.66/s  52%days | dIN  -1,096 dOUT +18,434
++ F15 4h o 09:20 0.4ADR s1.5 2R/15:00 [alone n=11 IN -122 OUT +4,359] n=168 win= 51% IN +28,651 OUT +23,523 tot +52,174 DD  4,134 0.66/s  51%days | dIN  +1,557 dOUT  +2,369  BETTER BOTH
++ F15 4h o 09:20 0.4ADR s1.5 0R/11:00 [alone n=11 IN -1,640 OUT +9,566] n=168 win= 50% IN +27,133 OUT +28,731 tot +55,864 DD  4,134 0.66/s  51%days | dIN     +39 dOUT  +7,576  BETTER BOTH
++ F15 4h o 09:20 0.4ADR s1.5 0R/15:00 [alone n=11 IN -1,640 OUT +13,360] n=165 win= 49% IN +27,133 OUT +33,266 tot +60,400 DD  4,134 0.65/s  51%days | dIN     +39 dOUT +12,112  BETTER BOTH
++ F15 4h o 09:30 0.1ADR s1 2R/15:00 [alone n=101 IN -9,259 OUT -4,277] n=247 win= 41% IN +19,905 OUT +15,949 tot +35,854 DD  6,269 0.97/s  67%days | dIN  -7,189 dOUT  -5,205
++ F15 4h o 09:30 0.1ADR s1 0R/11:00 [alone n=101 IN -14,030 OUT +1,750] n=243 win= 35% IN +13,829 OUT +19,468 tot +33,297 DD 12,665 0.96/s  67%days | dIN -13,265 dOUT  -1,686
++ F15 4h o 09:30 0.1ADR s1 0R/15:00 [alone n=101 IN -7,708 OUT +2,733] n=234 win= 32% IN +20,171 OUT +18,368 tot +38,540 DD 14,934 0.92/s  67%days | dIN  -6,923 dOUT  -2,786
++ F15 4h o 09:30 0.1ADR s1.5 2R/15:00 [alone n=87 IN -8,126 OUT -7,886] n=232 win= 40% IN +19,669 OUT +12,095 tot +31,764 DD 10,767 0.91/s  64%days | dIN  -7,425 dOUT  -9,059
++ F15 4h o 09:30 0.1ADR s1.5 0R/11:00 [alone n=87 IN -10,686 OUT -2,600] n=229 win= 37% IN +17,280 OUT +16,863 tot +34,143 DD 12,065 0.90/s  64%days | dIN  -9,814 dOUT  -4,291
++ F15 4h o 09:30 0.1ADR s1.5 0R/15:00 [alone n=87 IN -205 OUT -3,269] n=220 win= 35% IN +28,391 OUT +15,413 tot +43,804 DD 10,210 0.87/s  64%days | dIN  +1,297 dOUT  -5,741
++ F15 4h o 09:30 0.15ADR s1 2R/15:00 [alone n=90 IN -11,879 OUT -4,013] n=239 win= 41% IN +17,144 OUT +15,462 tot +32,606 DD  7,482 0.94/s  65%days | dIN  -9,950 dOUT  -5,692
++ F15 4h o 09:30 0.15ADR s1 0R/11:00 [alone n=90 IN -17,659 OUT +3,109] n=235 win= 35% IN +10,918 OUT +20,827 tot +31,744 DD 12,569 0.93/s  65%days | dIN -16,176 dOUT    -327
++ F15 4h o 09:30 0.15ADR s1 0R/15:00 [alone n=90 IN -20,620 OUT +4,092] n=228 win= 33% IN  +7,957 OUT +19,727 tot +27,684 DD 13,760 0.90/s  65%days | dIN -19,137 dOUT  -1,427
++ F15 4h o 09:30 0.15ADR s1.5 2R/15:00 [alone n=73 IN -10,785 OUT -6,125] n=220 win= 40% IN +18,238 OUT +13,856 tot +32,094 DD 10,441 0.87/s  61%days | dIN  -8,856 dOUT  -7,298
++ F15 4h o 09:30 0.15ADR s1.5 0R/11:00 [alone n=73 IN -11,704 OUT +494] n=218 win= 39% IN +16,872 OUT +19,957 tot +36,830 DD 10,543 0.86/s  61%days | dIN -10,222 dOUT  -1,197
++ F15 4h o 09:30 0.15ADR s1.5 0R/15:00 [alone n=73 IN -10,063 OUT -175] n=211 win= 36% IN +19,122 OUT +18,507 tot +37,630 DD  9,378 0.83/s  61%days | dIN  -7,972 dOUT  -2,647
++ F15 4h o 09:30 0.2ADR s1 2R/15:00 [alone n=78 IN -15,092 OUT -1,556] n=229 win= 41% IN +13,769 OUT +17,919 tot +31,688 DD  9,588 0.90/s  62%days | dIN -13,325 dOUT  -3,235
++ F15 4h o 09:30 0.2ADR s1 0R/11:00 [alone n=78 IN -19,982 OUT +5,566] n=225 win= 36% IN  +8,433 OUT +23,284 tot +31,717 DD 12,558 0.89/s  62%days | dIN -18,661 dOUT  +2,130
++ F15 4h o 09:30 0.2ADR s1 0R/15:00 [alone n=78 IN -20,999 OUT +6,549] n=218 win= 34% IN  +7,415 OUT +22,184 tot +29,599 DD 13,576 0.86/s  62%days | dIN -19,679 dOUT  +1,030
++ F15 4h o 09:30 0.2ADR s1.5 2R/15:00 [alone n=63 IN -12,260 OUT -3,280] n=212 win= 41% IN +16,601 OUT +16,702 tot +33,302 DD 12,343 0.83/s  59%days | dIN -10,493 dOUT  -4,453
++ F15 4h o 09:30 0.2ADR s1.5 0R/11:00 [alone n=63 IN -13,229 OUT +3,339] n=210 win= 40% IN +15,185 OUT +22,803 tot +37,988 DD 12,767 0.83/s  59%days | dIN -11,909 dOUT  +1,648
++ F15 4h o 09:30 0.2ADR s1.5 0R/15:00 [alone n=63 IN -13,322 OUT +2,670] n=204 win= 38% IN +15,131 OUT +21,353 tot +36,484 DD 13,220 0.80/s  59%days | dIN -11,963 dOUT    +198
++ F15 4h o 09:30 0.3ADR s1 2R/15:00 [alone n=48 IN -7,661 OUT +377] n=201 win= 44% IN +21,503 OUT +19,852 tot +41,355 DD  4,880 0.79/s  57%days | dIN  -5,591 dOUT  -1,302
++ F15 4h o 09:30 0.3ADR s1 0R/11:00 [alone n=48 IN -10,551 OUT +1,602] n=199 win= 40% IN +18,167 OUT +20,559 tot +38,725 DD  6,944 0.78/s  57%days | dIN  -8,927 dOUT    -596
++ F15 4h o 09:30 0.3ADR s1 0R/15:00 [alone n=48 IN -10,617 OUT +7,963] n=194 win= 39% IN +18,100 OUT +26,359 tot +44,459 DD  7,011 0.76/s  57%days | dIN  -8,994 dOUT  +5,205
++ F15 4h o 09:30 0.3ADR s1.5 2R/15:00 [alone n=37 IN -5,229 OUT -2,576] n=190 win= 45% IN +24,219 OUT +18,644 tot +42,863 DD  4,480 0.75/s  55%days | dIN  -2,875 dOUT  -2,510
++ F15 4h o 09:30 0.3ADR s1.5 0R/11:00 [alone n=37 IN -4,902 OUT -519] n=189 win= 44% IN +24,545 OUT +20,183 tot +44,728 DD  5,687 0.74/s  55%days | dIN  -2,549 dOUT    -971
++ F15 4h o 09:30 0.3ADR s1.5 0R/15:00 [alone n=37 IN -5,100 OUT +4,975] n=185 win= 43% IN +24,387 OUT +26,418 tot +50,805 DD  6,899 0.73/s  55%days | dIN  -2,707 dOUT  +5,264
++ F15 4h o 09:30 0.4ADR s1 2R/15:00 [alone n=28 IN -3,287 OUT +2,738] n=184 win= 48% IN +26,988 OUT +23,893 tot +50,880 DD  3,388 0.72/s  53%days | dIN    -106 dOUT  +2,738
++ F15 4h o 09:30 0.4ADR s1 0R/11:00 [alone n=28 IN -7,040 OUT +5,390] n=182 win= 45% IN +22,788 OUT +26,027 tot +48,815 DD  5,472 0.72/s  53%days | dIN  -4,306 dOUT  +4,872
++ F15 4h o 09:30 0.4ADR s1 0R/15:00 [alone n=28 IN -7,040 OUT +11,751] n=177 win= 44% IN +22,788 OUT +31,827 tot +54,615 DD  5,472 0.70/s  53%days | dIN  -4,306 dOUT +10,673
++ F15 4h o 09:30 0.4ADR s1.5 2R/15:00 [alone n=21 IN -5,717 OUT +1,302] n=175 win= 47% IN +24,112 OUT +22,521 tot +46,633 DD  6,117 0.69/s  52%days | dIN  -2,982 dOUT  +1,367
++ F15 4h o 09:30 0.4ADR s1.5 0R/11:00 [alone n=21 IN -4,812 OUT +3,358] n=174 win= 47% IN +25,016 OUT +24,060 tot +49,076 DD  5,212 0.69/s  52%days | dIN  -2,078 dOUT  +2,906
++ F15 4h o 09:30 0.4ADR s1.5 0R/15:00 [alone n=21 IN -5,717 OUT +8,852] n=171 win= 46% IN +24,112 OUT +30,295 tot +54,407 DD  6,117 0.67/s  52%days | dIN  -2,982 dOUT  +9,141
++ F15 4h pc 09:20 0.1ADR s1 2R/15:00 [alone n=111 IN +4,430 OUT +819 POS-BOTH] n=263 win= 44% IN +30,688 OUT +19,213 tot +49,901 DD  5,817 1.04/s  67%days | dIN  +3,594 dOUT  -1,941
++ F15 4h pc 09:20 0.1ADR s1 0R/11:00 [alone n=111 IN +1,526 OUT +5,818 POS-BOTH] n=251 win= 36% IN +30,831 OUT +21,813 tot +52,644 DD  7,141 0.99/s  67%days | dIN  +3,737 dOUT    +659  BETTER BOTH
++ F15 4h pc 09:20 0.1ADR s1 0R/15:00 [alone n=111 IN +3,769 OUT -1,854] n=246 win= 30% IN +30,970 OUT +12,834 tot +43,803 DD  9,879 0.97/s  67%days | dIN  +3,876 dOUT  -8,321
++ F15 4h pc 09:20 0.1ADR s1.5 2R/15:00 [alone n=104 IN +3,735 OUT -910] n=252 win= 44% IN +33,455 OUT +15,494 tot +48,949 DD  6,523 0.99/s  67%days | dIN  +6,361 dOUT  -5,660
++ F15 4h pc 09:20 0.1ADR s1.5 0R/11:00 [alone n=104 IN +5,168 OUT -467] n=244 win= 38% IN +34,403 OUT +15,528 tot +49,932 DD  9,386 0.96/s  67%days | dIN  +7,309 dOUT  -5,626
++ F15 4h pc 09:20 0.1ADR s1.5 0R/15:00 [alone n=104 IN +15,235 OUT -12,387] n=239 win= 32% IN +41,596 OUT  +3,603 tot +45,199 DD 13,614 0.94/s  67%days | dIN +14,502 dOUT -17,552
++ F15 4h pc 09:20 0.15ADR s1 2R/15:00 [alone n=101 IN +5,230 OUT -1,338] n=254 win= 44% IN +32,465 OUT +16,746 tot +49,211 DD  6,773 1.00/s  66%days | dIN  +5,371 dOUT  -4,409
++ F15 4h pc 09:20 0.15ADR s1 0R/11:00 [alone n=101 IN -2,933 OUT +2,741] n=244 win= 36% IN +27,731 OUT +18,736 tot +46,468 DD  9,991 0.96/s  66%days | dIN    +637 dOUT  -2,418
++ F15 4h pc 09:20 0.15ADR s1 0R/15:00 [alone n=101 IN +5,893 OUT -2,884] n=239 win= 32% IN +34,453 OUT +11,803 tot +46,257 DD 10,910 0.94/s  66%days | dIN  +7,359 dOUT  -9,351
++ F15 4h pc 09:20 0.15ADR s1.5 2R/15:00 [alone n=93 IN +1,481 OUT -1,021] n=242 win= 44% IN +31,709 OUT +15,384 tot +47,093 DD  6,634 0.95/s  65%days | dIN  +4,615 dOUT  -5,771
++ F15 4h pc 09:20 0.15ADR s1.5 0R/11:00 [alone n=93 IN -8,218 OUT -577] n=236 win= 39% IN +22,446 OUT +15,418 tot +37,864 DD  9,497 0.93/s  65%days | dIN  -4,648 dOUT  -5,737
++ F15 4h pc 09:20 0.15ADR s1.5 0R/15:00 [alone n=93 IN +3,825 OUT -12,498] n=232 win= 34% IN +32,864 OUT  +3,492 tot +36,356 DD 13,725 0.91/s  65%days | dIN  +5,770 dOUT -17,662
++ F15 4h pc 09:20 0.2ADR s1 2R/15:00 [alone n=85 IN +7,023 OUT -819] n=238 win= 45% IN +34,258 OUT +17,265 tot +51,523 DD  5,873 0.94/s  63%days | dIN  +7,164 dOUT  -3,890
++ F15 4h pc 09:20 0.2ADR s1 0R/11:00 [alone n=85 IN +330 OUT +4,208 POS-BOTH] n=228 win= 39% IN +30,994 OUT +20,203 tot +51,197 DD  8,683 0.90/s  63%days | dIN  +3,900 dOUT    -951
++ F15 4h pc 09:20 0.2ADR s1 0R/15:00 [alone n=85 IN +9,156 OUT +224 POS-BOTH] n=223 win= 34% IN +37,716 OUT +14,911 tot +52,627 DD  9,493 0.88/s  63%days | dIN +10,622 dOUT  -6,243
++ F15 4h pc 09:20 0.2ADR s1.5 2R/15:00 [alone n=79 IN +2,357 OUT +1,297 POS-BOTH] n=229 win= 45% IN +31,834 OUT +17,702 tot +49,536 DD  5,573 0.90/s  63%days | dIN  +4,740 dOUT  -3,452
++ F15 4h pc 09:20 0.2ADR s1.5 0R/11:00 [alone n=79 IN -6,484 OUT +1,378] n=222 win= 40% IN +24,180 OUT +17,373 tot +41,553 DD  8,250 0.87/s  63%days | dIN  -2,914 dOUT  -3,782
++ F15 4h pc 09:20 0.2ADR s1.5 0R/15:00 [alone n=79 IN +2,519 OUT -8,901] n=219 win= 35% IN +31,078 OUT  +7,088 tot +38,167 DD 12,143 0.86/s  63%days | dIN  +3,984 dOUT -14,066
++ F15 4h pc 09:20 0.3ADR s1 2R/15:00 [alone n=67 IN +4,630 OUT +1,118 POS-BOTH] n=221 win= 46% IN +31,121 OUT +19,202 tot +50,323 DD  4,765 0.87/s  59%days | dIN  +4,027 dOUT  -1,952
++ F15 4h pc 09:20 0.3ADR s1 0R/11:00 [alone n=67 IN +7,857 OUT +6,145 POS-BOTH] n=212 win= 42% IN +37,026 OUT +22,140 tot +59,166 DD  6,746 0.83/s  59%days | dIN  +9,932 dOUT    +986  BETTER BOTH
++ F15 4h pc 09:20 0.3ADR s1 0R/15:00 [alone n=67 IN +13,567 OUT +2,161 POS-BOTH] n=207 win= 37% IN +40,631 OUT +16,849 tot +57,480 DD  7,556 0.81/s  59%days | dIN +13,537 dOUT  -4,306
++ F15 4h pc 09:20 0.3ADR s1.5 2R/15:00 [alone n=60 IN +2,499 OUT +1,332 POS-BOTH] n=210 win= 46% IN +31,976 OUT +17,736 tot +49,713 DD  5,745 0.83/s  58%days | dIN  +4,882 dOUT  -3,418
