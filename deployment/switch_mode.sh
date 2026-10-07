@@ -28,4 +28,7 @@ if systemctl is-active --quiet trading-engine; then
   done
 fi
 
+# A deliberate switch is not a crash loop: clear the unit's start counter so a
+# few switches in a row cannot trip StartLimitBurst and leave it refusing to start.
+systemctl reset-failed trading-engine 2>/dev/null || true
 systemctl start trading-engine
