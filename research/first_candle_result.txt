@@ -1,0 +1,345 @@
+NIFTY: 65 sessions 2026-07-08 .. 2026-10-08, lot 65, step 50, IV 0.106 .. 0.118
+BANKNIFTY: 65 sessions 2026-07-08 .. 2026-10-08, lot 30, step 100, IV 0.169 .. 0.150
+SENSEX: 65 sessions 2026-07-08 .. 2026-10-08, lot 20, step 100, IV 0.118 .. 0.122
+halves: 2026-07-08 .. before 2026-08-21 | 2026-08-21 .. 2026-10-08
+
+==============================================================================================================
+ENTRY ON TOUCH  (first 1-min bar through the level)
+==============================================================================================================
+
+NIFTY
+   5-min first candle: 65 sessions, 35 red, 30 green
+    rule 1  red  -> CE          n= 10 win  50%  net Rs       +73  avg     +7 (win +698 / loss -683)  PF 1.02  maxDD 2,049  halves -209 / +282  avg ret +1.4%  [stop 5 target 5]
+    rule 2  green-> PE mirror   n= 17 win  47%  net Rs      -781  avg    -46 (win +563 / loss -587)  PF 0.85  maxDD 3,446  halves -662 / -119  avg ret +0.7%  [stop 9 target 8]
+    rule 2  green-> PE as written n= 29 win  90%  net Rs    +4,869  avg   +168 (win +445 / loss -2,233)  PF 1.73  maxDD 5,571  halves +406 / +4,463  avg ret +4.1%  [open_level 13 target 14 time 2]  2 bars hit both
+    rules 1+2 (mirror)          n= 27 win  48%  net Rs      -708  avg    -26 (win +615 / loss -621)  PF 0.92  maxDD 4,830  halves -871 / +163  avg ret +1.0%  [stop 14 target 13]
+  10-min first candle: 65 sessions, 37 red, 28 green
+    rule 1  red  -> CE          n= 16 win  38%  net Rs      -920  avg    -58 (win +625 / loss -467)  PF 0.80  maxDD 1,756  halves -578 / -342  avg ret +0.8%  [stop 10 target 6]
+    rule 2  green-> PE mirror   n= 18 win  33%  net Rs    -7,407  avg   -412 (win +575 / loss -905)  PF 0.32  maxDD 7,407  halves -4,970 / -2,438  avg ret -4.0%  [stop 12 target 6]
+    rule 2  green-> PE as written n= 26 win  85%  net Rs    +6,961  avg   +268 (win +508 / loss -1,052)  PF 2.65  maxDD 2,219  halves +5,399 / +1,562  avg ret +4.8%  [open_level 10 target 14 time 2]  2 bars hit both
+    rules 1+2 (mirror)          n= 34 win  35%  net Rs    -8,327  avg   -245 (win +600 / loss -706)  PF 0.46  maxDD 8,327  halves -5,547 / -2,780  avg ret -1.7%  [stop 22 target 12]
+  15-min first candle: 65 sessions, 38 red, 27 green
+    rule 1  red  -> CE          n= 19 win  42%  net Rs    -4,123  avg   -217 (win +605 / loss -815)  PF 0.54  maxDD 5,010  halves -432 / -3,690  avg ret -0.9%  [stop 11 target 8]
+    rule 2  green-> PE mirror   n= 17 win  35%  net Rs    -5,054  avg   -297 (win +581 / loss -776)  PF 0.41  maxDD 6,032  halves -5,794 / +740  avg ret -2.0%  [stop 11 target 6]
+    rule 2  green-> PE as written n= 27 win  81%  net Rs    +1,527  avg    +57 (win +473 / loss -1,777)  PF 1.17  maxDD 4,347  halves -2,009 / +3,536  avg ret +2.7%  [open_level 12 target 12 time 3]  3 bars hit both
+    rules 1+2 (mirror)          n= 36 win  39%  net Rs    -9,177  avg   -255 (win +594 / loss -795)  PF 0.48  maxDD 9,177  halves -6,226 / -2,951  avg ret -1.4%  [stop 22 target 14]
+
+BANKNIFTY
+   5-min first candle: 65 sessions, 33 red, 32 green
+    rule 1  red  -> CE          n= 12 win  50%  net Rs    +2,449  avg   +204 (win +1,747 / loss -1,339)  PF 1.30  maxDD 4,102  halves +194 / +2,255  avg ret +2.4%  [stop 6 target 6]
+    rule 2  green-> PE mirror   n= 12 win  50%  net Rs    +2,119  avg   +177 (win +1,628 / loss -1,275)  PF 1.28  maxDD 4,501  halves +1,797 / +322  avg ret +2.0%  [stop 6 target 6]
+    rule 2  green-> PE as written n= 31 win  81%  net Rs    +8,099  avg   +261 (win +1,011 / loss -2,861)  PF 1.47  maxDD 13,423  halves -4,649 / +12,748  avg ret +3.3%  [open_level 15 target 12 time 4]  2 bars hit both
+    rules 1+2 (mirror)          n= 24 win  50%  net Rs    +4,568  avg   +190 (win +1,688 / loss -1,307)  PF 1.29  maxDD 4,501  halves +1,991 / +2,577  avg ret +2.2%  [stop 12 target 12]
+  10-min first candle: 65 sessions, 34 red, 31 green
+    rule 1  red  -> CE          n= 17 win  35%  net Rs      +347  avg    +20 (win +1,835 / loss -970)  PF 1.03  maxDD 6,231  halves -3,880 / +4,227  avg ret +0.7%  [stop 11 target 5 time 1]
+    rule 2  green-> PE mirror   n= 15 win  60%  net Rs    +3,299  avg   +220 (win +1,267 / loss -1,350)  PF 1.41  maxDD 5,304  halves -85 / +3,383  avg ret +3.3%  [stop 6 target 9]
+    rule 2  green-> PE as written n= 30 win  77%  net Rs    +4,598  avg   +153 (win +1,011 / loss -2,666)  PF 1.25  maxDD 11,329  halves -3,582 / +8,180  avg ret +2.1%  [open_level 12 target 12 time 6]  2 bars hit both
+    rules 1+2 (mirror)          n= 32 win  47%  net Rs    +3,646  avg   +114 (win +1,494 / loss -1,104)  PF 1.19  maxDD 5,853  halves -3,964 / +7,610  avg ret +1.9%  [stop 17 target 14 time 1]
+  15-min first candle: 65 sessions, 31 red, 34 green
+    rule 1  red  -> CE          n= 13 win  46%  net Rs    +1,091  avg    +84 (win +1,638 / loss -1,248)  PF 1.12  maxDD 6,247  halves -6,247 / +7,338  avg ret +1.3%  [stop 7 target 5 time 1]
+    rule 2  green-> PE mirror   n= 17 win  41%  net Rs      -651  avg    -38 (win +1,217 / loss -917)  PF 0.93  maxDD 7,491  halves -2,140 / +1,489  avg ret +1.3%  [stop 10 target 7]
+    rule 2  green-> PE as written n= 34 win  68%  net Rs      -208  avg     -6 (win +945 / loss -1,994)  PF 0.99  maxDD 12,247  halves -8,591 / +8,383  avg ret +1.4%  [open_level 15 target 12 time 7]
+    rules 1+2 (mirror)          n= 30 win  43%  net Rs      +440  avg    +15 (win +1,411 / loss -1,053)  PF 1.02  maxDD 8,394  halves -8,387 / +8,827  avg ret +1.3%  [stop 17 target 12 time 1]
+
+SENSEX
+   5-min first candle: 65 sessions, 37 red, 28 green
+    rule 1  red  -> CE          n= 11 win  45%  net Rs    -1,614  avg   -147 (win +706 / loss -858)  PF 0.69  maxDD 2,746  halves -2,408 / +794  avg ret +0.6%  [stop 6 target 5]
+    rule 2  green-> PE mirror   n= 17 win  53%  net Rs       -74  avg     -4 (win +527 / loss -602)  PF 0.98  maxDD 2,496  halves -1,042 / +967  avg ret +2.3%  [stop 8 target 9]
+    rule 2  green-> PE as written n= 27 win  85%  net Rs    +6,365  avg   +236 (win +498 / loss -1,273)  PF 2.25  maxDD 4,869  halves +1,092 / +5,273  avg ret +5.2%  [open_level 12 target 14 time 1]  2 bars hit both
+    rules 1+2 (mirror)          n= 28 win  50%  net Rs    -1,689  avg    -60 (win +591 / loss -712)  PF 0.83  maxDD 3,963  halves -3,450 / +1,761  avg ret +1.6%  [stop 14 target 14]
+  10-min first candle: 65 sessions, 35 red, 30 green
+    rule 1  red  -> CE          n=  9 win  22%  net Rs    -2,576  avg   -286 (win +611 / loss -543)  PF 0.32  maxDD 2,976  halves -2,700 / +125  avg ret -1.4%  [stop 7 target 2]
+    rule 2  green-> PE mirror   n= 20 win  45%  net Rs    -1,094  avg    -55 (win +567 / loss -564)  PF 0.82  maxDD 2,489  halves -902 / -191  avg ret +1.1%  [stop 11 target 9]
+    rule 2  green-> PE as written n= 30 win  77%  net Rs    +3,499  avg   +117 (win +444 / loss -959)  PF 1.52  maxDD 4,916  halves +2,061 / +1,439  avg ret +3.5%  [open_level 17 target 11 time 2]  4 bars hit both
+    rules 1+2 (mirror)          n= 29 win  38%  net Rs    -3,669  avg   -127 (win +575 / loss -556)  PF 0.63  maxDD 3,669  halves -3,603 / -67  avg ret +0.3%  [stop 18 target 11]
+  15-min first candle: 65 sessions, 36 red, 29 green
+    rule 1  red  -> CE          n= 13 win  54%  net Rs      -114  avg     -9 (win +669 / loss -800)  PF 0.98  maxDD 2,330  halves -1,845 / +1,732  avg ret +1.4%  [stop 6 target 7]
+    rule 2  green-> PE mirror   n= 19 win  47%  net Rs       +98  avg     +5 (win +580 / loss -512)  PF 1.02  maxDD 2,416  halves +733 / -635  avg ret +1.5%  [stop 10 target 9]
+    rule 2  green-> PE as written n= 29 win  79%  net Rs    +6,214  avg   +214 (win +486 / loss -827)  PF 2.25  maxDD 4,586  halves +876 / +5,338  avg ret +4.8%  [open_level 17 target 11 time 1]  5 bars hit both
+    rules 1+2 (mirror)          n= 32 win  50%  net Rs       -16  avg     -0 (win +619 / loss -620)  PF 1.00  maxDD 2,777  halves -1,112 / +1,097  avg ret +1.5%  [stop 16 target 16]
+
+==============================================================================================================
+ENTRY ON CLOSE  (a timeframe candle closes through the level)
+==============================================================================================================
+
+NIFTY
+   5-min first candle: 65 sessions, 35 red, 30 green
+    rule 1  red  -> CE          n=  9 win  44%  net Rs    -2,745  avg   -305 (win +681 / loss -1,093)  PF 0.50  maxDD 4,989  halves +334 / -3,079  avg ret -2.7%  [stop 5 target 4]
+    rule 2  green-> PE mirror   n= 11 win  73%  net Rs    +2,049  avg   +186 (win +570 / loss -837)  PF 1.82  maxDD 1,553  halves +3,136 / -1,086  avg ret +3.6%  [stop 3 target 8]
+    rule 2  green-> PE as written n= 25 win  56%  net Rs    +1,602  avg    +64 (win +385 / loss -344)  PF 1.42  maxDD 2,219  halves +2,032 / -430  avg ret +2.0%  [open_level 18 target 6 time 1]  2 bars hit both
+    rules 1+2 (mirror)          n= 20 win  60%  net Rs      -695  avg    -35 (win +607 / loss -997)  PF 0.91  maxDD 5,661  halves +3,470 / -4,165  avg ret +0.8%  [stop 8 target 12]
+  10-min first candle: 65 sessions, 37 red, 28 green
+    rule 1  red  -> CE          n= 10 win  50%  net Rs    -1,458  avg   -146 (win +638 / loss -929)  PF 0.69  maxDD 4,202  halves +600 / -2,058  avg ret -0.4%  [stop 5 target 5]
+    rule 2  green-> PE mirror   n= 12 win  50%  net Rs    -4,380  avg   -365 (win +614 / loss -1,344)  PF 0.46  maxDD 4,380  halves -895 / -3,485  avg ret -4.8%  [stop 6 target 6]
+    rule 2  green-> PE as written n= 22 win  64%  net Rs    +3,663  avg   +167 (win +351 / loss -156)  PF 3.94  maxDD 662  halves +2,926 / +738  avg ret +3.5%  [open_level 18 target 4]  4 bars hit both
+    rules 1+2 (mirror)          n= 22 win  50%  net Rs    -5,838  avg   -265 (win +625 / loss -1,156)  PF 0.54  maxDD 8,063  halves -295 / -5,543  avg ret -2.8%  [stop 11 target 11]
+  15-min first candle: 65 sessions, 38 red, 27 green
+    rule 1  red  -> CE          n= 15 win  40%  net Rs    -7,225  avg   -482 (win +581 / loss -1,190)  PF 0.33  maxDD 7,225  halves -570 / -6,654  avg ret -4.2%  [stop 9 target 6]
+    rule 2  green-> PE mirror   n= 12 win  67%  net Rs      -114  avg     -9 (win +562 / loss -1,153)  PF 0.98  maxDD 2,116  halves +472 / -586  avg ret +0.7%  [stop 4 target 8]
+    rule 2  green-> PE as written n= 21 win  43%  net Rs      +758  avg    +36 (win +442 / loss -269)  PF 1.24  maxDD 2,357  halves +1,887 / -1,129  avg ret +1.4%  [open_level 15 target 5 time 1]  1 bars hit both
+    rules 1+2 (mirror)          n= 27 win  52%  net Rs    -7,338  avg   -272 (win +570 / loss -1,179)  PF 0.52  maxDD 8,018  halves -98 / -7,240  avg ret -2.0%  [stop 13 target 14]
+
+BANKNIFTY
+   5-min first candle: 65 sessions, 33 red, 32 green
+    rule 1  red  -> CE          n= 10 win  50%  net Rs    +3,270  avg   +327 (win +2,222 / loss -1,568)  PF 1.42  maxDD 2,524  halves +3,169 / +101  avg ret +1.0%  [stop 5 target 5]
+    rule 2  green-> PE mirror   n= 10 win  30%  net Rs    -8,965  avg   -897 (win +1,329 / loss -1,850)  PF 0.31  maxDD 8,965  halves -6,983 / -1,982  avg ret -2.9%  [stop 7 target 3]
+    rule 2  green-> PE as written n= 24 win  67%  net Rs    +7,547  avg   +314 (win +880 / loss -817)  PF 2.15  maxDD 2,694  halves +2,898 / +4,649  avg ret +2.7%  [open_level 15 target 7 time 2]  1 bars hit both
+    rules 1+2 (mirror)          n= 20 win  40%  net Rs    -5,695  avg   -285 (win +1,887 / loss -1,732)  PF 0.73  maxDD 9,521  halves -3,814 / -1,881  avg ret -0.9%  [stop 12 target 8]
+  10-min first candle: 65 sessions, 34 red, 31 green
+    rule 1  red  -> CE          n= 13 win  38%  net Rs      +735  avg    +57 (win +2,208 / loss -1,288)  PF 1.07  maxDD 3,205  halves +468 / +268  avg ret +1.0%  [stop 7 target 5 time 1]
+    rule 2  green-> PE mirror   n= 12 win  42%  net Rs    -8,953  avg   -746 (win +1,090 / loss -2,058)  PF 0.38  maxDD 10,061  halves -5,710 / -3,243  avg ret -3.3%  [stop 7 target 5]
+    rule 2  green-> PE as written n= 22 win  41%  net Rs      +237  avg    +11 (win +1,019 / loss -687)  PF 1.03  maxDD 5,199  halves -244 / +481  avg ret +1.0%  [open_level 13 target 5 time 4]
+    rules 1+2 (mirror)          n= 25 win  40%  net Rs    -8,218  avg   -329 (win +1,649 / loss -1,647)  PF 0.67  maxDD 9,265  halves -5,242 / -2,975  avg ret -1.1%  [stop 14 target 10 time 1]
+  15-min first candle: 65 sessions, 31 red, 34 green
+    rule 1  red  -> CE          n= 11 win  27%  net Rs   -10,850  avg   -986 (win +1,728 / loss -2,004)  PF 0.32  maxDD 11,729  halves -4,947 / -5,903  avg ret -2.8%  [stop 6 target 3 time 2]
+    rule 2  green-> PE mirror   n= 15 win  33%  net Rs    -9,499  avg   -633 (win +1,112 / loss -1,506)  PF 0.37  maxDD 13,320  halves -7,892 / -1,607  avg ret -2.4%  [stop 10 target 5]
+    rule 2  green-> PE as written n= 23 win  43%  net Rs    +6,833  avg   +297 (win +1,244 / loss -431)  PF 2.22  maxDD 2,079  halves +1,698 / +5,135  avg ret +2.4%  [open_level 15 target 6 time 2]  3 bars hit both
+    rules 1+2 (mirror)          n= 26 win  31%  net Rs   -20,349  avg   -783 (win +1,343 / loss -1,727)  PF 0.35  maxDD 21,228  halves -12,839 / -7,510  avg ret -2.6%  [stop 16 target 8 time 2]
+
+SENSEX
+   5-min first candle: 65 sessions, 37 red, 28 green
+    rule 1  red  -> CE          n=  9 win  33%  net Rs    -5,500  avg   -611 (win +790 / loss -1,312)  PF 0.30  maxDD 7,214  halves -4,303 / -1,197  avg ret -6.3%  [stop 6 target 3]
+    rule 2  green-> PE mirror   n= 13 win  69%  net Rs    +1,852  avg   +142 (win +528 / loss -726)  PF 1.64  maxDD 1,350  halves +757 / +1,095  avg ret +4.3%  [stop 4 target 9]
+    rule 2  green-> PE as written n= 23 win  39%  net Rs    -1,740  avg    -76 (win +422 / loss -395)  PF 0.69  maxDD 3,785  halves +1,562 / -3,302  avg ret +0.6%  [open_level 16 target 5 time 2]  2 bars hit both
+    rules 1+2 (mirror)          n= 22 win  55%  net Rs    -3,648  avg   -166 (win +594 / loss -1,078)  PF 0.66  maxDD 6,144  halves -3,546 / -102  avg ret -0.0%  [stop 10 target 12]
+  10-min first candle: 65 sessions, 35 red, 30 green
+    rule 1  red  -> CE          n=  8 win  62%  net Rs      +657  avg    +82 (win +754 / loss -1,038)  PF 1.21  maxDD 2,398  halves -1,336 / +1,993  avg ret +2.7%  [stop 3 target 5]
+    rule 2  green-> PE mirror   n= 17 win  53%  net Rs    -4,740  avg   -279 (win +532 / loss -1,191)  PF 0.50  maxDD 5,717  halves -2,233 / -2,506  avg ret -2.8%  [stop 8 target 9]
+    rule 2  green-> PE as written n= 23 win  39%  net Rs    -4,262  avg   -185 (win +324 / loss -513)  PF 0.41  maxDD 5,657  halves +968 / -5,230  avg ret -1.6%  [open_level 18 target 3 time 2]  1 bars hit both
+    rules 1+2 (mirror)          n= 25 win  56%  net Rs    -4,083  avg   -163 (win +611 / loss -1,149)  PF 0.68  maxDD 6,477  halves -3,569 / -513  avg ret -1.0%  [stop 11 target 14]
+  15-min first candle: 65 sessions, 36 red, 29 green
+    rule 1  red  -> CE          n=  9 win  78%  net Rs    +1,817  avg   +202 (win +726 / loss -1,632)  PF 1.56  maxDD 3,264  halves -398 / +2,215  avg ret +3.9%  [stop 2 target 7]
+    rule 2  green-> PE mirror   n= 17 win  59%  net Rs    -1,493  avg    -88 (win +552 / loss -1,002)  PF 0.79  maxDD 4,777  halves -940 / -553  avg ret -0.3%  [stop 7 target 10]
+    rule 2  green-> PE as written n= 23 win  35%  net Rs    -2,461  avg   -107 (win +325 / loss -337)  PF 0.51  maxDD 3,201  halves +104 / -2,565  avg ret +0.1%  [open_level 18 target 4 time 1]
+    rules 1+2 (mirror)          n= 26 win  65%  net Rs      +324  avg    +12 (win +624 / loss -1,142)  PF 1.03  maxDD 5,874  halves -1,338 / +1,662  avg ret +1.1%  [stop 9 target 17]
+
+==============================================================================================================
+ALL THREE INDICES, rules 1 + 2 (mirror), by timeframe
+==============================================================================================================
+  touch  5-min  n= 79 win  49%  net Rs    +2,172  avg    +27 (win +936 / loss -859)  PF 1.06  maxDD 8,730  halves -2,329 / +4,501  avg ret +1.6%  [stop 40 target 39]
+  touch 10-min  n= 95 win  40%  net Rs    -8,351  avg    -88 (win +946 / loss -777)  PF 0.81  maxDD 14,563  halves -13,114 / +4,763  avg ret +0.1%  [stop 57 target 37 time 1]
+  touch 15-min  n= 98 win  44%  net Rs    -8,752  avg    -89 (win +851 / loss -824)  PF 0.81  maxDD 16,353  halves -15,725 / +6,973  avg ret +0.4%  [stop 55 target 42 time 1]
+  close  5-min  n= 62 win  52%  net Rs   -10,039  avg   -162 (win +922 / loss -1,318)  PF 0.75  maxDD 15,913  halves -3,891 / -6,149  avg ret -0.1%  [stop 30 target 32]
+  close 10-min  n= 72 win  49%  net Rs   -18,139  avg   -252 (win +912 / loss -1,353)  PF 0.64  maxDD 22,914  halves -9,107 / -9,032  avg ret -1.6%  [stop 36 target 35 time 1]
+  close 15-min  n= 79 win  49%  net Rs   -27,363  avg   -346 (win +752 / loss -1,417)  PF 0.52  maxDD 30,174  halves -14,275 / -13,088  avg ret -1.2%  [stop 38 target 39 time 2]
+
+By month, rules 1 + 2 (mirror), entry on touch, net Rs
+                       2026-07   2026-08   2026-09   2026-10
+  NIFTY       5-min         -57      -720    -1,943    +2,012
+  NIFTY      10-min      -5,654      -251    -2,205      -217
+  NIFTY      15-min      -6,795      +582    -1,314    -1,650
+  BANKNIFTY   5-min      -2,104    +4,956    +2,674      -958
+  BANKNIFTY  10-min      -2,808      -705       +87    +7,071
+  BANKNIFTY  15-min      -3,249    -3,109      -272    +7,071
+  SENSEX      5-min      -2,046      +133    -1,097    +1,322
+  SENSEX     10-min      -3,010      -262      +246      -643
+  SENSEX     15-min      -1,491      +973      +200      +303
+
+Every session, rules 1 + 2 (mirror), entry on touch: first-candle colour, then the trade
+(R/G = red/green first candle; CE/PE target|stop|time net Rs; '-' = no trigger in the next 5 candles)
+
+NIFTY
+  day                                      5-min                            10-min                            15-min
+  2026-07-08     G PE 09:23-09:30 target    +726   R CE 09:52-09:58 stop      -713   R CE 09:52-10:04 stop      -952
+  2026-07-09                                 G -                               G -                               G -
+  2026-07-10                                 G -                               G -                               G -
+  2026-07-13     R CE 09:36-09:38 target    +631   R CE 09:36-09:38 target    +631   R CE 09:36-09:38 target    +631
+  2026-07-14                                 G -   G PE 09:48-11:14 stop    -2,359   G PE 09:48-11:13 stop    -2,256
+  2026-07-15                                 G -                               G -                               G -
+  2026-07-16     G PE 09:21-09:34 target    +753   R CE 09:25-09:26 stop      -310   R CE 09:45-09:48 stop      -705
+  2026-07-17                                 G -                               G -                               G -
+  2026-07-20     G PE 09:21-09:24 stop      -797   G PE 09:28-09:39 target    +565   G PE 09:30-09:37 stop      -252
+  2026-07-21                                 G -   G PE 10:14-10:38 target    +875   G PE 10:14-10:38 target    +875
+  2026-07-22                                 R -                               R -                               R -
+  2026-07-23     G PE 09:35-09:39 stop      -519   G PE 09:35-10:01 stop    -1,517   G PE 09:35-09:45 stop      -706
+  2026-07-24     G PE 09:42-09:48 target    +540   G PE 09:42-09:48 target    +540   G PE 09:42-09:48 target    +540
+  2026-07-27     R CE 09:20-09:30 target    +490   G PE 09:25-09:26 stop      -218   G PE 09:32-09:35 stop      -564
+  2026-07-28                                 G -   G PE 10:03-10:42 stop    -1,467   G PE 10:03-10:34 stop    -1,215
+  2026-07-29     G PE 09:21-09:27 stop      -560   G PE 09:25-09:26 stop      -250   G PE 09:30-09:31 stop      -415
+  2026-07-30     G PE 09:40-09:46 stop      -727   G PE 09:40-09:46 stop      -913   G PE 09:40-09:46 stop    -1,026
+  2026-07-31     R CE 09:23-09:25 stop      -595   R CE 09:50-09:51 stop      -518   R CE 09:50-09:51 stop      -750
+  2026-08-03                                 R -   R CE 10:01-11:00 target    +668   R CE 10:01-11:00 target    +668
+  2026-08-04                                 R -                               R -                               R -
+  2026-08-05                                 R -                               R -                               R -
+  2026-08-06     R CE 09:21-09:34 stop      -736   R CE 09:27-09:28 stop      -336   R CE 09:30-09:32 stop      -412
+  2026-08-07                                 G -                               G -                               G -
+  2026-08-10     G PE 09:26-09:28 target    +531   G PE 09:26-09:28 target    +531   R CE 10:21-10:30 target    +461
+  2026-08-11                                 R -                               R -                               R -
+  2026-08-12                                 R -                               R -                               R -
+  2026-08-13                                 R -                               R -                               R -
+  2026-08-14                                 R -                               R -                               R -
+  2026-08-17                                 R -                               R -                               R -
+  2026-08-18     G PE 09:31-09:36 stop      -609   G PE 09:31-09:36 stop      -755   G PE 09:31-09:36 stop      -775
+  2026-08-19                                 R -                               R -                               R -
+  2026-08-20                                 R -                               R -   R CE 10:15-12:51 target    +628
+  2026-08-21                                 R -                               R -                               R -
+  2026-08-24     G PE 09:30-09:59 target    +441   G PE 09:30-09:59 target    +441   G PE 09:30-09:31 stop      -238
+  2026-08-25     G PE 09:23-09:24 stop      -542   R CE 09:25-09:26 stop      -247   G PE 09:38-09:45 target    +720
+  2026-08-26     R CE 09:21-09:41 target    +765   G PE 09:31-09:33 stop      -553   G PE 09:31-09:33 stop      -469
+  2026-08-27                                 R -                               R -                               R -
+  2026-08-28     R CE 09:21-09:22 stop      -570                               G -                               G -
+  2026-08-31                                 R -                               R -                               R -
+  2026-09-01                                 R -                               R -                               R -
+  2026-09-02                                 R -   R CE 10:05-10:22 target    +717   R CE 10:05-10:22 target    +717
+  2026-09-03     R CE 09:38-09:42 target    +602   R CE 09:38-09:42 target    +602   R CE 09:38-09:42 target    +602
+  2026-09-04     G PE 09:22-09:46 stop      -635   G PE 09:27-09:34 stop      -292   R CE 09:30-09:31 stop      -399
+  2026-09-07                                 R -                               R -                               R -
+  2026-09-08                                 R -                               R -                               R -
+  2026-09-09     R CE 09:38-09:49 stop      -988   R CE 09:38-09:47 stop      -563   R CE 09:38-09:48 stop      -672
+  2026-09-10     G PE 09:20-09:21 stop      -569   R CE 09:51-09:59 stop      -775   R CE 09:51-09:55 stop      -487
+  2026-09-11                                 R -   R CE 10:03-10:09 target    +439   R CE 10:03-10:09 target    +439
+  2026-09-15                                 R -                               R -                               R -
+  2026-09-16     G PE 09:28-09:30 target    +499   G PE 09:28-09:30 target    +499   G PE 09:30-09:32 target    +499
+  2026-09-17                                 G -                               G -                               G -
+  2026-09-18                                 R -   R CE 09:57-09:58 stop      -375   R CE 09:57-10:27 stop    -1,231
+  2026-09-21                                 G -                               G -                               G -
+  2026-09-22     R CE 09:41-10:22 stop      -527   R CE 09:41-10:21 stop      -482   R CE 09:41-10:22 stop      -546
+  2026-09-23                                 G -   G PE 09:54-10:18 stop    -1,232   G PE 09:54-09:57 stop      -623
+  2026-09-24     G PE 09:20-09:21 stop      -326   G PE 09:45-10:09 stop      -744   G PE 09:45-10:22 target    +387
+  2026-09-25                                 G -                               G -                               G -
+  2026-09-28                                 R -                               R -                               R -
+  2026-09-29                                 R -                               R -                               R -
+  2026-09-30                                 G -                               G -                               G -
+  2026-10-01     G PE 09:21-09:23 target    +534   R CE 09:30-09:31 target    +692   R CE 09:30-09:31 target    +692
+  2026-10-05     G PE 09:21-09:22 target    +477   G PE 10:05-10:06 stop      -558   G PE 10:05-10:24 target    +464
+  2026-10-06     R CE 09:30-09:47 target  +1,000   R CE 09:30-09:31 stop      -351   R CE 09:30-09:31 stop      -495
+  2026-10-07                                 R -                               R -   R CE 10:29-10:37 stop    -2,311
+  2026-10-08                                 R -                               R -                               R -
+
+BANKNIFTY
+  day                                      5-min                            10-min                            15-min
+  2026-07-08     G PE 09:20-09:31 target  +2,391   R CE 09:51-10:00 stop    -1,820   R CE 09:51-09:58 stop    -1,608
+  2026-07-09                                 G -                               G -                               G -
+  2026-07-10                                 G -                               G -                               G -
+  2026-07-13     R CE 09:26-09:31 stop    -1,298   R CE 09:26-09:30 stop    -1,174   R CE 09:32-09:34 stop      -831
+  2026-07-14     R CE 09:26-09:35 stop    -2,803   R CE 09:26-09:27 stop    -1,090                               R -
+  2026-07-15                                 G -                               G -                               G -
+  2026-07-16                                 R -                               R -                               R -
+  2026-07-17                                 G -                               G -                               G -
+  2026-07-20     G PE 09:20-09:33 target  +1,635   G PE 09:25-09:33 target  +1,634   R CE 10:16-10:58 stop    -1,478
+  2026-07-21                                 G -                               G -                               G -
+  2026-07-22                                 R -                               R -                               R -
+  2026-07-23     R CE 09:20-09:21 target  +1,430   G PE 09:31-09:36 target  +1,277   G PE 09:31-09:36 target  +1,277
+  2026-07-24     G PE 09:35-09:48 target  +1,042   G PE 09:35-09:48 target  +1,042   G PE 09:35-09:48 target  +1,042
+  2026-07-27                                 G -   G PE 09:54-10:04 target    +792   G PE 09:54-10:04 target    +792
+  2026-07-28     G PE 09:31-10:45 stop    -2,189   G PE 09:31-09:39 stop    -1,414   G PE 09:31-09:35 stop    -1,110
+  2026-07-29                                 R -   R CE 10:06-15:14 time      +494   R CE 10:06-15:14 time      +494
+  2026-07-30                                 R -                               R -                               R -
+  2026-07-31     G PE 09:34-13:08 stop    -2,312   G PE 09:34-13:26 stop    -2,548   G PE 09:34-13:06 stop    -1,826
+  2026-08-03     R CE 09:25-09:44 target  +3,107   R CE 09:25-09:44 target  +3,107                               G -
+  2026-08-04                                 R -                               R -                               R -
+  2026-08-05                                 G -   G PE 09:55-10:02 stop    -1,342   G PE 09:55-09:58 stop      -806
+  2026-08-06     R CE 09:25-09:34 stop    -1,521   R CE 09:25-09:29 stop      -735   R CE 09:30-09:32 stop      -837
+  2026-08-07     R CE 09:22-09:25 stop      -758   R CE 09:25-09:26 stop      -575   G PE 09:30-09:31 stop      -512
+  2026-08-10     G PE 09:24-09:31 target  +1,875   R CE 09:25-09:26 stop      -499                               R -
+  2026-08-11                                 R -                               R -                               R -
+  2026-08-12     R CE 09:20-09:24 target  +2,038                               G -                               G -
+  2026-08-13                                 R -                               R -                               R -
+  2026-08-14                                 R -   R CE 09:46-10:30 stop    -1,587   R CE 09:46-10:31 stop    -1,987
+  2026-08-17                                 R -                               R -                               R -
+  2026-08-18                                 G -   G PE 09:45-10:54 target  +1,072   G PE 09:45-09:51 stop      -996
+  2026-08-19                                 R -                               R -                               R -
+  2026-08-20     G PE 09:25-09:26 stop      -646   G PE 09:25-09:26 stop      -598                               G -
+  2026-08-21     R CE 09:39-09:41 target    +834   R CE 09:39-09:41 target    +834   R CE 09:39-09:41 target    +834
+  2026-08-24     R CE 09:26-09:28 stop      -562   R CE 09:26-09:28 stop      -414                               R -
+  2026-08-25                                 G -                               G -                               G -
+  2026-08-26                                 G -                               G -                               G -
+  2026-08-27                                 R -                               R -                               R -
+  2026-08-28     R CE 09:26-09:30 stop    -1,091   R CE 09:26-09:37 stop    -1,648   G PE 09:30-09:40 stop      -486
+  2026-08-31     G PE 09:43-10:25 target  +1,680   G PE 09:43-10:25 target  +1,680   G PE 09:43-10:25 target  +1,680
+  2026-09-01                                 R -                               R -                               R -
+  2026-09-02     R CE 09:25-10:19 target  +2,095   R CE 09:25-09:30 stop      -457   G PE 09:30-09:33 stop      -360
+  2026-09-03                                 G -                               G -                               G -
+  2026-09-04                                 R -                               R -   R CE 10:30-11:22 target  +1,923
+  2026-09-07                                 R -                               R -                               R -
+  2026-09-08                                 R -                               R -   R CE 10:15-10:25 stop    -1,265
+  2026-09-09     G PE 09:20-09:21 stop      -346   R CE 09:25-09:26 stop      -666   G PE 09:31-09:36 stop      -352
+  2026-09-10                                 G -                               G -                               G -
+  2026-09-11                                 R -   R CE 10:04-10:22 target  +1,472   R CE 10:04-10:22 target  +1,472
+  2026-09-15                                 R -                               R -                               R -
+  2026-09-16     G PE 09:28-09:30 target  +1,145   G PE 09:28-09:30 target  +1,145   R CE 09:34-09:35 stop      -731
+  2026-09-17                                 G -                               G -                               G -
+  2026-09-18     G PE 09:21-09:38 stop    -1,199   G PE 09:27-09:36 stop      -674   G PE 09:30-09:31 stop      -414
+  2026-09-21                                 G -   G PE 10:06-11:00 stop    -1,526   G PE 10:06-13:16 stop    -2,308
+  2026-09-22                                 G -                               G -   G PE 10:30-10:35 target    +968
+  2026-09-23                                 G -                               G -                               G -
+  2026-09-24     R CE 09:21-09:23 target    +979   G PE 09:25-09:33 target    +793   G PE 09:30-09:33 target    +795
+  2026-09-25                                 G -                               G -                               G -
+  2026-09-28                                 R -                               R -                               R -
+  2026-09-29                                 R -                               R -                               R -
+  2026-09-30                                 G -                               G -                               G -
+  2026-10-01                                 G -                               G -                               G -
+  2026-10-05                                 G -   G PE 10:05-10:54 target  +1,965   G PE 10:05-10:54 target  +1,965
+  2026-10-06     G PE 09:20-09:32 stop      -958   R CE 09:29-09:41 target  +2,596   R CE 09:30-09:41 target  +2,595
+  2026-10-07                                 R -   R CE 10:11-10:16 target  +2,510   R CE 10:11-10:16 target  +2,510
+  2026-10-08                                 R -                               R -                               R -
+
+SENSEX
+  day                                      5-min                            10-min                            15-min
+  2026-07-08     G PE 09:20-09:22 target    +513                               R -   R CE 10:42-11:56 stop    -1,937
+  2026-07-09                                 G -                               G -                               G -
+  2026-07-10     G PE 09:27-09:28 stop      -702   G PE 09:27-09:37 stop    -1,232                               G -
+  2026-07-13     R CE 09:21-09:23 stop      -444   R CE 09:25-09:27 stop      -578   R CE 09:31-09:32 stop      -393
+  2026-07-14     R CE 09:21-09:24 target    +783   G PE 09:32-09:38 target    +726   G PE 09:32-09:38 target    +726
+  2026-07-15                                 G -                               G -                               G -
+  2026-07-16     G PE 09:21-09:45 stop      -939   G PE 09:27-09:30 stop      -403   G PE 09:31-09:32 stop      -337
+  2026-07-17                                 G -                               G -                               G -
+  2026-07-20                                 R -                               R -                               R -
+  2026-07-21     G PE 09:24-09:27 stop      -855   G PE 09:25-09:26 stop      -402   G PE 09:32-10:15 target    +679
+  2026-07-22                                 R -                               R -                               R -
+  2026-07-23     R CE 09:20-09:31 stop      -999   G PE 09:25-09:36 target    +975   R CE 09:52-10:09 target  +1,207
+  2026-07-24     G PE 09:37-09:48 target    +838   G PE 09:37-09:48 target    +838   G PE 09:37-09:48 target    +838
+  2026-07-27     R CE 09:20-09:46 target    +921   G PE 09:25-09:26 stop      -426   G PE 09:56-10:15 stop      -692
+  2026-07-28     G PE 09:33-10:03 target    +661   G PE 09:33-09:38 stop      -938   G PE 09:33-09:36 stop      -714
+  2026-07-29     G PE 09:21-09:27 stop      -681   G PE 09:25-09:26 stop      -285   R CE 09:30-09:33 target    +658
+  2026-07-30     G PE 09:37-09:46 stop      -526   G PE 09:37-09:46 stop      -839   G PE 09:37-09:46 stop      -921
+  2026-07-31     R CE 09:22-09:26 stop      -615   R CE 09:47-09:49 stop      -445   R CE 09:47-09:51 stop      -605
+  2026-08-03                                 R -                               R -                               R -
+  2026-08-04                                 R -                               R -                               R -
+  2026-08-05                                 R -                               R -                               R -
+  2026-08-06     R CE 09:22-09:33 stop      -985   R CE 09:30-09:31 stop      -555   R CE 09:30-09:31 stop      -503
+  2026-08-07                                 G -                               G -   G PE 10:31-14:31 target    +720
+  2026-08-10     G PE 09:27-09:31 target    +650   G PE 09:27-09:31 target    +650   R CE 10:17-10:24 target    +781
+  2026-08-11                                 R -                               R -                               R -
+  2026-08-12                                 R -                               R -                               R -
+  2026-08-13                                 R -                               R -                               R -
+  2026-08-14                                 R -                               R -                               R -
+  2026-08-17                                 R -                               R -                               R -
+  2026-08-18                                 G -   G PE 09:45-10:47 target    +436   G PE 09:45-10:47 target    +436
+  2026-08-19                                 R -                               R -                               R -
+  2026-08-20     R CE 09:36-11:19 stop    -1,068   R CE 09:36-11:20 stop    -1,122   R CE 09:36-11:18 stop    -1,055
+  2026-08-21                                 R -                               R -                               R -
+  2026-08-24                                 G -   G PE 09:54-10:59 target    +487   G PE 09:54-10:59 target    +487
+  2026-08-25     G PE 09:40-09:45 target    +411   G PE 09:40-09:45 target    +411   G PE 09:40-09:45 target    +411
+  2026-08-26     R CE 09:21-09:26 target    +399   G PE 09:30-09:40 stop      -567   G PE 09:30-09:33 stop      -304
+  2026-08-27                                 R -                               R -                               R -
+  2026-08-28     R CE 09:21-09:25 target    +726                               G -                               G -
+  2026-08-31                                 R -                               R -                               R -
+  2026-09-01                                 R -                               R -   R CE 10:31-10:53 target    +479
+  2026-09-02                                 R -                               R -   R CE 10:29-10:31 target    +336
+  2026-09-03     G PE 09:24-09:27 stop      -467   R CE 09:25-09:26 stop      -276   G PE 10:37-10:48 stop      -639
+  2026-09-04     G PE 09:20-09:21 stop      -265   R CE 09:51-10:02 target    +640   R CE 09:51-10:02 target    +640
+  2026-09-07                                 R -                               R -                               R -
+  2026-09-08                                 R -                               R -                               R -
+  2026-09-09                                 R -                               R -                               R -
+  2026-09-10     G PE 09:22-10:09 target    +463   G PE 09:25-09:27 stop      -277   G PE 09:31-09:48 stop      -535
+  2026-09-11                                 R -   R CE 10:03-10:13 target    +582   R CE 10:03-10:13 target    +582
+  2026-09-15                                 R -                               R -                               R -
+  2026-09-16     G PE 09:28-09:30 target    +288   G PE 09:28-09:30 target    +288   G PE 09:30-09:31 target    +313
+  2026-09-17                                 G -                               G -                               G -
+  2026-09-18                                 R -                               R -                               R -
+  2026-09-21                                 G -                               G -                               G -
+  2026-09-22     G PE 09:20-09:21 stop      -379   G PE 09:26-09:30 stop      -504   G PE 09:34-09:37 stop      -437
+  2026-09-23     G PE 09:29-09:55 target    +298   G PE 09:29-09:55 target    +298   G PE 09:30-09:31 stop      -242
+  2026-09-24     R CE 09:22-09:41 stop    -1,035   R CE 09:28-09:39 stop      -507   G PE 09:30-09:31 stop      -297
+  2026-09-25                                 G -                               G -                               G -
+  2026-09-28                                 R -                               R -                               R -
+  2026-09-29                                 R -                               R -                               R -
+  2026-09-30                                 G -                               G -                               G -
+  2026-10-01                                 G -                               G -                               G -
+  2026-10-05     G PE 09:20-09:21 target    +619   G PE 09:26-09:27 stop      -327   G PE 10:05-10:24 target    +609
+  2026-10-06     R CE 09:24-09:39 target    +703   R CE 09:25-09:26 stop      -315   R CE 09:30-09:32 stop      -306
+  2026-10-07                                 R -                               R -                               R -
+  2026-10-08                                 R -                               R -                               R -
+
+every session, every timeframe: research/first_candle_trades.csv (1708 rows)

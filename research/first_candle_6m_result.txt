@@ -1,0 +1,456 @@
+NIFTY: 130 sessions 2026-04-01 .. 2026-10-08, lot 65, step 50, IV 0.243 .. 0.118
+BANKNIFTY: 130 sessions 2026-04-01 .. 2026-10-08, lot 30, step 100, IV 0.322 .. 0.150
+SENSEX: 130 sessions 2026-04-01 .. 2026-10-08, lot 20, step 100, IV 0.246 .. 0.122
+window 2026-04-01 .. 2026-10-08: 130 sessions; halves split at 2026-07-08; 5-minute first candle only; 1 lot; modelled premiums; exact charges
+
+########################################################################################################################
+#  ENTRY ON TOUCH  (first 1-min bar through the level)
+########################################################################################################################
+
+NIFTY  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           60           70          130           70
+  trades                                           22           37           59           69
+  trigger rate %                                 36.7         52.9         45.4         98.6
+ACCURACY
+  win rate %                                     31.8         45.9         40.7         73.9
+  win rate 95% low %                             16.4         31.0         29.1         62.5
+  win rate 95% high %                            52.7         61.6         53.4         82.8
+  win rate before charges %                      31.8         45.9         40.7         75.4
+  break-even win rate %                          48.7         49.0         49.3         81.9
+  target hit %                                   31.8         45.9         40.7         37.7
+  stop hit %                                     68.2         54.1         59.3         46.4
+  time exit %                                     0.0          0.0          0.0         15.9
+  index right way +15 min %                      50.0         64.9         59.3         52.2
+  index right way +30 min %                      68.2         51.4         57.6         52.2
+  index right way at 15:14 %                     40.9         48.6         45.8         50.7
+MONEY
+  net Rs                                       -6,828       -1,813       -8,640      -16,406
+  gross Rs (before charges)                    -4,603       +1,719       -2,885       -9,815
+  charges Rs                                    2,223        3,531        5,754        6,591
+  charges per trade Rs                            101           95           98           96
+  expectancy Rs/trade                            -310          -49         -146         -238
+  median trade Rs                                -552         -326         -440         +341
+  expectancy R (per avg loss)                   -0.35        -0.06        -0.17        -0.10
+  avg win Rs                                     +943         +830         +863         +540
+  avg loss Rs                                    -895         -796         -839       -2,441
+  payoff (avg win / avg loss)                    1.05         1.04         1.03         0.22
+  largest win Rs                               +2,036       +1,724       +2,036       +1,701
+  largest loss Rs                              -2,900       -2,455       -2,900       -5,962
+  profit factor                                  0.49         0.89         0.71         0.63
+  avg return on premium, before charges %         -1.3          0.6         -0.1         -0.2
+  avg return on premium, after charges %         -2.3         -0.5         -1.2         -1.3
+  avg capital per trade Rs                     12,385        9,916       10,837       10,097
+  net / one lot's capital %                     -55.1        -18.3        -79.7       -162.5
+RISK
+  max drawdown Rs                               9,126        6,696       13,674       25,406
+  recovery factor (net / DD)                    -0.75        -0.27        -0.63        -0.65
+  longest win streak                                2            3            3           18
+  longest loss streak                               8            4            6            4
+  trade std Rs                                  1,072          965        1,005        1,713
+  Sharpe (daily, annualised)                    -1.86        -0.43        -1.56        -1.60
+  Sortino (daily, annualised)                   -2.22        -0.58        -1.97        -1.69
+TRADE PATH
+  avg MFE % of premium                            4.8          6.1          5.6          6.8
+  avg MAE % of premium                           -4.8         -4.5         -4.6        -13.9
+  losers' avg MFE %                               2.4          2.8          2.7          3.4
+  losers that were +5% first %                   26.7         20.0         22.9         33.3
+  avg hold min                                  11.36         8.19         9.37        88.81
+  avg hold min, winners                         19.29         7.82        11.17        30.88
+  avg hold min, losers                           7.67         8.50         8.14       252.94
+STABILITY
+  net 1st half Rs                              -6,901       -1,031       -7,932      -21,275
+  net 2nd half Rs                                 +73         -781         -708       +4,869
+  months positive %                              42.9         14.3         14.3         57.1
+STATISTICS
+  t-stat of mean trade                          -1.36        -0.31        -1.12        -1.15
+  p-value (two-sided)                           0.189        0.759        0.268        0.253
+  trades to prove edge (p<0.05)                     -            -            -            -
+
+BANKNIFTY  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           61           69          130           69
+  trades                                           23           32           55           67
+  trigger rate %                                 37.7         46.4         42.3         97.1
+ACCURACY
+  win rate %                                     39.1         37.5         38.2         65.7
+  win rate 95% low %                             22.2         22.9         26.5         53.7
+  win rate 95% high %                            59.2         54.7         51.4         75.9
+  win rate before charges %                      39.1         37.5         38.2         67.2
+  break-even win rate %                          35.7         41.5         38.8         70.4
+  target hit %                                   39.1         37.5         38.2         23.9
+  stop hit %                                     60.9         59.4         60.0         58.2
+  time exit %                                     0.0          3.1          1.8         17.9
+  index right way +15 min %                      60.9         62.5         61.8         52.2
+  index right way +30 min %                      52.2         59.4         56.4         55.2
+  index right way at 15:14 %                     47.8         53.1         50.9         58.2
+MONEY
+  net Rs                                       +3,358       -4,621       -1,263      -13,342
+  gross Rs (before charges)                    +6,532         -197       +6,335       -4,351
+  charges Rs                                    3,174        4,424        7,598        8,990
+  charges per trade Rs                            138          138          138          134
+  expectancy Rs/trade                            +146         -144          -23         -199
+  median trade Rs                                -758         -772         -758         +693
+  expectancy R (per avg loss)                    0.10        -0.10        -0.02        -0.07
+  avg win Rs                                   +2,730       +2,114       +2,378       +1,248
+  avg loss Rs                                  -1,515       -1,500       -1,506       -2,967
+  payoff (avg win / avg loss)                    1.80         1.41         1.58         0.42
+  largest win Rs                               +5,506       +4,703       +5,506       +3,855
+  largest loss Rs                              -3,520       -2,973       -3,520       -9,408
+  profit factor                                  1.16         0.85         0.98         0.80
+  avg return on premium, before charges %          0.4          0.7          0.6         -0.4
+  avg return on premium, after charges %         -0.2          0.1         -0.0         -1.0
+  avg capital per trade Rs                     26,944       27,267       27,132       25,666
+  net / one lot's capital %                      12.5        -16.9         -4.7        -52.0
+RISK
+  max drawdown Rs                              14,164        9,883       18,259       39,884
+  recovery factor (net / DD)                     0.24        -0.47        -0.07        -0.33
+  longest win streak                                2            3            3           11
+  longest loss streak                               6            5            7            4
+  trade std Rs                                  2,462        1,969        2,172        2,883
+  Sharpe (daily, annualised)                     0.40        -0.58        -0.11        -0.79
+  Sortino (daily, annualised)                    0.72        -0.85        -0.18        -0.88
+TRADE PATH
+  avg MFE % of premium                            6.0          5.2          5.6          5.5
+  avg MAE % of premium                           -3.8         -3.4         -3.6         -9.4
+  losers' avg MFE %                               3.5          2.3          2.8          2.3
+  losers that were +5% first %                   28.6         20.0         23.5         17.4
+  avg hold min                                  30.83        36.06        33.87        97.85
+  avg hold min, winners                         44.78        26.42        34.29        46.20
+  avg hold min, losers                          21.86        41.85        33.62       196.65
+STABILITY
+  net 1st half Rs                                +909       -6,741       -5,831      -21,442
+  net 2nd half Rs                              +2,449       +2,119       +4,568       +8,099
+  months positive %                              50.0         28.6         42.9         57.1
+STATISTICS
+  t-stat of mean trade                           0.28        -0.41        -0.08        -0.57
+  p-value (two-sided)                           0.779        0.681        0.938        0.574
+  trades to prove edge (p<0.05)                 1,092            -            -            -
+
+SENSEX  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           70           60          130           60
+  trades                                           23           36           59           56
+  trigger rate %                                 32.9         60.0         45.4         93.3
+ACCURACY
+  win rate %                                     39.1         44.4         42.4         71.4
+  win rate 95% low %                             22.2         29.5         30.6         58.5
+  win rate 95% high %                            59.2         60.4         55.1         81.6
+  win rate before charges %                      39.1         44.4         42.4         78.6
+  break-even win rate %                          50.3         52.5         51.8         76.0
+  target hit %                                   39.1         44.4         42.4         37.5
+  stop hit %                                     60.9         55.6         57.6         50.0
+  time exit %                                     0.0          0.0          0.0         12.5
+  index right way +15 min %                      39.1         52.8         47.5         55.4
+  index right way +30 min %                      65.2         38.9         49.2         48.2
+  index right way at 15:14 %                     47.8         44.4         45.8         50.0
+MONEY
+  net Rs                                       -4,550       -4,346       -8,896       -5,863
+  gross Rs (before charges)                    -2,148         -938       -3,086         -546
+  charges Rs                                    2,402        3,409        5,810        5,316
+  charges per trade Rs                            104           95           98           95
+  expectancy Rs/trade                            -198         -121         -151         -105
+  median trade Rs                                -444         -310         -379         +382
+  expectancy R (per avg loss)                   -0.22        -0.15        -0.18        -0.06
+  avg win Rs                                     +883         +710         +772         +555
+  avg loss Rs                                    -892         -785         -829       -1,754
+  payoff (avg win / avg loss)                    0.99         0.90         0.93         0.32
+  largest win Rs                               +1,623       +1,166       +1,623       +1,393
+  largest loss Rs                              -1,942       -2,131       -2,131       -5,386
+  profit factor                                  0.64         0.72         0.68         0.79
+  avg return on premium, before charges %          0.6          0.8          0.7          0.6
+  avg return on premium, after charges %         -0.2         -0.3         -0.3         -0.5
+  avg capital per trade Rs                     13,659        9,672       11,227        9,760
+  net / one lot's capital %                     -33.3        -44.9        -79.2        -60.1
+RISK
+  max drawdown Rs                               6,967        6,255       11,885       17,068
+  recovery factor (net / DD)                    -0.65        -0.69        -0.75        -0.34
+  longest win streak                                2            2            4           10
+  longest loss streak                               7            5           10            3
+  trade std Rs                                    969          871          903        1,553
+  Sharpe (daily, annualised)                    -1.36        -1.16        -1.78        -0.71
+  Sortino (daily, annualised)                   -1.72        -1.43        -2.21        -0.76
+TRADE PATH
+  avg MFE % of premium                            5.5          5.9          5.8          6.6
+  avg MAE % of premium                           -3.9         -4.7         -4.4        -11.8
+  losers' avg MFE %                               2.7          2.7          2.7          2.7
+  losers that were +5% first %                   14.3         20.0         17.6         25.0
+  avg hold min                                  14.57         8.36        10.78        68.23
+  avg hold min, winners                         16.11        10.69        12.64        32.45
+  avg hold min, losers                          13.57         6.50         9.41       157.69
+STABILITY
+  net 1st half Rs                              -2,936       -4,272       -7,208      -12,228
+  net 2nd half Rs                              -1,614          -74       -1,689       +6,365
+  months positive %                              42.9         42.9         57.1         57.1
+STATISTICS
+  t-stat of mean trade                          -0.98        -0.83        -1.28        -0.50
+  p-value (two-sided)                           0.338        0.411        0.205        0.616
+  trades to prove edge (p<0.05)                     -            -            -            -
+
+PER MONTH, rules 1+2 (mirror), entry on touch  (Oct = 1-8 Oct only, not in the average)
+
+NIFTY   one lot's capital Rs 10,837 (average entry premium x lot 65)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04       11   27.3%    -2,876       -261      -1.2%     -26.5%      -2,427     -449    -14,369
+  2026-05       13   38.5%    -4,527       -348      -3.3%     -41.8%      -4,239     -288     +4,439
+  2026-06        7   42.9%      -128        -18      -0.2%      -1.2%        +166     -294     -2,062
+  2026-07       11   45.5%      -458        -42      +0.1%      -4.2%        +125     -584    -10,221
+  2026-08        7   42.9%      -720       -103      -0.7%      -6.6%        -541     -179     +1,783
+  2026-09        7   28.6%    -1,943       -278      -4.9%     -17.9%        -913   -1,030     +3,389
+  2026-10*       3  100.0%    +2,012       +671      +8.7%     +18.6%      +1,000   +1,011       +635
+  avg month    9.3   37.5%    -1,775       -190      -1.7%     -16.4%      -1,305     -471     -2,840
+  positive months 0 of 6; best -128, worst -4,527; monthly return std 15.6 pts
+
+BANKNIFTY   one lot's capital Rs 27,132 (average entry premium x lot 30)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04       12   33.3%    +2,546       +212      -0.5%      +9.4%      +9,283   -6,737     -1,147
+  2026-05        8   25.0%    -6,122       -765      -2.8%     -22.6%      -7,354   +1,232     +1,682
+  2026-06        9   33.3%      -568        -63      -0.3%      -2.1%        -239     -329    -21,141
+  2026-07       10   40.0%    -3,791       -379      -0.0%     -14.0%      -3,453     -338     -7,385
+  2026-08       10   50.0%    +4,956       +496      +2.0%     +18.3%      +2,047   +2,909     +2,492
+  2026-09        5   60.0%    +2,674       +535      +3.1%      +9.9%      +3,074     -400     +7,506
+  2026-10*       1    0.0%      -958       -958      -4.5%      -3.5%          +0     -958     +4,651
+  avg month    9.0   38.9%       -51         -6      +0.1%      -0.2%        +560     -611     -2,999
+  positive months 3 of 6; best +4,956, worst -6,122; monthly return std 15.7 pts
+
+SENSEX   one lot's capital Rs 11,227 (average entry premium x lot 20)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04       12    8.3%   -10,311       -859      -4.2%     -91.8%      -4,612   -5,699     -7,025
+  2026-05        9   66.7%    +2,463       +274      +2.3%     +21.9%          +7   +2,457     +5,223
+  2026-06       10   40.0%      +640        +64      +0.1%      +5.7%      +1,670   -1,029     -4,095
+  2026-07       13   38.5%    -2,046       -157      -1.0%     -18.2%        -354   -1,692     -7,081
+  2026-08        6   66.7%      +133        +22      +2.2%      +1.2%        -928   +1,061     +2,404
+  2026-09        7   42.9%    -1,097       -157      -1.0%      -9.8%      -1,035      -63     +3,826
+  2026-10*       2  100.0%    +1,322       +661      +8.8%     +11.8%        +703     +619       +884
+  avg month    9.5   40.4%    -1,703       -179      -0.6%     -15.2%        -876     -828     -1,124
+  positive months 3 of 6; best +2,463, worst -10,311; monthly return std 40.0 pts
+
+########################################################################################################################
+#  ENTRY ON CLOSE  (a 5-min candle closes through the level)
+########################################################################################################################
+
+NIFTY  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           60           70          130           70
+  trades                                           18           26           44           55
+  trigger rate %                                 30.0         37.1         33.8         78.6
+ACCURACY
+  win rate %                                     44.4         73.1         61.4         41.8
+  win rate 95% low %                             24.6         53.9         46.6         29.7
+  win rate 95% high %                            66.3         86.3         74.3         55.0
+  win rate before charges %                      44.4         73.1         61.4         47.3
+  break-even win rate %                          48.8         56.3         52.9         76.9
+  target hit %                                   44.4         73.1         61.4         12.7
+  stop hit %                                     55.6         26.9         38.6         70.9
+  time exit %                                     0.0          0.0          0.0         16.4
+  index right way +15 min %                      61.1         61.5         61.4         50.9
+  index right way +30 min %                      66.7         50.0         56.8         43.6
+  index right way at 15:14 %                     44.4         50.0         47.7         45.5
+MONEY
+  net Rs                                       -1,779      +10,180       +8,401      -36,483
+  gross Rs (before charges)                       +61      +12,732      +12,793      -31,231
+  charges Rs                                    1,840        2,552        4,392        5,251
+  charges per trade Rs                            102           98          100           95
+  expectancy Rs/trade                             -99         +392         +191         -663
+  median trade Rs                                -635         +582         +495         -117
+  expectancy R (per avg loss)                   -0.09         0.30         0.16        -0.46
+  avg win Rs                                   +1,172       +1,020       +1,065         +436
+  avg loss Rs                                  -1,116       -1,314       -1,197       -1,453
+  payoff (avg win / avg loss)                    1.05         0.78         0.89         0.30
+  largest win Rs                               +2,593       +2,131       +2,593         +968
+  largest loss Rs                              -2,114       -2,838       -2,838       -6,297
+  profit factor                                  0.84         2.11         1.41         0.22
+  avg return on premium, before charges %         -0.9          3.3          1.6         -3.7
+  avg return on premium, after charges %         -1.8          2.2          0.6         -4.8
+  avg capital per trade Rs                     12,701       10,690       11,513       10,399
+  net / one lot's capital %                     -14.0         95.2         73.0       -350.8
+RISK
+  max drawdown Rs                               6,663        2,838        5,661       38,311
+  recovery factor (net / DD)                    -0.27         3.59         1.48        -0.95
+  longest win streak                                4            8            6            4
+  longest loss streak                               4            2            3            6
+  trade std Rs                                  1,311        1,227        1,271        1,886
+  Sharpe (daily, annualised)                    -0.46         2.21         1.39        -3.53
+  Sortino (daily, annualised)                   -0.65         3.52         2.11        -3.51
+TRADE PATH
+  avg MFE % of premium                            7.1          8.2          7.8          4.1
+  avg MAE % of premium                           -6.8         -7.0         -6.9        -11.1
+  losers' avg MFE %                               4.8          3.5          4.2          1.4
+  losers that were +5% first %                   50.0         42.9         47.1          6.2
+  avg hold min                                  21.67        22.77        22.32        73.47
+  avg hold min, winners                         23.75        25.79        25.19        37.87
+  avg hold min, losers                          20.00        14.57        17.76        99.06
+STABILITY
+  net 1st half Rs                                +966       +8,130       +9,096      -38,085
+  net 2nd half Rs                              -2,745       +2,049         -695       +1,602
+  months positive %                              57.1         71.4         42.9         28.6
+STATISTICS
+  t-stat of mean trade                          -0.32         1.63         1.00        -2.61
+  p-value (two-sided)                           0.753        0.116        0.325        0.012
+  trades to prove edge (p<0.05)                     -           38          170            -
+
+BANKNIFTY  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           61           69          130           69
+  trades                                           19           24           43           51
+  trigger rate %                                 31.1         34.8         33.1         73.9
+ACCURACY
+  win rate %                                     42.1         37.5         39.5         45.1
+  win rate 95% low %                             23.1         21.2         26.4         32.3
+  win rate 95% high %                            63.7         57.3         54.4         58.6
+  win rate before charges %                      42.1         37.5         39.5         47.1
+  break-even win rate %                          40.3         47.0         43.3         55.0
+  target hit %                                   42.1         37.5         39.5         17.6
+  stop hit %                                     57.9         58.3         58.1         68.6
+  time exit %                                     0.0          4.2          2.3         13.7
+  index right way +15 min %                      63.2         62.5         62.8         60.8
+  index right way +30 min %                      57.9         50.0         53.5         56.9
+  index right way at 15:14 %                     57.9         50.0         53.5         58.8
+MONEY
+  net Rs                                       +1,823       -9,325       -7,502      -13,345
+  gross Rs (before charges)                    +4,532       -6,046       -1,515       -6,436
+  charges Rs                                    2,708        3,279        5,987        6,910
+  charges per trade Rs                            143          137          139          135
+  expectancy Rs/trade                             +96         -389         -174         -262
+  median trade Rs                              -1,283       -1,187       -1,212         -158
+  expectancy R (per avg loss)                    0.05        -0.20        -0.09        -0.18
+  avg win Rs                                   +3,133       +2,181       +2,629       +1,183
+  avg loss Rs                                  -2,113       -1,930       -2,007       -1,448
+  payoff (avg win / avg loss)                    1.48         1.13         1.31         0.82
+  largest win Rs                               +5,423       +4,692       +5,423       +3,684
+  largest loss Rs                              -4,004       -3,611       -4,004       -7,612
+  profit factor                                  1.08         0.68         0.86         0.67
+  avg return on premium, before charges %         -0.7         -0.7         -0.7         -0.5
+  avg return on premium, after charges %         -1.2         -1.3         -1.2         -1.1
+  avg capital per trade Rs                     28,815       26,795       27,687       26,237
+  net / one lot's capital %                       6.3        -34.8        -27.1        -50.9
+RISK
+  max drawdown Rs                              12,278       11,358       20,267       27,100
+  recovery factor (net / DD)                     0.15        -0.82        -0.37        -0.49
+  longest win streak                                2            2            3            6
+  longest loss streak                               4            3            5            9
+  trade std Rs                                  2,939        2,235        2,549        2,185
+  Sharpe (daily, annualised)                     0.20        -1.19        -0.63        -1.19
+  Sortino (daily, annualised)                    0.33        -1.59        -0.93        -1.34
+TRADE PATH
+  avg MFE % of premium                            5.8          6.0          5.9          4.0
+  avg MAE % of premium                           -5.5         -5.3         -5.4         -6.2
+  losers' avg MFE %                               2.8          3.6          3.2          1.3
+  losers that were +5% first %                   27.3         33.3         30.8         10.7
+  avg hold min                                  42.63        65.58        55.44        65.24
+  avg hold min, winners                         57.12        60.33        58.82        29.70
+  avg hold min, losers                          32.09        68.73        53.23        94.43
+STABILITY
+  net 1st half Rs                              -1,447         -360       -1,807      -20,893
+  net 2nd half Rs                              +3,270       -8,965       -5,695       +7,547
+  months positive %                              66.7         42.9         42.9         42.9
+STATISTICS
+  t-stat of mean trade                           0.14        -0.85        -0.45        -0.86
+  p-value (two-sided)                           0.888        0.403        0.656        0.397
+  trades to prove edge (p<0.05)                 3,603            -            -            -
+
+SENSEX  -  every metric (rule 2 PE = mirror; 'as written' = rule 2 with no working stop)
+                                            rule 1 CE    rule 2 PE    rules 1+2   as written
+SIGNAL
+  setups                                           70           60          130           60
+  trades                                           20           27           47           47
+  trigger rate %                                 28.6         45.0         36.2         78.3
+ACCURACY
+  win rate %                                     35.0         63.0         51.1         40.4
+  win rate 95% low %                             18.1         44.2         37.2         27.6
+  win rate 95% high %                            56.7         78.5         64.7         54.7
+  win rate before charges %                      35.0         63.0         51.1         53.2
+  break-even win rate %                          55.1         58.1         58.5         72.5
+  target hit %                                   35.0         63.0         51.1         12.8
+  stop hit %                                     65.0         37.0         48.9         72.3
+  time exit %                                     0.0          0.0          0.0         14.9
+  index right way +15 min %                      30.0         40.7         36.2         44.7
+  index right way +30 min %                      55.0         33.3         42.6         38.3
+  index right way at 15:14 %                     50.0         40.7         44.7         44.7
+MONEY
+  net Rs                                       -9,210       +2,290       -6,920      -19,859
+  gross Rs (before charges)                    -7,154       +4,813       -2,341      -15,448
+  charges Rs                                    2,055        2,523        4,578        4,411
+  charges per trade Rs                            103           93           97           94
+  expectancy Rs/trade                            -460          +85         -147         -423
+  median trade Rs                                -854         +467         +297          -83
+  expectancy R (per avg loss)                   -0.36         0.08        -0.13        -0.44
+  avg win Rs                                   +1,030         +731         +818         +362
+  avg loss Rs                                  -1,263       -1,013       -1,154         -955
+  payoff (avg win / avg loss)                    0.82         0.72         0.71         0.38
+  largest win Rs                               +1,621       +1,244       +1,621         +853
+  largest loss Rs                              -2,255       -2,358       -2,358       -5,436
+  profit factor                                  0.44         1.23         0.74         0.26
+  avg return on premium, before charges %         -3.3          3.2          0.5         -2.5
+  avg return on premium, after charges %         -4.1          2.1         -0.6         -3.6
+  avg capital per trade Rs                     13,180        9,026       10,794        9,565
+  net / one lot's capital %                     -69.9         25.4        -64.1       -207.6
+RISK
+  max drawdown Rs                              11,483        5,759       10,310       19,981
+  recovery factor (net / DD)                    -0.80         0.40        -0.67        -0.99
+  longest win streak                                2            6            8            3
+  longest loss streak                               5            3            7            6
+  trade std Rs                                  1,216          981        1,109        1,330
+  Sharpe (daily, annualised)                    -2.27         0.63        -1.27        -2.96
+  Sortino (daily, annualised)                   -2.61         0.83        -1.55        -2.97
+TRADE PATH
+  avg MFE % of premium                            5.9          7.3          6.7          3.8
+  avg MAE % of premium                           -9.3         -5.9         -7.3        -10.0
+  losers' avg MFE %                               3.6          2.6          3.2          1.7
+  losers that were +5% first %                   23.1         10.0         17.4         10.7
+  avg hold min                                  32.45        17.00        23.57        71.00
+  avg hold min, winners                         33.14        21.06        24.58        39.47
+  avg hold min, losers                          32.08        10.10        22.52        92.39
+STABILITY
+  net 1st half Rs                              -3,709         +438       -3,272      -18,119
+  net 2nd half Rs                              -5,500       +1,852       -3,648       -1,740
+  months positive %                              28.6         83.3         28.6         28.6
+STATISTICS
+  t-stat of mean trade                          -1.69         0.45        -0.91        -2.18
+  p-value (two-sided)                           0.107        0.657        0.367        0.035
+  trades to prove edge (p<0.05)                     -          514            -            -
+
+PER MONTH, rules 1+2 (mirror), entry on close  (Oct = 1-8 Oct only, not in the average)
+
+NIFTY   one lot's capital Rs 11,513 (average entry premium x lot 65)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04       11   54.5%    +4,650       +423      +1.6%     +40.4%         +24   +4,626    -26,596
+  2026-05        9   77.8%    +5,514       +613      +4.3%     +47.9%        -158   +5,672       +253
+  2026-06        4   50.0%    -1,068       -267      -5.2%      -9.3%      +1,100   -2,167     -5,064
+  2026-07        6  100.0%    +3,899       +650      +8.8%     +33.9%      +1,216   +2,683     -4,812
+  2026-08        6   50.0%    -1,458       -243      -1.1%     -12.7%      -1,893     +435       +326
+  2026-09        6   33.3%    -2,841       -473      -7.1%     -24.7%      -3,096     +255       -584
+  2026-10*       2   50.0%      -296       -148      -7.3%      -2.6%      +1,028   -1,324         -6
+  avg month    7.0   61.9%    +1,449       +207      +0.9%     +12.6%        -468   +1,917     -6,079
+  positive months 3 of 6; best +5,514, worst -2,841; monthly return std 31.5 pts
+
+BANKNIFTY   one lot's capital Rs 27,687 (average entry premium x lot 30)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04        9   44.4%    +4,573       +508      +0.3%     +16.5%      +7,021   -2,448     -7,592
+  2026-05        7   28.6%    -7,748     -1,107      -4.5%     -28.0%      -8,155     +408     -4,303
+  2026-06        5   60.0%    +4,247       +849      +3.2%     +15.3%      +1,536   +2,710     -5,836
+  2026-07        9   22.2%   -11,290     -1,254      -5.3%     -40.8%      -1,399   -9,891       -398
+  2026-08        7   57.1%    +4,177       +597      +3.4%     +15.1%      +2,299   +1,878       +735
+  2026-09        5   40.0%      -298        -60      -2.2%      -1.1%        +522     -820     +1,235
+  2026-10*       1    0.0%    -1,162     -1,162      -5.4%      -4.2%          +0   -1,162     +2,813
+  avg month    7.0   40.5%    -1,057       -151      -1.1%      -3.8%        +304   -1,361     -2,693
+  positive months 3 of 6; best +4,573, worst -11,290; monthly return std 24.9 pts
+
+SENSEX   one lot's capital Rs 10,794 (average entry premium x lot 20)
+  month     trades   win %    net Rs  avg Rs/tr avg ret/tr  month ret    rule1 CE rule2 PE as written
+  2026-04        9   11.1%   -10,194     -1,133      -6.5%     -94.4%      -4,435   -5,759     -9,256
+  2026-05        8  100.0%    +7,985       +998      +9.1%     +74.0%      +1,954   +6,030        +49
+  2026-06        8   37.5%    -1,062       -133      -1.6%      -9.8%      -1,228     +166     -2,346
+  2026-07        9   44.4%    -3,054       -339      -3.2%     -28.3%      -3,119      +64     -5,711
+  2026-08        5   60.0%      -837       -167      -2.7%      -7.8%      -1,895   +1,058     +1,150
+  2026-09        7   57.1%      -408        -58      +0.7%      -3.8%      -1,138     +730     -3,636
+  2026-10*       1  100.0%      +652       +652      +8.8%      +6.0%        +652       +0       -110
+  avg month    7.7   50.0%    -1,262       -165      -0.8%     -11.7%      -1,644     +382     -3,291
+  positive months 1 of 6; best +7,985, worst -10,194; monthly return std 53.9 pts
+
+files: research/first_candle_6m_metrics.csv, research/first_candle_6m_monthly.csv, research/first_candle_6m_trades.csv
