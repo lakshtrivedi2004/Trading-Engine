@@ -68,19 +68,27 @@ def cached_spot(name, max_age_days=5.0):
 
 
 def live_funds(api):
-    """(available rupees, where the figure came from) from Angel's RMS limits."""
+    """(available rupees, where the figure came from) from Angel's RMS limits:
+    the smaller of availablecash and net when both are there. net is the
+    margin left after whatever is in use, so it can be the lower one once the
+    day has started; the smaller of the two never overstates what the account
+    can spend (re-read through the live day, owner 11 Oct 2026)."""
     try:
         r = api.rmsLimit() or {}
         d = r.get("data") or {}
     except Exception as e:
         return 0.0, f"rmsLimit failed: {e}"
+    vals = {}
     for key in ("availablecash", "net"):
         try:
             v = float(d.get(key) or 0)
         except (TypeError, ValueError):
             v = 0.0
         if v > 0:
-            return v, key
+            vals[key] = v
+    if vals:
+        key = min(vals, key=vals.get)
+        return vals[key], key
     return 0.0, f"rmsLimit returned {str(r)[:120]}"
 
 
@@ -526,8 +534,13 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
         capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log,
                               ceiling=L.capital_ceiling)
         capital.open_day()
-        cap_now = capital.sync_to_funds(funds)
-        log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f}")
+        capital.sync_to_funds(funds)
+        # Traded: min(configured, the account), re-read through the day by the
+        # engine (funds_reader below) - never fixed at this figure.
+        cap_now = capital.set_account_funds(funds)
+        log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f} "
+            f"= min(configured Rs {L.capital_ceiling:,.2f}, the account), re-read every "
+            f"{IntradayEngine.FUNDS_REFRESH_SEC:g} s while flat")
     else:
         capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=L.capital_ceiling)
     interval = args.candle_interval or L.candle_interval
@@ -558,6 +571,11 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
 
     engine = IntradayEngine(feed, bindings, cfg, cm, L, broker, journal,
                             capital, candles, notifier=notifier, log=log)
+    if mode == "live":
+        def _read_funds(api=session.api, cap=args.capital):
+            f, why = live_funds(api)
+            return (min(f, float(cap)) if f > 0 and cap else f), why
+        engine.funds_reader = _read_funds
     current["engine"] = engine
     if L.stocks_enabled and getattr(feed, "stock_slots", None):
         from arb.nse import NseClient
@@ -679,7 +697,7 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
             # After the close it is folded into capital now; stopped earlier,
             # it stays in the ledger and is folded when the next day opens, so
             # a mid-day restart resumes the day instead of splitting it.
-            before = capital.capital
+            before = capital.opening_capital
             after = capital.traded(capital.equity + capital.day_pnl)
             folded_now = market_phase() in ("closed", "weekend")
             if folded_now:

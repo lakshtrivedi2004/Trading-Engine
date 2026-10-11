@@ -24,6 +24,13 @@ The ceiling (IntradayLimits.capital_ceiling, owner's request of 30 Sep 2026).
 The ledger keeps compounding - it is the account's real equity - but what is
 TRADED is min(ceiling, equity): a profit stays in the account untouched, a
 loss shrinks the purse until profits bring it back up to the ceiling.
+
+Live mode (owner, 11 Oct 2026): the account can hold less than the configured
+amount, so what is traded is never a figure fixed at the open. The engine
+re-reads the account's funds through the day (set_account_funds) and sizes on
+min(ceiling, funds right now). The daily loss halt and the daily target stay
+on the day's opening figure (opening_capital), so a re-read or a restart does
+not move them. Paper never sets account funds and trades the ledger as before.
 """
 import json
 import os
@@ -41,6 +48,7 @@ class CapitalBook:
         self._lock = threading.Lock()
         self._data = {"capital": float(starting), "opened": "", "history": [],
                       "day": "", "day_pnl": 0.0, "day_trades": 0}
+        self._account_funds = None      # live only: the account's money right now
         self._load()
 
     def _load(self):
@@ -73,13 +81,38 @@ class CapitalBook:
 
     @property
     def capital(self):
-        """What is traded: the equity, capped at the ceiling."""
+        """What is traded: the equity capped at the ceiling - in live mode,
+        once the account has been read, min(ceiling, the account's funds now)."""
+        f = self._account_funds
+        return self.traded(f if f is not None else self.equity)
+
+    @property
+    def opening_capital(self):
+        """The day's opening traded figure, min(ceiling, the ledger's equity).
+        The daily loss halt and the daily target use it: a re-read of the
+        account in the middle of the day must not move either."""
         return self.traded(self.equity)
+
+    @property
+    def account_funds(self):
+        """Live: the account's funds as last read; None in paper mode."""
+        return self._account_funds
+
+    def set_account_funds(self, funds):
+        """Live: what the account holds right now. From here on what is traded
+        is min(ceiling, funds): the configured amount when the account holds at
+        least that much, else the account's own figure. A failed read (0 or
+        less) keeps the last figure. Returns the traded capital."""
+        funds = float(funds or 0.0)
+        if funds > 0:
+            with self._lock:
+                self._account_funds = funds
+        return self.capital
 
     def daily_target(self, pct):
         """The day's goal in rupees. A goal, not a gate - nothing stops trading
         when it is reached, because a day that runs further is a better day."""
-        return self.capital * pct / 100.0
+        return self.opening_capital * pct / 100.0
 
     def max_risk_per_trade(self, pct):
         return self.capital * pct / 100.0

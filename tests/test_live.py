@@ -257,6 +257,98 @@ with tempfile.TemporaryDirectory() as d:
     check("a restart mid-day keeps the day's opening capital (the halt cannot move)",
           cb.sync_to_funds(24_500.0) == 25_000.0)
 
+# Owner, 11 Oct 2026: live trades min(configured, the account's money), re-read
+# through the day - never a figure fixed at the open.
+with tempfile.TemporaryDirectory() as d:
+    cb = CapitalBook(10_000.0, path=os.path.join(d, "c.json"), ceiling=13_466.9)
+    cb.open_day()
+    cb.sync_to_funds(25_000.0)
+    check("account above the configured amount: the configured amount is traded",
+          cb.set_account_funds(25_000.0) == 13_466.9)
+    check("account below it: the account's own figure is traded",
+          cb.set_account_funds(9_000.0) == 9_000.0 and cb.capital == 9_000.0)
+    check("back above it: the configured amount again",
+          cb.set_account_funds(20_000.0) == 13_466.9)
+    cb.set_account_funds(9_000.0)
+    check("a failed read (0) keeps the last figure", cb.set_account_funds(0.0) == 9_000.0)
+    check("the daily loss halt and target stay on the day's opening figure",
+          cb.opening_capital == 13_466.9 and abs(cb.daily_target(10.0) - 1_346.69) < 1e-6)
+with tempfile.TemporaryDirectory() as d:
+    cb = CapitalBook(13_466.0, path=os.path.join(d, "c.json"), ceiling=13_466.9)
+    check("paper never reads the account: the ledger is traded as before",
+          cb.account_funds is None and cb.capital == 13_466.0 == cb.opening_capital)
+
+import run_bot as _rb                                              # noqa: E402
+
+
+class _Rms:
+    def __init__(self, data):
+        self.data = data
+
+    def rmsLimit(self):
+        if isinstance(self.data, Exception):
+            raise self.data
+        return {"status": True, "data": self.data}
+
+
+check("funds are the smaller of availablecash and net",
+      _rb.live_funds(_Rms({"availablecash": "20000", "net": "15000.5"})) == (15000.5, "net")
+      and _rb.live_funds(_Rms({"availablecash": "9000", "net": "30000"})) == (9000.0, "availablecash"))
+check("...or whichever one is there",
+      _rb.live_funds(_Rms({"availablecash": "0", "net": "12000"})) == (12000.0, "net"))
+check("...and an unreadable answer is 0, not a guess",
+      _rb.live_funds(_Rms(TimeoutError("read timed out")))[0] == 0.0
+      and _rb.live_funds(_Rms({}))[0] == 0.0)
+
+with tempfile.TemporaryDirectory() as d:
+    cb = CapitalBook(13_466.9, path=os.path.join(d, "c.json"), ceiling=13_466.9)
+    cb.open_day()
+    cb.sync_to_funds(13_466.9)
+    reads, logs = [], []
+    answers = [(13_466.9, "availablecash"), (6_000.0, "net"), (0.0, "rmsLimit failed: x"),
+               (0.0, "rmsLimit failed: y")]
+
+    def _reader():
+        reads.append(1)
+        return answers.pop(0)
+
+    held = []
+    fe = SimpleNamespace(funds_reader=_reader, capital=cb, _pending_entries=[],
+                         book=SimpleNamespace(count=lambda: len(held)), _funds_read_at=0.0,
+                         _funds_fail_said=False, FUNDS_REFRESH_SEC=30.0, log=logs.append)
+    IntradayEngine._refresh_funds(fe)
+    IntradayEngine._refresh_funds(fe)
+    check("the account is re-read at most every FUNDS_REFRESH_SEC", len(reads) == 1)
+    fe._funds_read_at = 0.0
+    held.append(1)
+    IntradayEngine._refresh_funds(fe)
+    check("...and not while a position is open (its premium is already out of the account)",
+          len(reads) == 1)
+    held.clear()
+    IntradayEngine._refresh_funds(fe)
+    check("money gone from the account mid-day: the engine sizes on what is left",
+          cb.capital == 6_000.0 and any("13,467 -> Rs 6,000" in x for x in logs), logs[-1:])
+    for _ in range(2):
+        fe._funds_read_at = 0.0
+        IntradayEngine._refresh_funds(fe)
+    check("an unreadable account keeps the last figure, said once",
+          cb.capital == 6_000.0 and sum("unreadable" in x for x in logs) == 1, logs[-1:])
+    he = SimpleNamespace(capital=cb, realised_pnl=-1_000.0, halted=False, halt_reason="",
+                         L=SimpleNamespace(max_daily_loss_pct=15.0), log=logs.append)
+    he._opening_capital = lambda: IntradayEngine._opening_capital(he)
+    IntradayEngine._check_daily_halt(he)
+    check("the daily loss halt is measured on the opening figure (Rs 2,020), not the re-read one (Rs 900)",
+          not he.halted)
+    he.realised_pnl = -2_100.0
+    IntradayEngine._check_daily_halt(he)
+    check("...and still halts past it", he.halted)
+    p = SimpleNamespace(funds_reader=None, capital=cb, _pending_entries=[],
+                        book=SimpleNamespace(count=lambda: 0), _funds_read_at=0.0,
+                        _funds_fail_said=False, FUNDS_REFRESH_SEC=30.0, log=logs.append)
+    n = len(reads)
+    IntradayEngine._refresh_funds(p)
+    check("paper has no funds reader: nothing is read", len(reads) == n)
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("4. ./run.sh_real blocks sleep only when the config asks")
 

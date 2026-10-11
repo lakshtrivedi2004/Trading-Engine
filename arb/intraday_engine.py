@@ -128,6 +128,11 @@ class IntradayEngine:
         self._starved_since = {}        # underlying -> when its candles ran out
         self._starved_warned = {}
         self._unaffordable_said = set()  # (day, underlying) already alerted
+        # Live only (set by run_bot): () -> (funds, detail) from the account.
+        # Sizing then trades min(configured, the account's money now).
+        self.funds_reader = None
+        self._funds_read_at = 0.0
+        self._funds_fail_said = False
         # Discipline state (IntradayLimits "discipline" block).
         self.loss_streak = 0
         self.last_loss_ts = 0.0
@@ -155,7 +160,8 @@ class IntradayEngine:
                 if self.trades_today:
                     self.log(f"[capital] resuming today: {self.trades_today} trades, "
                              f"Rs {self.realised_pnl:+,.2f} realised")
-                limit = abs(capital_book.capital * self.L.max_daily_loss_pct / 100.0)
+                opening = getattr(capital_book, "opening_capital", capital_book.capital)
+                limit = abs(opening * self.L.max_daily_loss_pct / 100.0)
                 if self.realised_pnl <= -limit:
                     self.halted = True
                     self.halt_reason = "daily loss limit (resumed)"
@@ -637,6 +643,7 @@ class IntradayEngine:
         return any(p.trade_id == pos.trade_id for p in self.book.snapshot())
 
     IP_PAUSE_SEC = 300.0
+    FUNDS_REFRESH_SEC = 30.0         # live: how often the account's funds are re-read while flat
 
     def _ip_refused(self, legs):
         """Angel refused the entry because this machine's public IP is not
@@ -1081,20 +1088,61 @@ class IntradayEngine:
                  f"day Rs {self.realised_pnl:+,.0f} / target Rs {tgt:,.0f}")
         if self.notifier:
             emoji = "✅" if net >= 0 else "🔴"
-            pct = 100.0 * self.realised_pnl / self.capital.capital if self.capital.capital else 0
+            opening = self._opening_capital()
+            pct = 100.0 * self.realised_pnl / opening if opening else 0
             self.notifier.send(
                 f"{emoji} <b>EXIT</b> {pos.symbol}\n"
                 f"{pos.entry:.2f} → {fill:.2f} ({points:+.2f} pt) · {reason}\n"
                 f"Net <code>Rs {net:+,.0f}</code>\n"
                 f"Day <code>Rs {self.realised_pnl:+,.0f}</code> "
-                f"(<code>{pct:+.2f}%</code> of Rs {self.capital.capital:,.0f}, "
+                f"(<code>{pct:+.2f}%</code> of Rs {opening:,.0f}, "
                 f"target {self.L.daily_target_pct:g}%)")
 
         self._check_daily_halt()
         return rec
 
+    def _opening_capital(self):
+        """The day's opening traded figure: the daily loss halt is measured on
+        it, not on live capital re-read from the account mid-day."""
+        return float(getattr(self.capital, "opening_capital", self.capital.capital))
+
+    def _refresh_funds(self):
+        """Live only: re-read the account's money every FUNDS_REFRESH_SEC while
+        flat and trade min(configured, it) - the account can hold less than
+        the configured amount, and what it holds changes through the day
+        (owner, 11 Oct 2026). Only while flat: an open position's premium is
+        already out of the account and is also counted as deployed. A failed
+        read keeps the last figure."""
+        reader = self.funds_reader
+        if reader is None or not hasattr(self.capital, "set_account_funds"):
+            return
+        if self.book.count() or self._pending_entries:
+            return
+        now = time.time()
+        if now - self._funds_read_at < self.FUNDS_REFRESH_SEC:
+            return
+        self._funds_read_at = now
+        try:
+            funds, detail = reader()
+        except Exception as e:
+            funds, detail = 0.0, f"{e!r}"
+        if funds <= 0:
+            if not self._funds_fail_said:
+                self._funds_fail_said = True
+                self.log(f"[capital] account funds unreadable ({str(detail)[:120]}); "
+                         f"trading on the last figure Rs {self.capital.capital:,.0f}")
+            return
+        self._funds_fail_said = False
+        before = self.capital.capital
+        after = self.capital.set_account_funds(funds)
+        if abs(after - before) >= 1.0:
+            ceiling = float(getattr(self.capital, "ceiling", 0.0) or 0.0)
+            self.log(f"[capital] account funds Rs {funds:,.2f} ({detail}): trading capital "
+                     f"Rs {before:,.0f} -> Rs {after:,.0f}"
+                     + (f" (min of configured Rs {ceiling:,.0f} and the account)" if ceiling else ""))
+
     def _check_daily_halt(self):
-        if self.realised_pnl <= -abs(self.capital.capital * self.L.max_daily_loss_pct / 100.0):
+        if self.realised_pnl <= -abs(self._opening_capital() * self.L.max_daily_loss_pct / 100.0):
             self.halted = True
             self.halt_reason = "daily loss limit"
             self.log(f"[intraday] HALTED: daily loss limit hit at Rs {self.realised_pnl:,.0f}")
@@ -1393,7 +1441,7 @@ class IntradayEngine:
         gate = self._gates(exempt=("too_close_to_squareoff", "warmup"))
         if gate:
             return False, False, f"blocked: {gate}"
-        limit = abs(self.capital.capital * L.max_daily_loss_pct / 100.0)
+        limit = abs(self._opening_capital() * L.max_daily_loss_pct / 100.0)
         if self.realised_pnl <= -limit:
             return True, False, "blocked: daily loss limit"
         if self.book.time_to_close(self.cfg.session_end) <= float(L.squareoff_minutes) + 1.0:
@@ -2015,6 +2063,10 @@ class IntradayEngine:
                      f"{r.get('t', r['decision_bar'][11:16])} | NO ORDER SENT")
 
     def hunt(self):
+        try:
+            self._refresh_funds()               # live: size on the account's money now
+        except Exception as e:
+            self.log(f"[capital] funds refresh error: {e!r}")
         try:
             self._shadow_lhm()                  # never sends an order
         except Exception as e:
@@ -3090,10 +3142,13 @@ class IntradayEngine:
 
     def summary(self):
         cap = self.capital.capital
+        opening = self._opening_capital()
         return {
             "capital": round(cap, 2),
+            # Live: the account's funds as last read (None in paper).
+            "account_funds": getattr(self.capital, "account_funds", None),
             "day_pnl": round(self.realised_pnl, 2),
-            "day_pct": round(100.0 * self.realised_pnl / cap, 3) if cap else 0.0,
+            "day_pct": round(100.0 * self.realised_pnl / opening, 3) if opening else 0.0,
             "target_inr": round(self.capital.daily_target(self.L.daily_target_pct), 2),
             "target_pct": self.L.daily_target_pct,
             "target_hit": self.realised_pnl >= self.capital.daily_target(self.L.daily_target_pct),
