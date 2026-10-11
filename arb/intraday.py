@@ -103,6 +103,11 @@ class ContractSelector:
         self.limits = limits
         self.log = log
         self.last_reject = ""
+        # Which check stopped the last refused selection ("cost", "stale",
+        # "thin", "spread", "delta_floor", "delta_ceiling", "no_quote", ...)
+        # and, for "cost", the cheapest lot that was out of reach.
+        self.last_reject_kind = ""
+        self.last_cheapest = None       # (lot_cost, strike) or None
 
     def select(self, cv, spot, side, capital, max_age_ms, min_depth_mult,
                max_delta=None, max_delta_fn=None):
@@ -114,8 +119,9 @@ class ContractSelector:
         L = self.limits
         opt = "CE" if side == BULL else "PE"
         strikes = list(cv.strikes)
+        self.last_reject_kind, self.last_cheapest = "", None
         if len(strikes) < 3:
-            self.last_reject = "chain too short"
+            self.last_reject, self.last_reject_kind = "chain too short", "chain"
             return None
 
         if opt == "CE":
@@ -135,6 +141,7 @@ class ContractSelector:
         if spot < strikes[0] - step or spot > strikes[-1] + step:
             self.last_reject = (f"spot {spot:,.0f} outside subscribed strikes "
                                 f"{strikes[0]:,.0f}-{strikes[-1]:,.0f} - restart to re-centre")
+            self.last_reject_kind = "chain"
             return None
         qty = cv.lot_size
         lo = max(0, a - L.max_strike_offset)
@@ -142,25 +149,37 @@ class ContractSelector:
 
         out, seen_any = [], False
         top = None          # the largest per-candidate delta ceiling met (D-L4)
+        # The check that stopped each strike: the refusal names what actually
+        # bound, not the delta ceiling every time (a purse too small for one
+        # lot read "no strike at delta <= 1.95 fits the risk cap" - 11 Oct 2026).
+        fails = {}
+        cheapest = None
         for i in range(lo, hi + 1):
             px, dq, ag = float(ask[i]), float(askq[i]), float(age[i])
             if px <= 0 or float(bid[i]) <= 0:
                 continue
             seen_any = True
             if ag > max_age_ms:
+                fails["stale"] = fails.get("stale", 0) + 1
                 continue
             if dq < qty * min_depth_mult:
+                fails["thin"] = fails.get("thin", 0) + 1
                 continue
             lot_cost = px * qty
             if lot_cost > capital:
+                fails["cost"] = fails.get("cost", 0) + 1
+                if cheapest is None or lot_cost < cheapest[0]:
+                    cheapest = (lot_cost, float(strikes[i]))
                 continue
             # A spread wider than the edge we are hunting is a losing trade the
             # moment it is opened: we pay the ask and can only leave at the bid.
             spread = px - float(bid[i])
             if spread > L.max_spread_points:
+                fails["spread"] = fails.get("spread", 0) + 1
                 continue
             d = chain_delta(ask, strikes, i, opt)
             if d < L.min_delta:
+                fails["delta_floor"] = fails.get("delta_floor", 0) + 1
                 continue
             # Delta sizing: the most delta whose rupee risk at the chart's own
             # stop still fits the per-trade cap. The stop is not moved; the
@@ -171,6 +190,7 @@ class ContractSelector:
             if ceiling is not None:
                 top = ceiling if top is None else max(top, ceiling)
             if ceiling is not None and d > ceiling:
+                fails["delta_ceiling"] = fails.get("delta_ceiling", 0) + 1
                 continue
             out.append(Candidate(
                 symbol=syms[i], token=toks[i], strike=float(strikes[i]), opt=opt,
@@ -185,15 +205,31 @@ class ContractSelector:
             # inside the cap (max_delta_fn) it is lower than the cost-free
             # max_delta, and quoting that one misreported the refusal (D-L4).
             limit = top if top is not None else max_delta
-            if limit is not None and limit < L.min_delta:
-                self.last_reject = "chart stop too wide for the risk cap even at min_delta"
-            elif limit is not None and seen_any:
-                self.last_reject = (f"no strike at delta <= {limit:.2f} "
-                                    f"fits the risk cap")
+            if not seen_any:
+                self.last_reject, self.last_reject_kind = "no strike quoting", "no_quote"
+            elif fails.get("delta_ceiling"):
+                # The risk cap is to blame only when a strike got as far as it.
+                self.last_reject_kind = "delta_ceiling"
+                if limit is not None and limit < L.min_delta:
+                    self.last_reject = "chart stop too wide for the risk cap even at min_delta"
+                else:
+                    self.last_reject = (f"no strike at delta <= {limit:.2f} "
+                                        f"fits the risk cap")
+            elif fails.get("cost") and set(fails) <= {"cost", "delta_floor"}:
+                # Every strike was either a lot the purse cannot pay for or one
+                # too far out of the money to count: the purse is the limit.
+                self.last_reject_kind, self.last_cheapest = "cost", cheapest
+                self.last_reject = (f"no affordable strike: cheapest lot Rs {cheapest[0]:,.0f} "
+                                    f"({cheapest[1]:,.0f}) > free capital Rs {capital:,.0f}")
             else:
-                self.last_reject = ("no strike quoting" if not seen_any else
-                                    f"none of ATM+/-{L.max_strike_offset} fits "
-                                    f"Rs {capital:,.0f} at >= {L.min_delta} delta")
+                names = {"stale": f"quote older than {max_age_ms:g} ms", "thin": "too thin",
+                         "cost": f"lot over Rs {capital:,.0f}",
+                         "spread": f"spread over {L.max_spread_points:g}",
+                         "delta_floor": f"delta under {L.min_delta:g}"}
+                self.last_reject_kind = max(fails, key=fails.get)
+                self.last_reject = (f"no tradable strike in ATM+/-{L.max_strike_offset}: "
+                                    + ", ".join(f"{n} {names[k]}" for k, n in
+                                                sorted(fails.items(), key=lambda kv: -kv[1])))
             return None
 
         # "Lot price nearest our capital": the most expensive contract we can
@@ -202,7 +238,7 @@ class ContractSelector:
         # to pay the same rupees. Cheapness breaks ties between neighbours.
         out.sort(key=lambda c: (c.lot_cost + 2.0 * c.cheapness * c.lot_size),
                  reverse=True)
-        self.last_reject = ""
+        self.last_reject, self.last_reject_kind = "", ""
         return out[0]
 
 

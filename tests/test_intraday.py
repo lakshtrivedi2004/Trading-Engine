@@ -201,6 +201,39 @@ wide = FakeCV(ladder, ce, pe, lot=65, spread=25.0)
 check("an unaffordably wide spread is refused",
       sel.select(wide, 24000.0, BULL, 10_000.0, 400.0, 1.0) is None, sel.last_reject)
 
+# 11 Oct 2026: live sizes from the account's funds. A purse too small for any
+# lot read "no strike at delta <= 1.95 fits the risk cap" - the delta ceiling
+# hunt() always passes was blamed for a refusal that was the purse's.
+sel.select(cv, 24000.0, BULL, 1_500.0, 400.0, 1.0, max_delta=1.95)
+check("a purse too small for any lot is named as such, not as the risk cap",
+      sel.last_reject_kind == "cost" and "no affordable strike" in sel.last_reject
+      and "risk cap" not in sel.last_reject, sel.last_reject)
+check("...with the cheapest lot it could not pay for",
+      sel.last_cheapest == (25.0 * 65, 24400.0) and "1,625" in sel.last_reject, sel.last_reject)
+sel.select(stale, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=1.95)
+check("stale quotes are named as stale quotes, not as the risk cap",
+      sel.last_reject_kind == "stale" and "quote older than" in sel.last_reject
+      and "risk cap" not in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.17)
+check("the risk cap is still named when a strike reached it",
+      sel.last_reject_kind == "delta_ceiling" and "fits the risk cap" in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0)
+check("a successful selection clears the refusal", sel.last_reject == "" and sel.last_reject_kind == "")
+
+import types as _types                                             # noqa: E402
+from arb.intraday_engine import IntradayEngine as _IE0             # noqa: E402
+_said, _sent = [], []
+_eng = _types.SimpleNamespace(_unaffordable_said=set(), broker=_types.SimpleNamespace(mode="live"),
+                              capital=_types.SimpleNamespace(capital=5_000.0),
+                              log=_said.append,
+                              notifier=_types.SimpleNamespace(send=_sent.append))
+for _ in range(3):
+    _IE0._unaffordable(_eng, "NIFTY", 5_000.0, (7_800.0, 24100.0))
+_IE0._unaffordable(_eng, "SENSEX", 5_000.0, (12_000.0, 72000.0))
+check("no affordable strike is said once per index per day, in the log and on Telegram",
+      len(_said) == 2 and len(_sent) == 2 and "NO AFFORDABLE STRIKE" in _said[0]
+      and "7,800" in _said[0] and "available funds" in _said[0], _said[:1])
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("4. The plan: stop where the idea dies, target a multiple of it")
 

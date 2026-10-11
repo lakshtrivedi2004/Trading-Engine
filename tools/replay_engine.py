@@ -332,6 +332,9 @@ def main():
     ap.add_argument("--days", nargs="*")
     ap.add_argument("--last", type=int, default=10)
     ap.add_argument("--live-broker", action="store_true")
+    ap.add_argument("--capital", type=float, default=None,
+                    help="size from this purse, as live sizes from the account's funds "
+                         "(default: capital_ceiling)")
     ap.add_argument("--workdir", default=os.path.join(ROOT, "research_out", "replay"))
     args = ap.parse_args()
     bars = {n: load_bars(n) for n in SPEC}
@@ -341,10 +344,10 @@ def main():
     work = tempfile.mkdtemp(prefix="run_", dir=args.workdir)
     L = IntradayLimits.load()
     CLOCK.set(datetime.fromisoformat(days[0] + "T09:00:00+05:30"))
-    capital = CapitalBook(float(L.capital_ceiling or L.starting_capital),
+    capital = CapitalBook(float(args.capital or L.capital_ceiling or L.starting_capital),
                           path=os.path.join(work, "capital.json"), ceiling=L.capital_ceiling)
     mode = "LIVE broker vs fake Angel" if args.live_broker else "paper broker"
-    print(f"replay {len(days)} sessions {days[0]}..{days[-1]} | {mode} | "
+    print(f"replay {len(days)} sessions {days[0]}..{days[-1]} | {mode} | capital Rs {capital.capital:,.0f} | "
           f"playbooks {list(L.playbooks)} | closed bars {L.decide_on_closed_bars} | "
           f"costs inside {L.risk_includes_costs} | same-side {L.same_side_cooldown_min:g} min | "
           f"workdir {work}\n")

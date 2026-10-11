@@ -127,6 +127,7 @@ class IntradayEngine:
         self.records = []
         self._starved_since = {}        # underlying -> when its candles ran out
         self._starved_warned = {}
+        self._unaffordable_said = set()  # (day, underlying) already alerted
         # Discipline state (IntradayLimits "discipline" block).
         self.loss_streak = 0
         self.last_loss_ts = 0.0
@@ -2168,7 +2169,11 @@ class IntradayEngine:
                                         max_age_ms=400.0, min_depth_mult=1.0,
                                         max_delta=max_delta, max_delta_fn=max_delta_fn)
             if cand is None:
-                self._note(self.selector.last_reject or "no_contract")
+                if self.selector.last_reject_kind == "cost":
+                    self._note("no_affordable_strike")
+                    self._unaffordable(und, available, self.selector.last_cheapest)
+                else:
+                    self._note(self.selector.last_reject or "no_contract")
                 continue
             if time.time() - self._symbol_cooldown.get(cand.symbol, -1e9) \
                     < self.L.symbol_cooldown_sec:
@@ -2799,6 +2804,30 @@ class IntradayEngine:
                 f"Stop <code>{inv:.2f}</code> · Target <code>{pos.index_target:.2f}</code>\n"
                 f"Risk <code>Rs {risk * qty:,.0f}</code> · cost <code>Rs {rt:,.0f}</code>")
         return True
+
+    def _unaffordable(self, und, free, cheapest):
+        """A setup was ready and no eligible strike's lot fits the free capital.
+        Live sizes from the account's funds, so a small balance refuses every
+        setup all day; it read as a risk-cap refusal on the dashboard and said
+        nothing else (11 Oct 2026). Say it once per index per day."""
+        key = (now_ist().strftime("%Y-%m-%d"), und)
+        if key in self._unaffordable_said:
+            return
+        self._unaffordable_said.add(key)
+        mode = getattr(self.broker, "mode", "paper")
+        lot = f"Rs {cheapest[0]:,.0f} ({cheapest[1]:,.0f} strike)" if cheapest else "unknown"
+        self.log(f"[intraday] NO AFFORDABLE STRIKE: {und} setup ready but the cheapest eligible "
+                 f"lot is {lot} against free capital Rs {free:,.0f} "
+                 f"({mode}: capital Rs {self.capital.capital:,.0f}"
+                 + (", from the account's available funds" if mode == "live" else "") + "). "
+                 f"No {und} trade can be taken at this capital.")
+        if self.notifier:
+            self.notifier.send(
+                f"\u26a0\ufe0f <b>NO AFFORDABLE STRIKE</b> {und}\n"
+                f"A setup was ready, but the cheapest eligible lot is <code>{lot}</code> "
+                f"and free capital is <code>Rs {free:,.0f}</code>."
+                + (" Live sizes from the Angel account's available funds - add funds to trade."
+                   if mode == "live" else ""))
 
     def _check_starved(self, und, rows):
         """Warn when an index has gone without usable candles for too long.
