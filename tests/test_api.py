@@ -503,15 +503,78 @@ try:
     except RuntimeError:
         check("a failure after the engine started is NOT retried (raises)", True)
 
+    # 7 Oct: a refused live start ended the process; systemd restarted it into
+    # the same refusal until the unit died, dashboard and Switch button with it.
+    _saved_hold, _saved_dash = _rb._hold_until_close, (_rb.Dashboard, _rb.DashboardState)
+    refused = {"days": 0, "held": 0}
+
     def _refuse(cfg, cm, creds, args, mode, notifier, dash_holder, current, stopping):
-        raise SystemExit("LIVE START REFUSED: open positions")
+        refused["days"] += 1
+        current["started"].append(_Leftover())
+        raise SystemExit("LIVE START REFUSED: the account already has open positions")
+
+    class _Dash:
+        url = "http://test"
+
+        def __init__(self, state, port=0):
+            self.state = state
+
+        def start(self):
+            return self
+
+        def stop(self):
+            pass
+
+    class _DState:
+        def __init__(self, *a):
+            self.start_refused = ""
+
+    def _hold(cfg, stopping):
+        refused["held"] += 1
+        refused["shown"] = holder_state[0].start_refused
+        stopping.set()
+
+    holder_state = []
+    _rb.Dashboard = lambda st, port=0: holder_state.append(st) or _Dash(st)
+    _rb.DashboardState = _DState
+    _rb._hold_until_close = _hold
+    _rb.cached_spot, _saved_spot = (lambda name: 0.0), _rb.cached_spot
+    # Refused during market hours; also keeps the idle live-funds login thread off.
+    _rb.market_phase, _saved_phase = (lambda **k: "open"), _rb.market_phase
+    _Leftover.stopped = 0
+
+    class _CfgStub:
+        session_start, session_end = "09:15", "15:30"
+
+        def active_underlyings(self):
+            return []
+
+    class _ArgsDash(_Args):
+        no_dashboard = False
 
     _rb._run_intraday_day = _refuse
     try:
+        _rb.run_intraday_forever(_CfgStub(), None, None, _ArgsDash(), "live")
+        check("a LIVE START REFUSED does not end the process (no systemd restart loop)", True)
+    except SystemExit as ex:
+        check("a LIVE START REFUSED does not end the process (no systemd restart loop)", False, str(ex))
+    check("...and is NOT retried this session: one start, then it holds",
+          refused["days"] == 1 and refused["held"] == 1, str(refused))
+    check("...the half-started parts are stopped", _Leftover.stopped == 1)
+    check("...the dashboard shows why", "open positions" in refused.get("shown", ""),
+          refused.get("shown", ""))
+
+    def _other_exit(cfg, cm, creds, args, mode, notifier, dash_holder, current, stopping):
+        raise SystemExit("no tradable chains")
+
+    _rb._run_intraday_day = _other_exit
+    try:
         _rb.run_intraday_forever(None, None, None, _Args(), "live")
-        check("a deliberate start refusal (SystemExit) is NOT retried", False)
+        check("any other SystemExit at start still ends the process", False)
     except SystemExit:
-        check("a deliberate start refusal (SystemExit) is NOT retried", True)
+        check("any other SystemExit at start still ends the process", True)
+    _rb._hold_until_close, (_rb.Dashboard, _rb.DashboardState) = _saved_hold, _saved_dash
+    _rb.cached_spot, _rb.market_phase = _saved_spot, _saved_phase
     _rb._run_intraday_day, _rb._wait_until_session, _rb.START_RETRY_SEC, _rb.signal.signal = _saved
 except Exception as ex:
     check("day loop retry (raised)", False, repr(ex)[:200])
@@ -580,6 +643,47 @@ try:
     check("an ordinary unfilled entry does not pause", not _IE2._ip_refused(e, [{"filled": False}]))
 except Exception as ex:
     check("IP refusal (raised)", False, repr(ex)[:200])
+
+section("switch to LIVE: a refused start is shown, can be retried, and holds till the close (7 Oct)")
+try:
+    import threading as _th
+    import run_bot as _rb3
+    from arb.dashboard import DashboardState as _DS, switch_target
+
+    check("the Switch button flips the mode", switch_target("/api/control/switch_mode", "paper") == "live"
+          and switch_target("/api/control/switch_mode", "live") == "paper")
+    check("Retry LIVE asks for live while already live",
+          switch_target("/api/control/switch_mode?to=live", "live") == "live")
+    check("an unknown ?to= falls back to the flip",
+          switch_target("/api/control/switch_mode?to=x", "live") == "paper")
+
+    class _C:
+        session_start, session_end = "09:15", "15:30"
+
+    ds = _DS(None, None, None, None, _C(), "live", None)
+    ds.intraday_mode = True
+    snap = ds.snapshot()
+    check("no refusal: the idle page is not halted", snap["halted"] is False and "start_refused" not in snap)
+    ds.start_refused = "LIVE START REFUSED: could not read available funds from Angel (x)"
+    snap = ds.snapshot()
+    check("a refusal is the page's halt reason, with the Retry flag",
+          snap["halted"] is True and snap["halt_reason"] == ds.start_refused
+          and snap["start_refused"] == ds.start_refused, str(snap.get("halt_reason")))
+
+    _saved_mp = _rb3.market_phase
+    _rb3.market_phase = lambda **k: "closed"
+    ev = _th.Event()
+    t0 = time.time()
+    _rb3._hold_until_close(_C(), ev)
+    check("the hold ends at the close (next session checks again)", time.time() - t0 < 1.0)
+    _rb3.market_phase = lambda **k: "open"
+    ev.set()
+    t0 = time.time()
+    _rb3._hold_until_close(_C(), ev)
+    check("the hold ends at once on a stop (switch / retry / restart)", time.time() - t0 < 1.0)
+    _rb3.market_phase = _saved_mp
+except Exception as ex:
+    check("refused start shown (raised)", False, repr(ex)[:200])
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

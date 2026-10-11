@@ -10,6 +10,7 @@ Paper mode is the default and is the only mode that runs without an explicit
 the broker and nothing else, so what paper trades is exactly what live trades.
 """
 import argparse
+import html
 import os
 import signal
 import sys
@@ -390,9 +391,38 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
             if not _wait_until_session(cfg, stopping, log):
                 break
             current["stage"], current["started"] = "starting", []
+            if dash_holder["dstate"] is not None:
+                dash_holder["dstate"].start_refused = ""
             try:
                 _run_intraday_day(cfg, cm, creds, args, mode, notifier,
                                   dash_holder, current, stopping)
+            except SystemExit as e:
+                # 7 Oct: a LIVE START REFUSED (open positions, no funds, a
+                # working order) ended the process. Under systemd
+                # (Restart=on-failure) that restarted straight into the same
+                # refusal until StartLimitBurst left the unit dead - dashboard
+                # down with it, so "Switch to LIVE" seemed to do nothing and
+                # nothing said why. Still not retried this session, but the
+                # process and dashboard stay up with the reason on the page and
+                # in Telegram, to be fixed and retried or switched back to paper.
+                why = str(e.code or "")
+                if current.get("stage") != "starting" or not why.startswith("LIVE START REFUSED"):
+                    raise
+                _stop_partial_start(current, log)
+                why = redact(why)
+                log(f"{why}\nnot trading this session; fix it and retry LIVE "
+                    f"from the dashboard, or switch to paper")
+                if dash_holder["dstate"] is not None:
+                    dash_holder["dstate"].start_refused = why
+                if notifier:
+                    try:
+                        notifier.send(f"🛑 <b>LIVE START REFUSED</b>\n"
+                                      f"<code>{html.escape(why.split(':', 1)[-1].strip()[:600])}</code>\n"
+                                      f"Not trading this session. Fix it and retry LIVE "
+                                      f"from the dashboard, or switch to paper.")
+                    except Exception:
+                        pass
+                _hold_until_close(cfg, stopping)
             except Exception as e:
                 # 6 Oct 09:17: one read timeout while downloading the scrip
                 # master ended the live process before the open, with nothing
@@ -419,6 +449,15 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
 
 
 START_RETRY_SEC = 60.0
+
+
+def _hold_until_close(cfg, stopping):
+    """After a refused live start: no trading and no new attempt until this
+    session closes (the next session_start checks again) or the process is
+    stopped - by a mode switch, a retry, or a restart."""
+    while not stopping.is_set() and \
+            market_phase(start=cfg.session_start, end=cfg.session_end) == "open":
+        stopping.wait(30)
 
 
 def _pace_need(L, name):

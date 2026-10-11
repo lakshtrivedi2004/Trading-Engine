@@ -79,6 +79,9 @@ class DashboardState:
         # an always-attached engine.
         self.intraday_mode = False
         self.intraday = None
+        # Why today's live start was refused ("" when it was not): shown as the
+        # halt reason, with a Retry LIVE button, while the process holds.
+        self.start_refused = ""
         self._hist = None
         self._hist_at = 0.0
         self.started = time.time()
@@ -480,7 +483,11 @@ class DashboardState:
 
     def snapshot(self):
         if getattr(self, "intraday_mode", False):
-            return self.intraday_snapshot()
+            d = self.intraday_snapshot()
+            if self.start_refused:
+                d.update(halted=True, halt_reason=self.start_refused,
+                         start_refused=self.start_refused)
+            return d
         e, f, r = self.engine, self.feed, self.risk
         st = e.stats.summary()
         h = e.quote_health
@@ -534,6 +541,15 @@ class DashboardState:
             "strategies": list(self.cfg.strategies),
             "margin": self.margin.snapshot() if self.margin is not None else None,
         }
+
+
+def switch_target(path, mode):
+    """The mode a switch request asks for: ?to=paper|live when given (Retry
+    LIVE after a refused start is live -> live), else the other mode."""
+    to = (parse_qs(urlparse(path).query).get("to") or [""])[0]
+    if to in ("paper", "live"):
+        return to
+    return "paper" if mode == "live" else "live"
 
 
 def make_handler(state):
@@ -635,7 +651,7 @@ def make_handler(state):
             be running under, so it must sit outside this unit's cgroup to
             survive that restart.
             """
-            target = "paper" if state.mode == "live" else "live"
+            target = switch_target(self.path, state.mode)
             # The script must restart the unit THIS process runs under: prod
             # (trading-engine) and dev (trading-engine-dev) share this code, and
             # switch_mode.sh on dev would rewrite dev's mode but restart prod.
@@ -649,14 +665,24 @@ def make_handler(state):
             script = os.path.join(os.path.dirname(HERE), "deployment", name)
             unit = f"trading-switch-{int(time.time() * 1000)}"
             try:
-                subprocess.Popen(
+                # systemd-run returns once the transient unit is started; a
+                # failure there used to be discarded and the page said
+                # "Switching..." while nothing happened.
+                r = subprocess.run(
                     ["systemd-run", "--collect", f"--unit={unit}",
                      "/bin/bash", script, target],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    text=True, timeout=15)
             except FileNotFoundError:
                 return self._control({"ok": False,
                     "error": "systemd-run not found - mode switching only works "
                              "on the deployed host (systemd), not this environment"})
+            except subprocess.TimeoutExpired:
+                return self._control({"ok": False,
+                    "error": f"systemd-run did not answer in 15 s; check: journalctl -u {unit}"})
+            if r.returncode != 0:
+                return self._control({"ok": False,
+                    "error": f"systemd-run failed ({r.returncode}): {(r.stderr or '').strip()[:300]}"})
             self._control({"ok": True, "switching_to": target})
 
         def do_POST(self):
@@ -666,7 +692,7 @@ def make_handler(state):
                 elif self.path == "/api/control/stop_trading":
                     self._control_intraday(
                         lambda e: e.manual_stop("manual stop (dashboard)"), "stop_trading")
-                elif self.path == "/api/control/switch_mode":
+                elif urlparse(self.path).path == "/api/control/switch_mode":
                     self._switch_mode()
                 else:
                     self.send_response(404)
