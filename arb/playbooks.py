@@ -394,6 +394,14 @@ def ob_fvg_retest(candles, st, spot, trend, L, strike_step=0.0):
     if bos is None or not _recent(st, bos[0], window):
         return None
 
+    # The retest must occur within the next 2-3 candles of the break, not later.
+    # Stale pullbacks (> 3 bars) suffer from momentum decay and order book drift.
+    bars_since_bos = (st.bar_count - 1) - bos[0]
+    max_bars = int(getattr(L, "retest_max_bars", 3) or 0)
+    min_bars = int(getattr(L, "retest_min_bars", 1) or 1)
+    if max_bars > 0 and not (min_bars <= bars_since_bos <= max_bars):
+        return None
+
     zone = st.active_zone(spot, trend)
     gap = st.active_fvg(spot, trend)
     if zone is None and gap is None:
@@ -401,6 +409,10 @@ def ob_fvg_retest(candles, st, spot, trend, L, strike_step=0.0):
 
     where = zone if zone is not None else gap
     kind = "order_block" if zone is not None else "fair_value_gap"
+
+    # Pure SMC defense: price must not have breached the zone's boundary.
+    if (trend == BULL and spot < where.low) or (trend == BEAR and spot > where.high):
+        return None
 
     react = None
     if engulfing(candles) == trend:

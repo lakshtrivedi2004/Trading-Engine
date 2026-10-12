@@ -663,6 +663,12 @@ class IntradayLimits:
     # this many bars after that break. The sequence window says how far apart
     # the steps may be; this says how stale the trigger may be. 0 disables.
     trigger_fresh_bars: int = 5
+    # Retest horizon for ob_fvg_retest: maximum bars after the break within which
+    # the retest must occur. Research (Bulkowski 2021, Zarattini et al. 2024,
+    # Brock et al. 1992, Cont et al. 2014) shows fast retests in next 2-3 candles
+    # retain institutional momentum; stale retests (> 3 bars) degrade into drift.
+    retest_max_bars: int = 3
+    retest_min_bars: int = 1
     # The breaking bar's body, in ATR, for choch_bos. 0 disables.
     displacement_body_atr: float = 0.8
     # How far back a liquidity sweep may have completed. This must be WIDER

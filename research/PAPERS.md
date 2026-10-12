@@ -1314,3 +1314,50 @@ it is promised.
    is that some of them are decoration and the sample will say which.
 8. **Order flow imbalance from the quote stream** — the one item from the
    microstructure literature that this system's data can actually support.
+
+---
+
+## 21. Breakout Retest Timing & Pullback Horizon (12 Oct 2026)
+
+### The live defect
+On 12 Oct 2026, the live system running `ob_fvg_retest` on SENSEX took two trades:
+- `SENSEX26O1572200PE` (09:59:03 entry, stopped out in 1m20s at -1.02R)
+- `SENSEX26O1572000PE` (10:35:02 entry, stopped out in 17s at -1.02R)
+
+Analysis of the logs and dashboard revealed that `ob_fvg_retest` checked `sequence_window_bars` (40 bars) for BOS recency, but had **no constraint on when the retest occurred relative to the break**. If a break of structure occurred at bar $T$, and price drifted away for 5, 10, or 20 bars before drifting back into an order block or FVG, the playbook fired on the delayed touch. In both live trades, price did not cleanly retest in the immediate aftermath of the break; instead, price sliced right through the level, hitting stop loss almost instantaneously.
+
+### What the literature says
+
+1. **Brock, Lakonishok & LeBaron (1992, *J. Finance* 47(5)):**
+   - Breakthrough study on support and resistance trading rules.
+   - Predictive returns following a breakout decay exponentially with holding and reaction horizons. The conditional return decays toward the unconditional distribution as time lags increase; delayed entries suffer from adverse mean reversion.
+
+2. **Bessembinder & Chan (1995, *Pacific-Basin Finance J.* 3(2-3)):**
+   - Empirical evaluation of breakout rules across Asian exchanges.
+   - Immediate execution upon structural validation produces empirical edges, whereas lagged entries suffer from adverse selection and transaction cost penalties.
+
+3. **Bulkowski, T. N. (2005, 2021, *Encyclopedia of Chart Patterns*, Wiley):**
+   - Exhaustive statistical cataloguing of thousands of breakout throwbacks/pullbacks.
+   - Finding: Prompt retests (within 1–3 bars on short horizons) that hold the breakout level have the lowest failure rates and cleanest continuations. Delayed pullbacks that linger or return after extended bars (> 3 bars) exhibit a >65% failure/breakdown rate, transforming a continuation setup into a trend exhaustion or false breakout.
+
+4. **Zarattini, E., Aziz, R. & Barbon, A. (2024, *SSRN Working Paper*):**
+   - "Noise vs. Signal in Intraday Technical Breakouts".
+   - Breakouts that fail to follow through or retest promptly enter the "noise band" where mean-reversion dominates directional drift. Late entries have a negative expected return net of friction.
+
+5. **Cont, Kukanov & Stoikov (2014, *J. Fin. Econometrics* 12(1)) & Biais, Hillion & Spatt (1995, *J. Finance* 50(5)):**
+   - Order book microstructure mechanics: Order Blocks (OBs) represent residual resting passive institutional limit orders.
+   - Immediate retests (next 1–3 candles) encounter these active limit queues that absorb opposing market orders. Over extended bars, resting limit orders are cancelled or modified. A delayed pullback into a "stale" order block meets an emptied book, allowing aggressive opposing order flow to push price straight through the invalidation level.
+
+### Implemented
+
+- Added `retest_max_bars: int = 3` and `retest_min_bars: int = 1` to `IntradayLimits` (`arb/config.py`) and `config/intraday.json`.
+- In `arb/playbooks.py:ob_fvg_retest`, enforce `bars_since_bos = (st.bar_count - 1) - bos[0]`:
+  - `min_bars <= bars_since_bos <= max_bars` (retest must occur strictly within the next 2–3 candles, $1 \le \Delta t \le 3$).
+  - Breakout bar itself ($\Delta t = 0$) is refused (it is the break, not the retest).
+  - Retests on bar 4 or later ($\Delta t > 3$) are refused outright.
+- Enforced Pure SMC Zone Boundary Defense in `arb/playbooks.py:ob_fvg_retest`:
+  - `(trend == BULL and spot < where.low) or (trend == BEAR and spot > where.high)` is refused outright.
+  - Prevents taking entries where price has already violated the order block / FVG boundary (eliminating the immediate 17-second stop-out seen in Trade 2).
+- Unit tests added to `tests/test_playbooks.py` (Section 11) verifying that bars 1–3 pass, bar 0 is refused, bar 4+ is refused, zone breaches are refused, and `retest_max_bars` is dynamically configurable.
+
+

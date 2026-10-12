@@ -393,6 +393,68 @@ check("touches counts taps without counting a clean break through",
       touches(mk([(100, 105, 95, 98)] * 3), 100.0, 1.0) == 3)
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+section("11. ob_fvg_retest - retest in next 2-3 candles, not more")
+
+# Base series with swing high at 24060 and an order block candle before break
+seq_ob = []
+px_ob = 24000.0
+for i in range(25):
+    step = 4.0 if (i % 6) < 3 else -4.0
+    seq_ob.append((px_ob, px_ob + 5, px_ob - 5, px_ob + step))
+    px_ob += step
+
+seq_ob.append((24030, 24060, 24025, 24055)) # swing high bar (idx 25)
+seq_ob.append((24055, 24058, 24030, 24035)) # pull down (idx 26)
+seq_ob.append((24035, 24040, 24020, 24025)) # red candle (bull OB [24020, 24035], idx 27)
+seq_ob.append((24025, 24080, 24025, 24075)) # BOS_UP bar (idx 28)
+
+hammer_bar = (24030, 24035, 24020, 24032)  # inside OB, rejection wick
+
+# Bar 0 (breakout bar itself): cannot retest itself
+st_b0 = struct(mk(seq_ob))
+check("ob_fvg_retest refuses on the breakout candle itself (bar 0)",
+      ob_fvg_retest(mk(seq_ob), st_b0, 24075, BULL, L) is None)
+
+# Bar 1 (1 candle after BOS)
+seq_b1 = list(seq_ob) + [hammer_bar]
+st_b1 = struct(mk(seq_b1))
+check("ob_fvg_retest fires on 1st candle after break",
+      ob_fvg_retest(mk(seq_b1), st_b1, 24030, BULL, L) is not None)
+
+# Bar 2 (2 candles after BOS)
+seq_b2 = list(seq_ob) + [(24070, 24075, 24050, 24055), hammer_bar]
+st_b2 = struct(mk(seq_b2))
+check("ob_fvg_retest fires on 2nd candle after break",
+      ob_fvg_retest(mk(seq_b2), st_b2, 24030, BULL, L) is not None)
+
+# Bar 3 (3 candles after BOS)
+seq_b3 = list(seq_ob) + [(24070, 24075, 24050, 24055), (24055, 24060, 24045, 24050), hammer_bar]
+st_b3 = struct(mk(seq_b3))
+check("ob_fvg_retest fires on 3rd candle after break",
+      ob_fvg_retest(mk(seq_b3), st_b3, 24030, BULL, L) is not None)
+
+# Bar 4 (4 candles after BOS - more than 2-3 candles): MUST REFUSE
+seq_b4 = list(seq_ob) + [(24070, 24075, 24050, 24055), (24055, 24060, 24045, 24050),
+                         (24050, 24055, 24045, 24050), hammer_bar]
+st_b4 = struct(mk(seq_b4))
+check("ob_fvg_retest refuses when retest is > 3 candles after break",
+      ob_fvg_retest(mk(seq_b4), st_b4, 24030, BULL, L) is None)
+
+# Configurable: retest_max_bars=2 tightens to 2 candles
+check("retest_max_bars=2 refuses the 3rd candle",
+      ob_fvg_retest(mk(seq_b3), st_b3, 24030, BULL, IntradayLimits(retest_max_bars=2)) is None)
+
+# Configurable: retest_max_bars=0 disables the limit
+check("retest_max_bars=0 disables the freshness limit",
+      ob_fvg_retest(mk(seq_b4), st_b4, 24030, BULL, IntradayLimits(retest_max_bars=0)) is not None)
+
+# Pure SMC boundary defense: spot breached past where.low (bull) is refused
+check("ob_fvg_retest refuses when spot has breached below the order block (bull)",
+      ob_fvg_retest(mk(seq_b1), st_b1, 24018, BULL, L) is None)
+
+
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)
