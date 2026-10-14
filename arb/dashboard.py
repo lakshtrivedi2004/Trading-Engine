@@ -19,10 +19,10 @@ from arb import history as hist
 from arb.instruments import IST, market_phase, now_ist, years_to_expiry
 from arb.mathview import chain_math, term_structure
 from arb.settlement import LegMarker, SettlementBook
+from arb.fileio import write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "dashboard.html")
-STATIC = os.path.join(HERE, "static")
 REPO_ROOT = os.path.dirname(HERE)
 LOG_PATH = os.path.join(REPO_ROOT, "engine.log")
 
@@ -148,11 +148,7 @@ class DashboardState:
                     and now - getattr(self, "_cons_saved_at", 0.0) >= 30.0:
                 self._cons_saved_at = now
                 try:
-                    os.makedirs(os.path.dirname(saved_path), exist_ok=True)
-                    tmp = saved_path + ".tmp"
-                    with open(tmp, "w") as fh:
-                        json.dump(dict(out, saved_at=now_ist().strftime("%Y-%m-%d %H:%M:%S")), fh)
-                    os.replace(tmp, saved_path)
+                    write_json(saved_path, dict(out, saved_at=now_ist().strftime("%Y-%m-%d %H:%M:%S")))
                 except OSError:
                     pass
         self._cons, self._cons_at = out, now
@@ -593,23 +589,6 @@ def make_handler(state):
                 elif self.path in ("/constraints", "/constraints.html"):
                     with open(os.path.join(HERE, "constraints.html"), "rb") as fh:
                         self._send(fh.read(), "text/html; charset=utf-8")
-                elif self.path.startswith("/static/"):
-                    # Fonts are served locally rather than from a CDN so the
-                    # dashboard renders identically with no network.
-                    name = os.path.basename(self.path)
-                    fp = os.path.join(STATIC, name)
-                    if os.path.isfile(fp) and os.path.dirname(fp) == STATIC:
-                        ct = "font/woff2" if name.endswith(".woff2") else "application/octet-stream"
-                        with open(fp, "rb") as fh:
-                            body = fh.read()
-                        self.send_response(200)
-                        self.send_header("Content-Type", ct)
-                        self.send_header("Cache-Control", "public, max-age=604800")
-                        self.send_header("Content-Length", str(len(body)))
-                        self.end_headers()
-                        self.wfile.write(body)
-                    else:
-                        self.send_response(404); self.end_headers()
                 elif self.path in ("/", "/index.html"):
                     page = PAGE
                     if getattr(state, "intraday_mode", False):
@@ -686,6 +665,14 @@ def make_handler(state):
             self._control({"ok": True, "switching_to": target})
 
         def do_POST(self):
+            # A web page on another site can make the browser POST here (the
+            # controls include switching to LIVE); the dashboard's own buttons
+            # send an Origin naming this host. Tools without an Origin pass.
+            origin = urlparse(self.headers.get("Origin") or "").netloc
+            if origin and origin != (self.headers.get("Host") or ""):
+                self.send_response(403)
+                self.end_headers()
+                return
             try:
                 if self.path == "/api/control/exit_all":
                     self._control_intraday(lambda e: e.manual_exit_all(), "exit_all")

@@ -24,16 +24,12 @@ import threading
 import time
 from collections import deque
 
-from arb.instruments import IST, now_ist
+from arb.instruments import now_ist
 from arb.scanner import InPlay, daily_stat, rank, same_time_volume
 from arb.stockspike import spike
 
 HIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     ".cache", "history", "stocks")
-
-
-def _minute(iso):
-    return int(iso[11:13]) * 60 + int(iso[14:16])
 
 
 class StockDesk:

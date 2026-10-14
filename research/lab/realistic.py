@@ -33,7 +33,9 @@ SPREAD = {"NIFTY": 0.25, "BANKNIFTY": 0.9, "SENSEX": 1.0}
 INDICES = ["NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"]
 
 def load_rows(name):
-    return [r for r in json.load(open(os.path.join(ROOT, ".cache", "history", f"{name}.json")))
+    # HISTORY_DIR points the lab at another copy of the bars (e.g. .cache/history_oct)
+    base = os.environ.get("HISTORY_DIR") or os.path.join(ROOT, ".cache", "history")
+    return [r for r in json.load(open(os.path.join(base, f"{name}.json")))
             if "09:15" <= r[0][11:16] <= "15:29"]
 
 class Index:

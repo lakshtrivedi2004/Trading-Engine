@@ -33,10 +33,10 @@ on the day's opening figure (opening_capital), so a re-read or a restart does
 not move them. Paper never sets account funds and trades the ledger as before.
 """
 import json
-import os
 import threading
 
 from arb.instruments import now_ist
+from arb.fileio import write_json
 
 
 class CapitalBook:
@@ -62,11 +62,7 @@ class CapitalBook:
 
     def _save(self):
         try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(self._data, fh, indent=2)
-            os.replace(tmp, self.path)
+            write_json(self.path, self._data, indent=2)
         except Exception as e:
             self.log(f"[capital] save failed: {e}")
 
@@ -113,9 +109,6 @@ class CapitalBook:
         """The day's goal in rupees. A goal, not a gate - nothing stops trading
         when it is reached, because a day that runs further is a better day."""
         return self.opening_capital * pct / 100.0
-
-    def max_risk_per_trade(self, pct):
-        return self.capital * pct / 100.0
 
     # ── the day ledger ──────────────────────────────────────────────────────
     @property

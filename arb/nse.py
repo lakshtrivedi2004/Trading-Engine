@@ -74,17 +74,6 @@ class NseClient:
         d = self._json(f"live-analysis-variations?index={key}")
         return list((d.get(group) or {}).get("data") or [])
 
-    def volume_gainers(self):
-        """Stocks trading far above their 1- and 2-week average volume."""
-        return list(self._json("live-analysis-volume-gainers").get("data") or [])
-
-    def most_active(self, by="value"):
-        return list(self._json(f"live-analysis-most-active-securities?index={by}").get("data") or [])
-
-    def preopen(self, key="FO"):
-        """Pre-open (09:00-09:08) indicative prices and buy/sell quantities."""
-        return list(self._json(f"market-data-pre-open?key={key}").get("data") or [])
-
     def ban_list(self):
         """F&O securities in the ban period today (open interest past 95% of the
         market-wide limit): no new positions may be built in their derivatives,

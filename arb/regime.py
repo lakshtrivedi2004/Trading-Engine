@@ -45,7 +45,7 @@ def atr(candles, period=20):
     return sum(trs) / len(trs) if trs else 0.0
 
 
-def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0)):
+def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0), no_gap=False):
     """Current ATR against its own trailing baseline, capped.
 
     The baseline is the median true range over the preceding ``baseline_bars``,
@@ -57,14 +57,22 @@ def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0)):
     """
     if len(candles) < period + 1:
         return 0.0
-    recent = atr(candles, period)
-    if recent <= 0:
-        return 0.0
     window = candles[-(baseline_bars + 1):]
     if len(window) < period + 2:
         return 0.0
-    trs = sorted(true_range(window[i - 1][4], window[i][2], window[i][3])
-                 for i in range(1, len(window)))
+
+    def tr(a, b):
+        # pace_no_gap (13 Oct 2026 review): a session's first bar measures its
+        # own range, not the overnight gap, which otherwise pins the ratio at
+        # the cap for the first ~20 minutes of every gapped day.
+        if no_gap and a[0][:10] != b[0][:10]:
+            return b[2] - b[3]
+        return true_range(a[4], b[2], b[3])
+    all_tr = [tr(window[i - 1], window[i]) for i in range(1, len(window))]
+    recent = sum(all_tr[-period:]) / period
+    if recent <= 0:
+        return 0.0
+    trs = sorted(all_tr)
     mid = len(trs) // 2
     base = trs[mid] if len(trs) % 2 else 0.5 * (trs[mid - 1] + trs[mid])
     if base <= 0:
@@ -172,8 +180,8 @@ def regime_gate(candles, L, now=None, name=None):
     if need > 0:
         if len(candles) < L.atr_period + 1:
             return "candles_warming_up"
-        ar = atr_ratio(candles, period=L.atr_period,
-                       baseline_bars=L.atr_baseline_bars)
+        ar = atr_ratio(candles, period=L.atr_period, baseline_bars=L.atr_baseline_bars,
+                       no_gap=bool(getattr(L, "pace_no_gap", False)))
         if ar <= 0:
             # Zero range over the whole ATR window is not a quiet market, it is
             # a dead feed (flat bars at the last price): never a pass.

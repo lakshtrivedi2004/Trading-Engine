@@ -455,6 +455,94 @@ check("ob_fvg_retest refuses when spot has breached below the order block (bull)
 
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+section("12. Forex SMC models (13 Oct 2026) - fire on their pattern, refuse otherwise")
+
+from arb.playbooks import _in_windows, ifvg_retest, judas_sweep, silver_bullet
+
+check("_in_windows: 10:30 is inside 10:00-11:00", _in_windows(630, "10:00-11:00,13:30-14:30"))
+check("_in_windows: 11:00 is outside (end exclusive)", not _in_windows(660, "10:00-11:00"))
+check("the six new models are registered",
+      all(n in PLAYBOOKS for n in ("breaker_retest", "ifvg_retest", "silver_bullet",
+                                   "judas_sweep", "ote_mss", "eqhl_sweep")))
+
+# Inverse FVG: a bear gap 102-105 is closed through, then its first retest from above holds.
+flat = [(110, 111, 109, 110)] * 25
+ifvg_seq = flat + [(110, 111, 105, 106), (106, 106, 100, 101), (101, 102, 99, 100),
+                   (100, 106, 100, 105.8), (105.8, 107, 105.5, 106.5), (106.5, 106.6, 105.2, 105.4)]
+held = (105.3, 107.2, 104, 107)
+rows_ifvg = mk(ifvg_seq + [held])
+s_ifvg = ifvg_retest(rows_ifvg, struct(rows_ifvg), 107.0, BULL, L)
+check("ifvg_retest fires on the first retest of an inverted bear gap", s_ifvg is not None,
+      s_ifvg.describe() if s_ifvg else "")
+check("ifvg_retest stop sits below the gap", s_ifvg is not None and s_ifvg.invalidation < 102)
+touched = ifvg_seq[:-1] + [(106.5, 106.6, 104.5, 105.4)] + [held]
+rows_t = mk(touched)
+check("ifvg_retest refuses a second touch", ifvg_retest(rows_t, struct(rows_t), 107.0, BULL, L) is None)
+check("ifvg_retest refuses the other side", ifvg_retest(rows_ifvg, struct(rows_ifvg), 107.0, BEAR, L) is None)
+
+# Judas swing: opening range 100-110 (09:15-09:29), its low run at 09:40 and reclaimed, then an engulfing bar.
+or_bars = [(105, 110, 100, 105)] + [(105, 106, 104, 105)] * 14
+drift = [(105, 106, 103, 104)] * 10
+sweep = [(104, 104.5, 98, 101)]
+after = [(101, 103, 100.5, 102.5)] * 3 + [(102.5, 102.6, 101.2, 101.4), (101.3, 104, 101, 103.8)]
+rows_j = mk(or_bars + drift + sweep + after)
+s_j = judas_sweep(rows_j, struct(rows_j), 103.8, BULL, L)
+check("judas_sweep fires: opening-range low run, reclaimed, engulfing", s_j is not None,
+      s_j.describe() if s_j else "")
+check("judas_sweep stop is below the sweep wick", s_j is not None and s_j.invalidation < 98)
+rows_brk = mk(or_bars + drift + [(104, 104.5, 97, 98)] + sweep + after)
+check("judas_sweep refuses a breakout (close beyond the range before any reclaim)",
+      judas_sweep(rows_brk, struct(rows_brk), 103.8, BULL, L) is None)
+check("silver_bullet refuses outside its windows (09:50)",
+      silver_bullet(rows_j, struct(rows_j), 103.8, BULL, L) is None)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("13. structural_invalidation never returns a stop on the wrong side of price")
+
+from arb.intraday import structural_invalidation
+from arb.smc import Structure
+
+def _st(close, swing_low, swing_high):
+    s = Structure(); s.closes = [close]; s.swing_low, s.swing_high = swing_low, swing_high
+    return s
+
+check("setup stop below price is used for a long", structural_invalidation(_st(100, 90, 110), BULL, 95) == 95)
+check("setup stop above price falls back to the swing low", structural_invalidation(_st(100, 90, 110), BULL, 101) == 90)
+check("both above price: no stop, no trade", structural_invalidation(_st(100, 105, 110), BULL, 101) == 0.0)
+check("short: both below price: no stop, no trade", structural_invalidation(_st(100, 90, 95), BEAR, 99) == 0.0)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("14. 13 Oct review flags: consume swings, today only, pace without the gap")
+
+from types import SimpleNamespace as _NS
+from arb.regime import atr_ratio
+
+# A chop that keeps closing back through one broken level.
+seq_c, _ = wave(100.0, [(1, 3), (-1, 2)] * 4 + [(1, 2), (-1, 3)] + [(1, 1), (-1, 1)] * 3
+                + [(1, 2), (-1, 1), (1, 1), (-1, 1), (1, 1)])
+rows_c = mk(seq_c)
+lvl = lambda lim: [round(e[2], 1) for e in analyse(rows_c, 2, 25, limits=lim).events]
+dup = lambda xs: len(xs) - len(set(xs))
+check("default: one broken level re-fires", dup(lvl(None)) >= 1, str(lvl(None)))
+check("smc_consume_swings: every level breaks once", dup(lvl(_NS(smc_consume_swings=True))) == 0,
+      str(lvl(_NS(smc_consume_swings=True))))
+
+two_days = mk([(100, 101, 99, 100)] * 30, day="2026-09-21") + mk([(120, 121, 119, 120)] * 30, day="2026-09-22")
+st_t = analyse(two_days, 2, 25, limits=_NS(smc_today_only=True))
+check("smc_today_only: no event comes from yesterday's bars or the gap",
+      all(e[0] >= 30 for e in st_t.events) and all(g.at - 1 >= 30 for g in st_t.fvgs))
+check("smc_today_only: under min_bars of today -> no structure",
+      analyse(two_days[:45], 2, 25, limits=_NS(smc_today_only=True)).events == [])
+
+flat = mk([(100, 101, 99, 100)] * 200, day="2026-09-21") + mk([(130, 131, 129, 130)] * 15, day="2026-09-22")
+check("pace with the overnight gap: inflated by the gap bar alone", atr_ratio(flat) > 1.5, f"{atr_ratio(flat):.2f}")
+check("pace_no_gap: a gap open on a normal-range day reads ~1.0", abs(atr_ratio(flat, no_gap=True) - 1.0) < 1e-9,
+      f"{atr_ratio(flat, no_gap=True):.2f}")
+
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

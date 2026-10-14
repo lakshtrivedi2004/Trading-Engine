@@ -19,7 +19,7 @@ input silently sizes every stop wrong.
 """
 from dataclasses import dataclass, field
 
-from arb.smc import BULL, BEAR
+from arb.smc import BULL
 
 
 @dataclass
@@ -245,13 +245,13 @@ class ContractSelector:
 def structural_invalidation(structure, side, invalidation=None):
     """The index level where the idea dies: the setup's own, when it is on the
     correct side of price, else the last swing. 0.0 when neither exists."""
-    invalid = structure.invalidation(side)
-    if invalidation:
-        ref = structure.closes[-1] if structure.closes else 0.0
-        if ref > 0 and ((side == BULL and invalidation < ref)
-                        or (side == BEAR and invalidation > ref)):
-            invalid = invalidation
-    return invalid or 0.0
+    ref = structure.closes[-1] if structure.closes else 0.0
+    ok = lambda lvl: lvl and ref > 0 and (lvl < ref if side == BULL else lvl > ref)
+    # A stop on the wrong side of price exits on the first tick: no level, no trade.
+    for lvl in (invalidation, structure.invalidation(side)):
+        if ok(lvl):
+            return lvl
+    return 0.0
 
 
 def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,

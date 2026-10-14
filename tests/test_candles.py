@@ -217,6 +217,17 @@ try:
     why = regime_gate(flat, Lg, name="NIFTY")
     check("60 flat bars (dead feed) are refused, not passed as 'unknown regime'",
           why == "no_range_bars", repr(why))
+
+    section("5. A laptop suspend: quotes go stale, no bar spans the sleep")
+    cs5._sample_live()
+    st5.recv_ns[:] = time.perf_counter_ns()
+    cs5._slept -= 600                                     # the boot clock ran 10 min ahead: a sleep
+    cs5._sample_live()
+    check("after a 10-minute sleep every quote reads stale and the open bars are dropped",
+          not st5.recv_ns.any() and not cs5.live and not cs5.fetched_at)
+    st5.recv_ns[1] = time.perf_counter_ns()
+    cs5._sample_live()
+    check("...and the next fresh tick opens a new bar as normal", "RELIANCE" in cs5.live)
 finally:
     time.time = _real_time
 

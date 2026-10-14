@@ -35,8 +35,9 @@ from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direct
                         session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
 from arb.config import stock_risk_pct
-from arb.smc import BEAR, BULL, RANGE, analyse
+from arb.smc import BEAR, BULL, analyse
 from arb.costs import leg_cost, per_unit_cost_points
+from arb.fileio import write_json
 from arb import optionflow, trailing
 
 
@@ -208,6 +209,40 @@ class IntradayEngine:
         self.log(f"[intraday] today's journal: {len(recs)} closed trades "
                  f"(W{self.wins}/L{self.losses}) restored to the dashboard")
         self._resume_loss_state(recs)
+        self._resume_discipline(recs)
+
+    def _resume_discipline(self, recs):
+        """The loss-streak pause, the careful-after-a-streak grade floor and the
+        per-playbook daily cap, from today's journal. Kept only in memory, a
+        restart cleared all three: a paused desk resumed at once and a playbook
+        at its cap could trade again (review, 13 Oct 2026). One trade may have
+        several journal rows (partial exits); each counts once, by trade_id."""
+        L = self.L
+        trades = {}
+        for r in recs:
+            t = trades.setdefault(r.get("trade_id"), dict(r, net=0.0))
+            t["net"] += float(r.get("net_inr") or 0.0)
+            t["ts_ist"] = r.get("ts_ist") or t.get("ts_ist")
+        cap = int(getattr(L, "max_consecutive_losses", 0) or 0)
+        mins = float(getattr(L, "loss_streak_pause_min", 30.0))
+        for t in trades.values():
+            side = {"CE": BULL, "PE": BEAR}.get(str(t.get("opt") or "").upper()) \
+                or {"long": BULL, "short": BEAR}.get(str(t.get("direction") or ""))
+            lead = (t.get("playbooks") or [""])[0]
+            if side and lead:
+                k = (t.get("underlying"), lead, side)
+                self.playbook_count[k] = self.playbook_count.get(k, 0) + 1
+            if t["net"] >= 0:
+                self.loss_streak, self.careful = 0, False
+                continue
+            self.loss_streak += 1
+            if cap and self.loss_streak >= cap:
+                try:
+                    at = datetime.fromisoformat(str(t.get("ts_ist"))).timestamp()
+                except (ValueError, TypeError):
+                    at = time.time()
+                self.paused_until = max(self.paused_until, min(at, time.time()) + 60.0 * mins)
+                self.careful, self.loss_streak = True, 0
 
     def _resume_loss_state(self, recs):
         """The loss cooldown and F4's same-side block, from today's journal.
@@ -259,10 +294,7 @@ class IntradayEngine:
                 "mode": getattr(self.broker, "mode", "paper"),
                 "positions": [asdict(p) for p in self.book.snapshot()]}
         try:
-            tmp = self._open_path + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(data, fh, default=lambda o: o.item() if hasattr(o, "item") else str(o))
-            os.replace(tmp, self._open_path)
+            write_json(self._open_path, data, default=lambda o: o.item() if hasattr(o, "item") else str(o))
         except Exception as e:
             self.log(f"[intraday] could not save open positions: {e}")
 
@@ -486,6 +518,9 @@ class IntradayEngine:
                 self.exit_all_requested = False
         mins = self.book.time_to_close(self.cfg.session_end)
         for pos in self.book.snapshot():
+            if pos.exit_blocked:
+                self._flatten_naked(pos)
+                continue
             bid = self._mark_of(pos)
             idx = self._underlying_px(pos)
             if pos.exit_rules != "lhm":         # last_half_hour: the index stop never moves
@@ -673,6 +708,49 @@ class IntradayEngine:
         self.log(f"[intraday] HALTED: {reason}")
         if self.notifier:
             self.notifier.send(f"🛑 <b>CHECK THE ANGEL APP</b>\n{text}")
+
+    NAKED_CONFIRM_SEC = 2.0
+
+    def _flatten_naked(self, pos):
+        """Owner's rule (1 Oct 2026, research_out/phase_a/owner_decisions.md Q7):
+        once two net-position reads at least 2 s apart agree the broker is past
+        flat, and no order of ours is working in the symbol, send ONE
+        risk-reducing order for exactly that quantity, then stay halted and
+        alert. Any doubt - an unreadable book, reads that disagree - sends nothing."""
+        if not str(pos.exit_blocked).startswith("broker shows") or getattr(pos, "naked_sent", False) \
+                or not hasattr(self.broker, "net_position") or not hasattr(self.broker, "open_orders"):
+            return
+        short = pos.opt == "EQ" and pos.side < 0
+        held = self.broker.net_position(pos.symbol)
+        working = self.broker.open_orders(pos.symbol)
+        past_flat = held is not None and ((held > 0) if short else (held < 0))
+        if not past_flat or working is None or working or pos.pending_exit_oid:
+            pos.naked_seen = None
+            return
+        seen, now = getattr(pos, "naked_seen", None), time.time()
+        if seen is None or seen[1] != held:
+            pos.naked_seen = (now, held)
+            return
+        if now - seen[0] < self.NAKED_CONFIRM_SEC:
+            return
+        pos.naked_sent = True                   # one order, whatever happens next
+        slot = self.feed.store.slot_of_token.get(str(pos.token))
+        buy = held < 0
+        px = 0.0
+        if slot is not None:
+            px = float(self.feed.store.ask[slot] if buy else self.feed.store.bid[slot])
+        leg = dict(self._exit_leg(pos, px or pos.mark), side="BUY" if buy else "SELL",
+                   qty=abs(held), depth=abs(held), market=True, kind="X")
+        try:
+            legs, _ = self.broker.place_structure(
+                _Ticket([leg], abs(held), "INTRADAY_EXIT", f"flatten naked {pos.symbol}", pos.expiry), 1)
+            what = f"{leg['side']} {abs(held)} sent, filled {legs[0].get('filled_qty', legs[0].get('filled', '?'))}"
+        except Exception as e:
+            what = f"{leg['side']} {abs(held)} FAILED: {e!r}"
+        self._halt_alert(f"NAKED {pos.symbol} flatten: {what}",
+                         f"<b>NAKED POSITION</b> <code>{pos.symbol}</code> ({held}): one "
+                         f"risk-reducing order - {what}. Entries stay halted; check the Angel app.")
+        self.log(f"[intraday] NAKED {pos.symbol}: broker {held} confirmed twice, {what}")
 
     def _held_gone(self, pos, held, short):
         """How much of pos the broker no longer holds, from its net quantity
@@ -2130,7 +2208,7 @@ class IntradayEngine:
                     self._note(wait)
                 continue
             st = analyse(rows, strength=self.L.swing_strength,
-                         min_bars=self.L.min_structure_bars)
+                         min_bars=self.L.min_structure_bars, limits=self.L)
             self.structures[und] = st
             self.evaluated_at[und] = time.time()
 
@@ -2366,7 +2444,7 @@ class IntradayEngine:
         known, is the account's whole position in symbol - what the alert
         reports (review O-ADV-1)."""
         adopted = False
-        if adopt is not None and held is not None and held > 0 \
+        if adopt is not None and held \
                 and getattr(self.L, "adopt_unknown_entry", False):
             try:
                 adopted = adopt(held)
@@ -2692,7 +2770,7 @@ class IntradayEngine:
                     < L.symbol_cooldown_sec:
                 self._note("symbol_cooldown")
                 continue
-            st = analyse(rows, strength=L.swing_strength, min_bars=L.min_structure_bars)
+            st = analyse(rows, strength=L.swing_strength, min_bars=L.min_structure_bars, limits=L)
             self.stock_structures[sym] = st
             lead = v.setups[0] if v.setups else None
             inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
@@ -2718,7 +2796,7 @@ class IntradayEngine:
                 self._note("stock:risk_too_large")
                 continue
             rt = self._stock_round_trip(fill_px, qty, bid, ask)
-            if rt > L.max_cost_frac_of_risk * risk * qty:
+            if L.max_cost_frac_of_risk > 0 and rt > L.max_cost_frac_of_risk * risk * qty:
                 self._note("stock:cost_too_large_for_stop")
                 continue
             tgt = trailing.initial_target(rows, v.side, px, risk, L, 0.0)
@@ -2809,13 +2887,45 @@ class IntradayEngine:
             return False
         if self._ip_refused(legs):
             return False
-        self._entry_working(legs[0], leg["symbol"], side=v.side)
+
+        def adopt(held):
+            # An unseen fill on the entry's side, taken on at the quote so the
+            # software stop manages it (options already did this; stocks only halted).
+            if held * v.side <= 0:
+                return False
+            n = abs(int(held))
+            p = self._stock_position(sym, info, v, st, px, inv, risk, tgt, n, quote, rt, rows, pick)
+            p.detail.update(adopted=True, entry_estimated=True)
+            self.log(f"[intraday] ADOPTED {sym} x{n} @ ~{quote:.2f} (stop {inv:.2f})")
+            return True
         if not legs[0].get("filled"):
-            self._unknown_entry(legs[0], leg["symbol"], side=v.side)
+            self._entry_working(legs[0], leg["symbol"], adopt=adopt, side=v.side)
+            self._unknown_entry(legs[0], leg["symbol"], adopt=adopt, side=v.side)
             self._note("entry_not_filled")
             return False
         fill = float(legs[0]["fill_price"])
         qty = int(legs[0].get("qty") or qty)     # what the broker actually filled
+        pos = self._stock_position(sym, info, v, st, px, inv, risk, tgt, qty, fill, rt, rows, pick)
+        # Part filled and still working after its cancel: more of it may fill (O4).
+        self._entry_working(legs[0], leg["symbol"], side=v.side,
+                            adopt=lambda more: more * v.side > 0 and self._adopt_more(pos, abs(more)))
+        word = "BUY" if v.side > 0 else "SHORT"
+        self.log(f"[intraday] ENTRY {word} {sym} x{qty} @ {fill:.2f} = Rs {fill * qty:,.0f} "
+                 f"(margin Rs {pos.margin:,.0f}) | grade {v.grade} {' + '.join(v.plays())} | "
+                 f"stop {inv:.2f} target {pos.index_target:.2f} | risk Rs {risk * qty:,.0f} "
+                 f"cost Rs {rt:,.0f} | in play: rvol {pick.rvol:.1f}, ATR {100 * pick.atr_pct:.1f}%")
+        if self.notifier:
+            self.notifier.send(
+                f"🔵 <b>{word}</b> <code>{sym}</code> (stock, intraday)\n"
+                f"Entry <code>{fill:.2f}</code> x {qty} = <code>Rs {fill * qty:,.0f}</code>\n"
+                f"Why <code>{' + '.join(v.plays())}</code> · grade <code>{v.grade}</code>\n"
+                f"Stop <code>{inv:.2f}</code> · Target <code>{pos.index_target:.2f}</code>\n"
+                f"Risk <code>Rs {risk * qty:,.0f}</code> · cost <code>Rs {rt:,.0f}</code>")
+        return True
+
+    def _stock_position(self, sym, info, v, st, px, inv, risk, tgt, qty, fill, rt, rows, pick):
+        """Book a stock position - a seen fill or an adopted one - and return it."""
+        L = self.L
         self.trade_id += 1
         self.trades_today += 1
         self.last_trade_ts = time.time()
@@ -2843,19 +2953,7 @@ class IntradayEngine:
         pos.delta, pos.entry_bar = 1.0, rows[-1][0] if rows else ""
         self.book.add(pos)
         self._save_open(force=True)
-        word = "BUY" if v.side > 0 else "SHORT"
-        self.log(f"[intraday] ENTRY {word} {sym} x{qty} @ {fill:.2f} = Rs {fill * qty:,.0f} "
-                 f"(margin Rs {pos.margin:,.0f}) | grade {v.grade} {' + '.join(v.plays())} | "
-                 f"stop {inv:.2f} target {pos.index_target:.2f} | risk Rs {risk * qty:,.0f} "
-                 f"cost Rs {rt:,.0f} | in play: rvol {pick.rvol:.1f}, ATR {100 * pick.atr_pct:.1f}%")
-        if self.notifier:
-            self.notifier.send(
-                f"🔵 <b>{word}</b> <code>{sym}</code> (stock, intraday)\n"
-                f"Entry <code>{fill:.2f}</code> x {qty} = <code>Rs {fill * qty:,.0f}</code>\n"
-                f"Why <code>{' + '.join(v.plays())}</code> · grade <code>{v.grade}</code>\n"
-                f"Stop <code>{inv:.2f}</code> · Target <code>{pos.index_target:.2f}</code>\n"
-                f"Risk <code>Rs {risk * qty:,.0f}</code> · cost <code>Rs {rt:,.0f}</code>")
-        return True
+        return pos
 
     def _unaffordable(self, und, free, cheapest):
         """A setup was ready and no eligible strike's lot fits the free capital.
@@ -2997,7 +3095,7 @@ class IntradayEngine:
             return False
 
         def adopt(held):
-            return self._adopt_entry(cand, plan, structure, zone, verdict, held)
+            return held > 0 and self._adopt_entry(cand, plan, structure, zone, verdict, held)
         if self._ip_refused(legs):
             return False
         if not legs[0].get("filled"):
@@ -3179,5 +3277,5 @@ class IntradayEngine:
         """Live volatility regime for the dashboard: 1.0 is this index's own
         normal, below `min_atr_ratio` is a tape too quiet to pay for itself."""
         rows = self.candles.get(underlying, limit=250) if self.candles else []
-        return atr_ratio(rows, period=self.L.atr_period,
-                         baseline_bars=self.L.atr_baseline_bars)
+        return atr_ratio(rows, period=self.L.atr_period, baseline_bars=self.L.atr_baseline_bars,
+                         no_gap=bool(getattr(self.L, "pace_no_gap", False)))

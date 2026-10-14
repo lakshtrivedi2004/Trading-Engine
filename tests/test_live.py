@@ -677,6 +677,39 @@ def t5_sign():
           e.book.count() == 0 and len(e.journal.rows) == 1 and not e.halted)
 
 
+def t5b_flatten():
+    class Naked(UnknownBroker):
+        orders = []
+
+        def open_orders(self, symbol=None):
+            return self.orders
+
+    def run(held_seq, orders=()):
+        e, pos = engine([])
+        e.L.exit_safety_fixes = True
+        e.notifier = Notes()
+        e.broker = Naked(held=-130)
+        e.broker.orders = list(orders)
+        e.close(pos, "stop_loss")                      # broker shows -130: blocked, halted
+        n0 = len(e.broker.seen)
+        for h in held_seq:
+            e.broker.held = h
+            e.manage()
+            _clk.t += 1.5
+        return e, e.broker.seen[n0:]
+
+    e, sent = run([-130, -130, -130, -130, -130])
+    check("5b. naked -130 read twice >= 2 s apart: ONE buy of 130, never repeated, still halted",
+          len(sent) == 1 and sent[0]["side"] == "BUY" and sent[0]["qty"] == 130 and e.halted
+          and any("flatten" in m.lower() or "risk-reducing" in m for m in e.notifier.msgs), sent)
+    _, sent = run([-130, -65, -130, -65, -130])
+    check("5b. reads that disagree: nothing sent", not sent, sent)
+    _, sent = run([-130, None, -130, None])
+    check("5b. an unreadable position book: nothing sent", not sent, sent)
+    _, sent = run([-130] * 5, orders=[{"symbol": "X", "oid": "9"}])
+    check("5b. an order still working in the symbol: nothing sent", not sent, sent)
+
+
 def t6_variety():
     api = ExitAngel([("open", 0, 0.0)])
     api.sticky = True
@@ -1398,7 +1431,7 @@ _O_TESTS = [("O1", tO1_null_answer), ("O2", tO2_raise_lagging_book), ("O3", tO3_
 
 try:
     for _name, _fn in [("1", t1_golden), ("2", t2_pending_ioc), ("3", t3_place_raises),
-                       ("3b", t3b_structure_raises), ("4", t4_late_fill), ("5", t5_sign),
+                       ("3b", t3b_structure_raises), ("4", t4_late_fill), ("5", t5_sign), ("5b", t5b_flatten),
                        ("6", t6_variety), ("7", t7_partial_halt), ("8", t8_adopt),
                        ("8b", t8b_entry_may_work), ("9", t9_start_guard), ("10", t10_bucket),
                        ("12", t12_day), ("defaults", t13_flags_default)]:

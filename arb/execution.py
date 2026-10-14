@@ -12,14 +12,10 @@ import random
 import threading
 import time
 
-from arb.costs import structure_cost, leg_cost
+from arb.costs import leg_cost
 from datetime import datetime
 
 from arb.instruments import IST, now_ist
-
-
-class BrokerError(Exception):
-    pass
 
 
 def _scale_legs(opp, lots):
@@ -209,7 +205,10 @@ class LiveBroker:
     def _protected(self, leg, price):
         eq = leg.get("instrument") == "EQ"
         pct = (0.5 if eq else self.protection_pct) / 100.0
-        tick = self._tick(price, leg.get("instrument"))
+        # The tick of the price SENT, which can sit in the next band up; the
+        # coarser of the two is on both grids.
+        tick = max(self._tick(price, leg.get("instrument")),
+                   self._tick(price * (1 + pct), leg.get("instrument")))
         if leg["side"] == "BUY":
             return math.ceil(price * (1 + pct) / tick - 1e-9) * tick
         return max(tick, math.floor(price * (1 - pct) / tick + 1e-9) * tick)

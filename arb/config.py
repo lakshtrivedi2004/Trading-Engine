@@ -642,18 +642,10 @@ class IntradayLimits:
     # flat-count behaviour and is not recommended: a count is order-blind, and
     # order is most of what distinguishes a setup from a coincidence.
     require_playbook: bool = True
-    # How many named setups must have completed. One is a setup; raising this
-    # to 2 demands two different models agree on the same bar, which is far
-    # stricter and will cut the trade count hard - choose it deliberately, and
-    # remember that a smaller sample is also a weaker basis for believing any
-    # of this works.
-    min_setups: int = 1
     # Which playbooks are live. Empty means every registered one. Names come
     # from arb/playbooks.py:PLAYBOOKS, and an unrecognised name is reported at
     # startup rather than silently ignored.
     playbooks: tuple = ()
-    # Kept for older configs; with min_confirmations = 1 it has no effect.
-    setups_that_stand_alone: int = 2
     # How recent a structural event may be and still count as part of a live
     # sequence. On a 1-minute series 40 bars is roughly the last three quarters
     # of an hour - long enough for CHoCH-then-BOS to complete, short enough
@@ -669,6 +661,17 @@ class IntradayLimits:
     # retain institutional momentum; stale retests (> 3 bars) degrade into drift.
     retest_max_bars: int = 3
     retest_min_bars: int = 1
+    # Refuse an ob_fvg_retest entry once price has closed past the zone's far
+    # edge (still inside active_zone's tolerance pad). Off, the entry takes the
+    # swing as its stop, or no trade if that is on the wrong side too.
+    retest_refuse_breached: bool = True
+    # 13 Oct 2026 strategy review, each OFF until the year test says otherwise
+    # (research/PAPERS.md section 22): see arb/smc.py:analyse, arb/regime.py:
+    # atr_ratio and arb/playbooks.py:_own_zone.
+    retest_own_zone: bool = False
+    smc_consume_swings: bool = False
+    smc_today_only: bool = False
+    pace_no_gap: bool = False
     # The breaking bar's body, in ATR, for choch_bos. 0 disables.
     displacement_body_atr: float = 0.8
     # How far back a liquidity sweep may have completed. This must be WIDER
@@ -719,7 +722,8 @@ class IntradayLimits:
     # setups are exempt - a retest is a pullback, and on the lower timeframe a
     # pullback is a counter move by definition.
     ltf_must_agree: bool = True
-    # Per playbook and side, at most this many entries a day. A model that has
+    # Per index, playbook and side (as tools/backtest.py:run tested it), at
+    # most this many entries a day. A model that has
     # already been tried twice today in the same direction is not a new idea.
     # 0 disables.
     max_per_playbook_per_day: int = 2

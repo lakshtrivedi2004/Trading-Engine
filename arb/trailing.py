@@ -121,7 +121,7 @@ def reversal_warning(candles, side, since_iso, L):
     if rejection(done) == -side:
         return "opposing_rejection"
     st = analyse(done, strength=int(getattr(L, "swing_strength", 2)),
-                 min_bars=min(len(done), int(getattr(L, "min_structure_bars", 25))))
+                 min_bars=min(len(done), int(getattr(L, "min_structure_bars", 25))), limits=L)
     want = "CHOCH_DOWN" if side == BULL else "CHOCH_UP"
     ev = st.last(want)
     if ev is not None and ev[0] >= _after(done, since_iso):

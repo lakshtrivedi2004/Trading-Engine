@@ -1319,6 +1319,13 @@ it is promised.
 
 ## 21. Breakout Retest Timing & Pullback Horizon (12 Oct 2026)
 
+> **Correction (13 Oct 2026, section 22).** The citations below do not support
+> the rule; checked at their sources they are off-topic, misquoted or do not
+> exist. On a year of real bars the 1-3 bar window cut ob_fvg_retest from 86 to
+> 12 trades and cost about Rs 8,000. The window and the boundary check are now
+> off in config/intraday.json (`retest_max_bars: 0`, `retest_refuse_breached:
+> false`); the code stays behind those flags.
+
 ### The live defect
 On 12 Oct 2026, the live system running `ob_fvg_retest` on SENSEX took two trades:
 - `SENSEX26O1572200PE` (09:59:03 entry, stopped out in 1m20s at -1.02R)
@@ -1360,4 +1367,119 @@ Analysis of the logs and dashboard revealed that `ob_fvg_retest` checked `sequen
   - Prevents taking entries where price has already violated the order block / FVG boundary (eliminating the immediate 17-second stop-out seen in Trade 2).
 - Unit tests added to `tests/test_playbooks.py` (Section 11) verifying that bars 1–3 pass, bar 0 is refused, bar 4+ is refused, zone breaches are refused, and `retest_max_bars` is dynamically configurable.
 
+---
+
+## 22. The retest window checked, the Forex SMC models tested, a code review (13-14 Oct 2026)
+
+**The owner's request.** Check the 12 Oct retest change (section 21) against the
+literature, add the SMC models of the Forex-Trading-Engine, test everything on
+real data, and find out why live has taken no trades for days.
+
+**Data and method.** 1-minute NIFTY, BANKNIFTY and SENSEX bars, 22 Sep 2025 -
+30 Sep 2026, plus 1-13 Oct 2026 for the replay. Every variant ran through the
+engine's own decision code and was priced as the option the engine would buy
+(`research/playbook_lab.py`, `research/smc_lab.py`): costs inside the 8% cap,
+live per-index pace, the 4-hour trend, split 25 May. Outputs are in
+`research_out/retest_1013/`.
+
+### 1. The citations in section 21
+
+| Cited | What the source actually is |
+|---|---|
+| Brock, Lakonishok & LeBaron 1992 | Real (J. Finance 47(5)). Moving-average and range-break rules on daily DJIA; nothing on retest timing |
+| Bessembinder & Chan 1995 | Real (Pacific-Basin FJ 3(2-3)). The same rules on Asian indices; nothing on retests |
+| Bulkowski, ">65% failure after 3 bars" | Not in his data. He reports throwbacks in 58% of breakouts, about 10 days to return, 65% *recover*, and breakouts with a throwback do worse (thepatternsite.com/throwbacks.html) |
+| Zarattini, Aziz & Barbon 2024, "Noise vs. Signal..." | No such paper. Their real paper ("Beat the Market", SPY noise area) deliberately *delays* entry to the next half hour |
+| Cont, Kukanov & Stoikov 2014; Biais, Hillion & Spatt 1995 | Real; order-flow imbalance and limit-order-book dynamics. Nothing about order blocks |
+
+No study measuring retest timing in bars was found.
+
+### 2. The retest rule on the year
+
+| ob_fvg_retest | Trades | Win | In-sample | Held-out | Year | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| **No window, no boundary (now live)** | **86** | 53% | +3,901 | +7,522 | **+11,423** | 4,322 |
+| 10-bar window, no boundary | 51 | 55% | +3,754 | +4,479 | +8,233 | 2,993 |
+| 10-bar window + boundary | 35 | 57% | +4,843 | +2,064 | +6,907 | 3,470 |
+| 3-bar window, no boundary | 15 | 80% | +3,315 | +2,170 | +5,486 | 1,081 |
+| No window + boundary | 55 | 49% | +983 | +2,212 | +3,194 | 8,115 |
+| 3-bar window + boundary (12 Oct) | 12 | 75% | +2,838 | +506 | +3,344 | 1,081 |
+| 5-bar window + boundary | 21 | 62% | +3,488 | -498 | +2,990 | 1,584 |
+
+The window buys win rate with trade count and money. The boundary check refuses
+entries whose close sits inside the zone's tolerance pad below its far edge;
+those take the swing as their stop and were profitable.
+
+**A real bug found on the way.** `structural_invalidation` fell back to the last
+swing without checking that the swing was on the correct side of price, so a
+stop could land above a long's entry and exit on the first tick. It now
+returns no level (no trade) when neither stop is valid. On the year this
+removed one losing trade.
+
+### 3. The Forex SMC models
+
+The six models NSE did not have, ported to `arb/playbooks.py`, registered but
+off. Each alone and added to the live book (OB + LHM: 159 trades, +27,094 /
++21,154):
+
+| Model | Live gates: n, IN / OUT | Trend only | No gates | Book with it, dIN / dOUT |
+|---|---|---|---|---|
+| breaker_retest | 5, -1,973 / +404 | 47, -1,640 | 88, -6,843 | -1,795 / -6 |
+| ifvg_retest | 22, -3,003 / +360 | 82, -16,978 | 156, -26,555 | -58 / -978 |
+| silver_bullet (10:00-11:00, 13:30-14:30) | 9, -1,824 / 0 | 57, -5,386 | 112, -18,395 | -882 / 0 |
+| judas_sweep (15-min OR) | 2, +455 / -683 | 2, -229 | 10, -3,023 | -275 / -683 |
+| ote_mss (ICT 2022 model) | 0 | 31, -2,135 | 62, -9,030 | 0 / 0 |
+| eqhl_sweep | 33, -2,848 / -454 | 224, -15,848 | 426, -38,980 | +588 / -310 |
+
+None passes. Every one loses more as the gates are removed: the gates are not
+starving them. This matches the independent evidence: StatOasis (1 of 32 ICT
+t-stats above 2), an FVG placebo study (no difference from random levels),
+Mahadzva 2026 (G10 FX, sweeps continue rather than reverse), and Osler (2005):
+prices accelerate *through* stop clusters.
+
+### 4. Canonical-SMC corrections, tested
+
+A code review found that the structure code differs from the textbook. Each fix
+is a flag in `arb/config.py`, off:
+
+| Flag | What it fixes | Trades | IN / OUT | Year |
+|---|---|---:|---|---:|
+| (current) | | 86 | +3,901 / +7,522 | +11,423 |
+| `smc_consume_swings` | a broken swing re-fires BOS/CHoCH | 85 | +2,833 / +509 | +3,342 |
+| `retest_own_zone` | the retest uses any recent zone, not the one the cited BOS made | 27 | +929 / +1,892 | +2,822 |
+| `smc_today_only` | yesterday's bars and the overnight gap count as structure | 76 | +2,254 / +5,389 | +7,643 |
+| `pace_no_gap` | the 09:15 bar's gap inflates the pace for ~20 minutes | 86 | identical | +11,423 |
+
+All worse or no different. ob_fvg_retest is the survivor of a long search, so
+part of its result may be luck; the canonical versions being worse is no proof
+they are wrong, only that switching would not help.
+
+### 5. Why live took no trades
+
+- **The retest window** (section 2): about one OB trade a month instead of
+  seven.
+- **Short sessions.** LHM fires at 15:00 and is about half the book's trades.
+  5 and 6 Oct ran to 15:15 but with 4 and 7 restarts; 7 Oct ended at 10:28 and
+  13 Oct at 09:47 (the laptop powered off at 09:48). No live log exists here for
+  8-12 Oct. The full-engine replay of 1-13 Oct with the final code takes 10
+  trades in 8 sessions (40% win, -Rs 470), 5 of them at 15:00 or later; with
+  the 12 Oct rule it took 6 (17% win, -Rs 1,698). Eight days is noise, not
+  evidence.
+- **Capital.** The noise-breakout shadow found its signals on 13 Oct but no strike
+  fits the risk cap at Rs 13,467.
+
+### 6. Other fixes from the review (all tested)
+
+- Naked position at the broker: the owner's 1 Oct rule is now implemented: two
+  position reads 2 s apart agree, no order working, then ONE risk-reducing order
+  for exactly that quantity, halt and alert.
+- A stock entry whose fill was not seen is now adopted under the software stop
+  (shorts too), as options already were.
+- A restart rebuilds the loss-streak pause, the careful-grade mode and the
+  per-playbook cap from the journal.
+- A laptop suspend is detected (CLOCK_BOOTTIME against CLOCK_MONOTONIC): quotes are
+  marked stale, the open bars dropped, history refreshed within a minute.
+- Cash-stock limit prices use the tick of the price actually sent.
+- Dashboard controls refuse a POST from another site's page (Origin check).
+- Dead code, three unused config files and duplicated atomic-write code removed.
 

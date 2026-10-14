@@ -209,6 +209,54 @@ def open_stock(e, side, px=500.0, risk=4.0, qty=50, target=0.0):
     return ok, e.book.snapshot()[0] if ok else None
 
 
+class _Unknown(PaperBroker):
+    """An entry whose status cannot be read; the broker's position book shows `held`."""
+    def __init__(self, held):
+        super().__init__(CostModel(slippage_ticks_per_leg=0.0))
+        self.held = held
+
+    def place_structure(self, ticket, lots):
+        return [dict(ticket.legs[0], filled=False, fill_price=0.0, broker_status="unknown")], ["unknown"]
+
+    def net_position(self, symbol):
+        return self.held
+
+
+for side, held, want in ((BEAR, -50, 50), (BULL, 50, 50), (BEAR, 50, 0), (BULL, -50, 0)):
+    e = engine()
+    e.L.adopt_unknown_entry = True
+    e.broker = _Unknown(held)
+    open_stock(e, side)
+    snap = e.book.snapshot()
+    got = snap[0].qty if snap else 0
+    check(f"stock entry status unknown, side {side:+d}, broker {held:+d}: "
+          + (f"adopted x{want} under the software stop" if want else "not adopted (wrong side)") + ", halted",
+          got == want and e.halted and (not snap or (snap[0].side == side and snap[0].detail.get("adopted"))),
+          f"got {got}, halted {e.halted}")
+
+
+# A restart rebuilds the loss-streak pause and the per-playbook cap from the journal.
+e = engine()
+e.L.max_consecutive_losses, e.L.loss_streak_pause_min = 3, 30.0
+from datetime import datetime as _dt, timedelta as _td
+_now = _dt.now().astimezone()
+_r = lambda tid, opt, net, mins_ago, pb="ob_fvg_retest": {
+    "trade_id": tid, "opt": opt, "underlying": "NIFTY", "net_inr": net, "playbooks": [pb],
+    "ts_ist": (_now - _td(minutes=mins_ago)).isoformat()}
+e._resume_discipline([_r(1, "CE", -100, 20), _r(2, "PE", -50, 15), _r(3, "PE", -20, 10), _r(3, "PE", -5, 9)])
+check("restart after 3 losing trades 9 min ago: paused ~21 more minutes, careful on",
+      e.careful and 19 * 60 < e.paused_until - _now.timestamp() <= 21 * 60 + 5,
+      f"{e.paused_until - _now.timestamp():.0f} s")
+check("restart: per-playbook cap counts trades, not rows (trade 3 has two rows)",
+      e.playbook_count.get(("NIFTY", "ob_fvg_retest", BEAR)) == 2
+      and e.playbook_count.get(("NIFTY", "ob_fvg_retest", BULL)) == 1, str(e.playbook_count))
+e = engine()
+e.L.max_consecutive_losses = 3
+e._resume_discipline([_r(1, "CE", -100, 20), _r(2, "PE", -50, 15), _r(3, "PE", +80, 10)])
+check("restart: a win after two losses leaves no streak, no pause",
+      e.loss_streak == 0 and not e.careful and e.paused_until == 0.0)
+
+
 e = engine()
 ok, pos = open_stock(e, BEAR)
 check("a short opens with a SELL and a margin of notional / leverage",

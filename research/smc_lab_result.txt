@@ -1,0 +1,64 @@
+sessions 254, split 2026-05-25, capital Rs 10,672.74, risk 8%
+BASELINE OB + LHM (OB before the 12 Oct retest window)     n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days {'LHM': 72, 'OB': 87}
+
+== breaker_retest: raw 154 priced 91 after live gates 5
+   breaker_retest trend only (no pace)                     n= 47 win= 43% IN  -2,364 OUT    +724 tot  -1,640 DD  6,367 0.19/s  16%days
+   breaker_retest no gates                                 n= 88 win= 40% IN  -5,216 OUT  -1,627 tot  -6,843 DD  9,103 0.35/s  28%days
+   breaker_retest ALONE                                    n=  5 win= 40% IN  -1,973 OUT    +404 tot  -1,569 DD  1,973 0.02/s   2%days
+     NIFTY                                                 n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     BANKNIFTY                                             n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     SENSEX                                                n=  5 win= 40% IN  -1,973 OUT    +404 tot  -1,569 DD  1,973 0.02/s   2%days
+   OB + LHM + breaker_retest                               n=160 win= 49% IN +25,299 OUT +21,148 tot +46,447 DD  3,649 0.63/s  50%days | dIN  -1,795 dOUT      -6 {'LHM': 72, 'OB': 85, 'breaker_retest': 3}
+   VERDICT breaker_retest: fail (alone + both halves: False; book better both halves: False)
+
+== ifvg_retest: raw 311 priced 175 after live gates 22
+   ifvg_retest trend only (no pace)                        n= 82 win= 28% IN -13,018 OUT  -3,960 tot -16,978 DD 18,519 0.32/s  26%days
+   ifvg_retest no gates                                    n=156 win= 31% IN -14,343 OUT -12,212 tot -26,555 DD 26,868 0.61/s  43%days
+   ifvg_retest ALONE                                       n= 22 win= 36% IN  -3,003 OUT    +360 tot  -2,644 DD  3,932 0.09/s   9%days
+     NIFTY                                                 n=  3 win= 33% IN    -241 OUT      +0 tot    -241 DD    857 0.01/s   1%days
+     BANKNIFTY                                             n=  2 win=  0% IN  -1,216 OUT      +0 tot  -1,216 DD  1,216 0.01/s   1%days
+     SENSEX                                                n= 17 win= 41% IN  -1,547 OUT    +360 tot  -1,187 DD  2,411 0.07/s   7%days
+   OB + LHM + ifvg_retest                                  n=172 win= 49% IN +27,036 OUT +20,176 tot +47,212 DD  3,649 0.68/s  52%days | dIN     -58 dOUT    -978 {'LHM': 72, 'OB': 85, 'ifvg_retest': 15}
+   VERDICT ifvg_retest: fail (alone + both halves: False; book better both halves: False)
+
+== silver_bullet: raw 197 priced 125 after live gates 9
+   silver_bullet trend only (no pace)                      n= 57 win= 46% IN  -3,435 OUT  -1,950 tot  -5,386 DD  8,485 0.22/s  20%days
+   silver_bullet no gates                                  n=112 win= 38% IN  -8,560 OUT  -9,835 tot -18,395 DD 22,044 0.44/s  37%days
+   silver_bullet ALONE                                     n=  9 win= 33% IN  -1,824 OUT      +0 tot  -1,824 DD  3,038 0.04/s   4%days
+     NIFTY                                                 n=  1 win=  0% IN     -70 OUT      +0 tot     -70 DD     70 0.00/s   0%days
+     BANKNIFTY                                             n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     SENSEX                                                n=  8 win= 38% IN  -1,755 OUT      +0 tot  -1,755 DD  3,038 0.03/s   3%days
+   OB + LHM + silver_bullet                                n=162 win= 50% IN +26,212 OUT +21,154 tot +47,366 DD  3,649 0.64/s  50%days | dIN    -882 dOUT      +0 {'LHM': 72, 'OB': 87, 'silver_bullet': 3}
+   VERDICT silver_bullet: fail (alone + both halves: False; book better both halves: False)
+
+== judas_sweep: raw 32 priced 22 after live gates 7
+   judas_sweep trend only (no pace)                        n=  2 win= 50% IN    +455 OUT    -683 tot    -229 DD    683 0.01/s   1%days
+   judas_sweep no gates                                    n= 10 win= 40% IN  -2,449 OUT    -573 tot  -3,023 DD  4,281 0.04/s   4%days
+   judas_sweep ALONE                                       n=  2 win= 50% IN    +455 OUT    -683 tot    -229 DD    683 0.01/s   1%days
+     NIFTY                                                 n=  1 win=  0% IN      +0 OUT    -683 tot    -683 DD    683 0.00/s   0%days
+     BANKNIFTY                                             n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     SENSEX                                                n=  1 win=100% IN    +455 OUT      +0 tot    +455 DD      0 0.00/s   0%days
+   OB + LHM + judas_sweep                                  n=160 win= 50% IN +26,819 OUT +20,471 tot +47,290 DD  3,649 0.63/s  50%days | dIN    -275 dOUT    -683 {'LHM': 72, 'OB': 86, 'judas_sweep': 2}
+   VERDICT judas_sweep: fail (alone + both halves: False; book better both halves: False)
+
+== ote_mss: raw 90 priced 62 after live gates 0
+   ote_mss trend only (no pace)                            n= 31 win= 42% IN  -1,470 OUT    -665 tot  -2,135 DD  3,321 0.12/s  12%days
+   ote_mss no gates                                        n= 62 win= 39% IN  -5,619 OUT  -3,411 tot  -9,030 DD  9,030 0.24/s  22%days
+   ote_mss ALONE                                           n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     NIFTY                                                 n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     BANKNIFTY                                             n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     SENSEX                                                n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+   OB + LHM + ote_mss                                      n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0 {'LHM': 72, 'OB': 87}
+   VERDICT ote_mss: fail (alone + both halves: False; book better both halves: False)
+
+== eqhl_sweep: raw 2489 priced 1483 after live gates 65
+   eqhl_sweep trend only (no pace)                         n=224 win= 43% IN -12,812 OUT  -3,036 tot -15,848 DD 25,637 0.88/s  58%days
+   eqhl_sweep no gates                                     n=426 win= 42% IN -21,089 OUT -17,891 tot -38,980 DD 45,946 1.68/s  81%days
+   eqhl_sweep ALONE                                        n= 33 win= 45% IN  -2,848 OUT    -454 tot  -3,302 DD  6,752 0.13/s  12%days
+     NIFTY                                                 n=  4 win= 50% IN    -350 OUT      +0 tot    -350 DD  1,404 0.02/s   2%days
+     BANKNIFTY                                             n=  0 win=  0% IN      +0 OUT      +0 tot      +0 DD      0 0.00/s   0%days
+     SENSEX                                                n= 29 win= 45% IN  -2,498 OUT    -454 tot  -2,952 DD  5,348 0.11/s  11%days
+   OB + LHM + eqhl_sweep                                   n=183 win= 51% IN +27,682 OUT +20,844 tot +48,527 DD  4,056 0.72/s  54%days | dIN    +588 dOUT    -310 {'LHM': 71, 'OB': 83, 'eqhl_sweep': 29}
+   VERDICT eqhl_sweep: fail (alone + both halves: False; book better both halves: False)
+
+PASSING: []

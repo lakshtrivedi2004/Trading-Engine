@@ -8,7 +8,6 @@ Per pass it gathers each expiry's grid into contiguous arrays and runs every
 scanner over the whole grid at once. Detection is O(strikes^2) inside numpy, not
 in Python, so a 25-strike chain is scanned end to end in well under a millisecond.
 """
-import statistics
 import threading
 import time
 from collections import deque

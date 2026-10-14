@@ -55,7 +55,7 @@ def work(args):
         v = evaluate(seg, spot, L, strike_step=STEP[name])
         if not v.tradable:
             continue
-        st = analyse(seg, strength=L.swing_strength, min_bars=L.min_structure_bars)
+        st = analyse(seg, strength=L.swing_strength, min_bars=L.min_structure_bars, limits=L)
         lead = v.setups[0] if v.setups else None
         inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
         if not inv:
@@ -119,7 +119,8 @@ def work(args):
                         R=(move - cost_pts / delta) / risk, net=net, why=why, held=j - i, atr=a,
                         prem_risk_inr=prem_risk * lot,
                         er=efficiency([r[4] for r in seg[-17:-1]]) * 15 ** 0.5,
-                        ar=atr_ratio(seg, period=L.atr_period, baseline_bars=L.atr_baseline_bars),
+                        ar=atr_ratio(seg, period=L.atr_period, baseline_bars=L.atr_baseline_bars,
+                                     no_gap=bool(getattr(L, "pace_no_gap", False))),
                         rev=v.reversal))
     return out
 EXP = {"NIFTY": 1, "SENSEX": 3}          # weekly expiry weekday (Tue, Thu)

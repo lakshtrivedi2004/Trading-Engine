@@ -120,9 +120,3 @@ class VolumeTracker:
         if prev is None or prev <= 0 or cumulative < prev:
             return 0.0
         return cumulative - prev
-
-    def reset(self, name=None):
-        if name is None:
-            self._last.clear()
-        else:
-            self._last.pop(name, None)

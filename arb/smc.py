@@ -85,6 +85,7 @@ class Structure:
     range_high: float = 0.0
     events: list = field(default_factory=list)   # [(bar_index, name, level)]
     bar_count: int = 0            # bars analysed, so "how long ago" is answerable
+    event_zones: dict = field(default_factory=dict)   # event bar -> the order block it made
 
     def last(self, *names, after=None):
         """The most recent structural event matching any of `names`, or None.
@@ -213,19 +214,34 @@ def _levels(candles, highs, lows, tol_pct=0.0008):
     return out
 
 
-def analyse(candles, strength=2, min_bars=25):
+def analyse(candles, strength=2, min_bars=25, limits=None):
     """Read market structure off an OHLC series.
 
     `candles` is [[iso, o, h, l, c, v], ...] oldest first - exactly what
-    CandleStore.get() returns.
+    CandleStore.get() returns. Two research flags on `limits` (13 Oct 2026
+    review, off by default so the tested behaviour is unchanged):
+      smc_consume_swings  a swing breaks once; later closes past the same
+                          level do not re-fire BOS/CHoCH (nor re-label a
+                          pullback candle as a fresh order block)
+      smc_today_only      swings, events, order blocks and gaps from today's
+                          bars only - the overnight gap is not a structure break
     """
     st = Structure()
     if not candles or len(candles) < min_bars:
         st.reason = f"only {len(candles)} bars, need {min_bars}"
         return st
     st.closes = [c[4] for c in candles]
+    consume = bool(getattr(limits, "smc_consume_swings", False))
+    off = 0
+    if getattr(limits, "smc_today_only", False):
+        day = candles[-1][0][:10]
+        off = next((k for k, c in enumerate(candles) if c[0][:10] == day), 0)
+        if len(candles) - off < min_bars:
+            st.reason = f"only {len(candles) - off} bars today, need {min_bars}"
+            return st
 
     highs, lows = _swings(candles, strength)
+    highs, lows = [k for k in highs if k >= off], [k for k in lows if k >= off]
     if len(highs) < 2 or len(lows) < 2:
         st.reason = "not enough swing points"
         return st
@@ -238,7 +254,7 @@ def analyse(candles, strength=2, min_bars=25):
     # a CHoCH flips the trend that later BOSes are measured against.
     trend = RANGE
     last_event, event_at, zones = "", -1, []
-    events = []
+    events, used = [], set()
     hi_i, lo_i = 0, 0
     for i in range(min(highs[0], lows[0]) + 1, len(candles)):
         close = candles[i][4]
@@ -249,28 +265,38 @@ def analyse(candles, strength=2, min_bars=25):
         prior_high = candles[highs[hi_i - 1]][2] if hi_i > 0 else None
         prior_low = candles[lows[lo_i - 1]][3] if lo_i > 0 else None
 
+        if consume:
+            if prior_high is not None and ("h", highs[hi_i - 1]) in used:
+                prior_high = None
+            if prior_low is not None and ("l", lows[lo_i - 1]) in used:
+                prior_low = None
+
         if prior_high is not None and close > prior_high:
             ev = "BOS_UP" if trend in (BULL, RANGE) else "CHOCH_UP"
             if ev != last_event or i - event_at > strength:
                 last_event, event_at, trend = ev, i, BULL
                 events.append((i, ev, prior_high))
+                used.add(("h", highs[hi_i - 1]))
                 ob = _order_block(candles, i, BULL)
-                if ob:
+                if ob and ob.at >= off:
                     zones.append(ob)
+                    st.event_zones[i] = ob
         elif prior_low is not None and close < prior_low:
             ev = "BOS_DOWN" if trend in (BEAR, RANGE) else "CHOCH_DOWN"
             if ev != last_event or i - event_at > strength:
                 last_event, event_at, trend = ev, i, BEAR
                 events.append((i, ev, prior_low))
+                used.add(("l", lows[lo_i - 1]))
                 ob = _order_block(candles, i, BEAR)
-                if ob:
+                if ob and ob.at >= off:
                     zones.append(ob)
+                    st.event_zones[i] = ob
 
     st.last_event, st.event_at = last_event, event_at
     st.events = events
     st.bar_count = len(candles)
     st.zones = _levels(candles, highs, lows) + zones[-6:]
-    st.fvgs = find_fvgs(candles)
+    st.fvgs = [g for g in find_fvgs(candles) if g.at - 1 >= off]
     st.sweep, st.sweep_level = liquidity_sweep(candles, strength=strength)
     st.range_low, st.range_high = dealing_range(candles)
 

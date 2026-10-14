@@ -202,7 +202,7 @@ def evaluate(ltf_candles, spot, L, strike_step=0.0):
     trend, htf = day_trend(ltf_candles, L)
     v.day_trend = trend
     ltf = analyse(ltf_candles, strength=L.swing_strength,
-                  min_bars=L.min_structure_bars)
+                  min_bars=L.min_structure_bars, limits=L)
 
     bias, src = _bias(trend, ltf, ltf_candles, spot, L)
     v.bias, v.bias_source = bias, src

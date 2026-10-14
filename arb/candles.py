@@ -21,6 +21,7 @@ except ImportError:                # pragma: no cover - Windows: per process onl
 
 from arb.instruments import IST, now_ist, parse_expiry
 from arb.volume import VolumeTracker
+from arb.fileio import write_json
 
 INTERVALS = {"1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
              "1h": "ONE_HOUR", "1d": "ONE_DAY"}
@@ -110,10 +111,7 @@ def _take_slot(api):
             if wait <= 0:
                 stamps.append(now)
                 try:
-                    tmp = f"{path}.{os.getpid()}.tmp"
-                    with open(tmp, "w") as fh:
-                        json.dump(stamps, fh)
-                    os.replace(tmp, path)
+                    write_json(path, stamps)
                 except OSError:
                     pass
                 return
@@ -248,11 +246,38 @@ class CandleStore:
         from datetime import datetime
         return datetime.fromtimestamp(start, IST).strftime("%Y-%m-%dT%H:%M:%S+05:30")
 
+    SUSPEND_GAP_SEC = 5.0
+
+    def _woke_from_suspend(self, st):
+        """True once after the machine slept. Ticks are stamped on the monotonic
+        clock, which stops in suspend, so after a lid-open quotes from before
+        the sleep read as fresh and the open live bar would span the whole gap
+        as one fake bar (13 Oct 2026 review). CLOCK_BOOTTIME keeps counting
+        through a sleep and CLOCK_MONOTONIC does not, so their gap grows by
+        exactly the time slept (Linux; elsewhere this never fires)."""
+        boot = getattr(time, "CLOCK_BOOTTIME", None)
+        if boot is None:
+            return False
+        slept = time.clock_gettime(boot) - time.monotonic()
+        last, self._slept = getattr(self, "_slept", None), slept
+        if last is None or slept - last < self.SUSPEND_GAP_SEC:
+            return False
+        recv = getattr(st, "recv_ns", None)
+        if recv is not None:
+            recv[:] = 0                        # every quote stale until it ticks again
+        self.live.clear()                      # no bar may span the sleep
+        self.fetched_at.clear()                # history again at the next refresh pass
+        self.log(f"[candles] the machine slept {slept - last:.0f} s: quotes marked stale, "
+                 f"open bars dropped, history refresh due")
+        return True
+
     def _sample_live(self):
         st = self._store
         if st is None:
             return
         now = time.time()
+        if self._woke_from_suspend(st):
+            return
         iso = self._bucket_iso(now)
         if hasattr(st, "ask") and (not self._premium or self._premium[-1][0] != iso):
             b, a = st.bid, st.ask
@@ -342,10 +367,7 @@ class CandleStore:
 
     def _save_cache(self, name, rows):
         try:
-            tmp = self._cache_path(name) + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(rows, fh)
-            os.replace(tmp, self._cache_path(name))
+            write_json(self._cache_path(name), rows)
         except Exception:
             pass
 
@@ -420,11 +442,11 @@ class CandleStore:
     def _run(self):
         while not self._stop.is_set():
             self.refresh_once()
-            # An index whose history was refused is tried again in a minute,
-            # not at the next 5-minute refresh; the ones already current are
-            # skipped by refresh_once, so this costs only the failed calls.
-            self._stop.wait(min(60.0, self.refresh_sec) if self._fetch_errors
-                            else self.refresh_sec)
+            # Looked at every minute: refresh_once skips what is still current at
+            # no cost, so a refused index is retried in a minute and history
+            # comes back within a minute of a suspend (the wait's clock stops
+            # while the machine sleeps; the wall-clock age it checks does not).
+            self._stop.wait(min(60.0, self.refresh_sec))
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="candles", daemon=True)

@@ -189,10 +189,6 @@ class Opportunity:
     def gross_inr(self):
         return self.gross_edge_points * self.qty
 
-    @property
-    def est_net_inr(self):
-        return (self.gross_edge_points - self.est_cost_points) * self.qty
-
 
 def _tradable(bid, ask, bidq, askq, age, max_age_ms, need_qty, min_depth_mult):
     """A quote is usable only if it is two-sided, uncrossed, fresh and deep enough."""
@@ -213,12 +209,6 @@ def _top(cand, net, top_k):
     if top_k and idx.size > top_k:
         idx = idx[np.argpartition(-net[idx], top_k - 1)[:top_k]]
     return idx
-
-
-def _pair_grid(n):
-    """Upper-triangular index grids for all i<j strike pairs."""
-    i, j = np.triu_indices(n, k=1)
-    return i, j
 
 
 # ─────────────────────────────────────────────────────────────────────────────

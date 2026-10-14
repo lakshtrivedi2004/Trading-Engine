@@ -19,6 +19,7 @@ from datetime import date, timedelta
 
 from arb import noise_breakout as nb
 from arb.candles import candle_data
+from arb.fileio import write_json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -150,11 +151,7 @@ class SigmaHistory:
                 "ranges": {k: [max(float(r[2]) for r in days[k]), min(float(r[3]) for r in days[k])]
                            for k in keys[-15:]}}
         try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            tmp = self._path(day, name) + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(dict(prof, sigma={str(k): v for k, v in sigma.items()}), fh)
-            os.replace(tmp, self._path(day, name))
+            write_json(self._path(day, name), dict(prof, sigma={str(k): v for k, v in sigma.items()}))
         except OSError as e:
             self.log(f"[shadow] noise_breakout {name}: sigma cache not written: {e}")
         prof["source"] = "history"

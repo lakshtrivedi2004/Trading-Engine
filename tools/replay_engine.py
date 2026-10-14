@@ -130,7 +130,8 @@ def yahoo_rows(sym):
 
 
 def load_bars(name):
-    rows = [r for r in json.load(open(os.path.join(ROOT, ".cache", "history", f"{name}.json")))
+    base = os.environ.get("HISTORY_DIR") or os.path.join(ROOT, ".cache", "history")
+    rows = [r for r in json.load(open(os.path.join(base, f"{name}.json")))
             if "09:15" <= r[0][11:16] <= "15:29"]
     last = rows[-1][0][:10] if rows else ""
     rows += [r for r in yahoo_rows(SPEC[name]["yahoo"]) if r[0][:10] > last]

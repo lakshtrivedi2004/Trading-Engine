@@ -375,6 +375,24 @@ def psych_reaction(candles, st, spot, trend, L, strike_step=0.0):
 
 # ── 5. break of structure, then retest of what caused it ────────────────────
 
+def _own_zone(candles, st, at, spot, trend):
+    """retest_own_zone (13 Oct 2026 review): the order block the cited break
+    itself made, else a gap inside that break's leg - never an unrelated older
+    zone - and only while no close has gone through its far edge."""
+    n, pad = len(candles), st._pad()
+    dead = lambda lo, hi, k0: any((trend == BULL and candles[j][4] < lo) or
+                                  (trend == BEAR and candles[j][4] > hi) for j in range(k0, n - 1))
+    ob = st.event_zones.get(at)
+    if ob is not None and ob.contains(spot, pad=pad) and not dead(ob.low, ob.high, at + 1):
+        return ob, None
+    start = ob.at if ob is not None else at - 12
+    for g in reversed(st.fvgs):
+        if g.side == trend and not g.mitigated and start <= g.at <= at and g.contains(spot) \
+                and not dead(g.low, g.high, at + 1):
+            return None, g
+    return None, None
+
+
 def ob_fvg_retest(candles, st, spot, trend, L, strike_step=0.0):
     """A BOS, then price comes back into the order block or gap that made it.
 
@@ -402,8 +420,11 @@ def ob_fvg_retest(candles, st, spot, trend, L, strike_step=0.0):
     if max_bars > 0 and not (min_bars <= bars_since_bos <= max_bars):
         return None
 
-    zone = st.active_zone(spot, trend)
-    gap = st.active_fvg(spot, trend)
+    if getattr(L, "retest_own_zone", False):
+        zone, gap = _own_zone(candles, st, bos[0], spot, trend)
+    else:
+        zone = st.active_zone(spot, trend)
+        gap = st.active_fvg(spot, trend)
     if zone is None and gap is None:
         return None
 
@@ -411,7 +432,8 @@ def ob_fvg_retest(candles, st, spot, trend, L, strike_step=0.0):
     kind = "order_block" if zone is not None else "fair_value_gap"
 
     # Pure SMC defense: price must not have breached the zone's boundary.
-    if (trend == BULL and spot < where.low) or (trend == BEAR and spot > where.high):
+    if bool(getattr(L, "retest_refuse_breached", True)) and (
+            (trend == BULL and spot < where.low) or (trend == BEAR and spot > where.high)):
         return None
 
     react = None
@@ -631,6 +653,364 @@ def vwap_pullback(candles, st, spot, trend, L, strike_step=0.0):
 # The registry. Adding a playbook means writing a function with this signature
 # and naming it here; nothing else in the system needs to change. Which of them
 # are live is a configuration decision, not a code one - see `enabled()`.
+# ── 8-13. ICT / SMC models from the Forex engine (13 Oct 2026) ──────────────
+# The owner asked for the SMC models of his Forex-Trading-Engine. The ones NSE
+# did not already have are below; each is registered but OFF until it passes
+# the year test (research/smc_lab.py, PAPERS.md section 22). No peer-reviewed
+# test of any of them exists; independent mechanical tests found none beat a
+# placebo (StatOasis 2025; FVG placebo study on TradingView). Osler (2005)
+# found prices CONTINUE through stop clusters, against the sweep-reversal read.
+
+def _held(candles, side):
+    """The completed bar's reaction in `side`'s favour, or None."""
+    if engulfing(candles) == side:
+        return "engulfing"
+    if rejection(candles) == side:
+        return "rejection_wick"
+    return None
+
+
+def _in_windows(m, spec):
+    """Is minute-of-day `m` inside any "HH:MM-HH:MM" window of a comma list?"""
+    for part in str(spec or "").split(","):
+        if "-" not in part:
+            continue
+        a, b = part.strip().split("-")
+        ha, ma = (int(x) for x in a.split(":"))
+        hb, mb = (int(x) for x in b.split(":"))
+        if ha * 60 + ma <= m < hb * 60 + mb:
+            return True
+    return False
+
+
+def _first_touch(candles, lo, hi, start, side):
+    """Is the completed bar the FIRST since `start` to trade back into [lo, hi]?"""
+    n = len(candles)
+    for j in range(start, n - 1):
+        if (side == BULL and candles[j][3] <= hi) or (side == BEAR and candles[j][2] >= lo):
+            return False
+    last = candles[-1]
+    return (last[3] <= hi) if side == BULL else (last[2] >= lo)
+
+
+def breaker_retest(candles, st, spot, trend, L, strike_step=0.0):
+    """An order block that FAILED, retested from the other side.
+
+    ICT's breaker: a bear order block (the last up candle before a down leg)
+    that price later closes straight through is no longer supply; the orders
+    that defended it were run. Price coming back to it from above is buying
+    where trapped shorts must cover. Steps: zone formed, closed through (with a
+    break of structure in the new direction), first retest, reaction.
+    """
+    window = int(getattr(L, "sequence_window_bars", 40))
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    if a <= 0:
+        return None
+    want = "bear_ob" if trend == BULL else "bull_ob"
+    n = len(candles)
+    for z in reversed(st.zones):
+        if z.kind != want:
+            continue
+        brk = None
+        for j in range(z.at + 1, n - 1):
+            c = candles[j][4]
+            if (trend == BULL and c > z.high) or (trend == BEAR and c < z.low):
+                brk = j
+                break
+        if brk is None or (n - 1 - brk) > window:
+            continue
+        ev = st.last("BOS_UP" if trend == BULL else "BOS_DOWN",
+                      "CHOCH_UP" if trend == BULL else "CHOCH_DOWN", after=brk - 1)
+        if ev is None or not _first_touch(candles, z.low, z.high, brk + 1, trend):
+            continue
+        if (trend == BULL and spot < z.low) or (trend == BEAR and spot > z.high):
+            return None
+        react = _held(candles, trend)
+        if react is None:
+            return None
+        pad = float(getattr(L, "zone_stop_pad_atr", 0.10)) * a
+        return Setup(
+            name="breaker_retest", side=trend,
+            steps=[("failed_order_block", f"{z.kind} {z.low:.1f}-{z.high:.1f} closed through"),
+                   ("break_of_structure", f"{ev[1]} at {ev[2]:.1f}"),
+                   (react, "first retest of the breaker held")],
+            invalidation=z.low - pad if trend == BULL else z.high + pad,
+            zone=(z.low, z.high), note="failed block flipped and defended")
+    return None
+
+
+def ifvg_retest(candles, st, spot, trend, L, strike_step=0.0):
+    """Inverse fair value gap: a gap closed THROUGH flips sides.
+
+    A bearish gap left by a down move is supply until a candle closes above
+    its top. After that ICT reads it as support: the first pullback into it
+    from above, defended by a reaction candle, is the entry.
+    """
+    from arb.smc import find_fvgs
+    window = int(getattr(L, "sequence_window_bars", 40))
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    if a <= 0:
+        return None
+    min_gap = float(getattr(L, "ifvg_min_gap_atr", 0.10)) * a
+    n = len(candles)
+    for g in reversed(find_fvgs(candles, lookback=90)):
+        if g.side != -trend or g.size < min_gap:
+            continue
+        inv = None
+        for j in range(g.at + 2, n - 1):
+            c = candles[j][4]
+            if (trend == BULL and c > g.high) or (trend == BEAR and c < g.low):
+                inv = j
+                break
+        if inv is None or (n - 1 - inv) > window:
+            continue
+        if not _first_touch(candles, g.low, g.high, inv + 1, trend):
+            continue
+        if (trend == BULL and spot < g.low) or (trend == BEAR and spot > g.high):
+            return None
+        react = _held(candles, trend)
+        if react is None:
+            return None
+        pad = float(getattr(L, "zone_stop_pad_atr", 0.10)) * a
+        return Setup(
+            name="ifvg_retest", side=trend,
+            steps=[("fair_value_gap", f"{'bear' if trend == BULL else 'bull'} gap "
+                    f"{g.low:.1f}-{g.high:.1f}"),
+                   ("inversion", f"closed through {n - 1 - inv} bars ago"),
+                   (react, "first retest of the inverted gap held")],
+            invalidation=g.low - pad if trend == BULL else g.high + pad,
+            zone=(g.low, g.high), note="gap inverted and defended")
+    return None
+
+
+def silver_bullet(candles, st, spot, trend, L, strike_step=0.0):
+    """ICT Silver Bullet: inside a fixed hour, the first displacement gap with
+    the bias, then the first retrace into it.
+
+    ICT's window is 10:00-11:00 New York. NSE has no New York session; the
+    nearest equivalents are the hour after the opening drive and the hour
+    before the close (`sb_windows`, IST).
+    """
+    from arb.smc import find_fvgs
+    m = _minutes_of(candles[-1])
+    spec = getattr(L, "sb_windows", "10:00-11:00,13:30-14:30")
+    if m is None or not _in_windows(m, spec):
+        return None
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    if a <= 0:
+        return None
+    day = candles[-1][0][:10]
+    min_gap = float(getattr(L, "sb_min_gap_atr", 0.15)) * a
+    n = len(candles)
+    for g in find_fvgs(candles, lookback=90):
+        row = candles[g.at]
+        gm = _minutes_of(row)
+        if g.side != trend or row[0][:10] != day or gm is None or g.size < min_gap:
+            continue
+        if not _in_windows(gm, spec) or g.at >= n - 2:
+            continue
+        # The window's FIRST qualifying gap only; a later one is a second idea.
+        dead = any((trend == BULL and candles[j][4] < g.low) or
+                   (trend == BEAR and candles[j][4] > g.high) for j in range(g.at + 2, n))
+        if dead or not _first_touch(candles, g.low, g.high, g.at + 2, trend):
+            return None
+        last = candles[-1]
+        if (trend == BULL and last[4] <= g.high) or (trend == BEAR and last[4] >= g.low):
+            return None
+        pad = float(getattr(L, "zone_stop_pad_atr", 0.10)) * a
+        lo = min(candles[k][3] for k in range(g.at - 1, g.at + 2))
+        hi = max(candles[k][2] for k in range(g.at - 1, g.at + 2))
+        return Setup(
+            name="silver_bullet", side=trend,
+            steps=[("killzone", f"window {spec}"),
+                   ("fair_value_gap", f"{g.low:.1f}-{g.high:.1f} displacement"),
+                   ("retrace", "first touch, closed back out the trend side")],
+            invalidation=lo - pad if trend == BULL else hi + pad,
+            zone=(g.low, g.high), note="first gap of the window, retraced")
+    return None
+
+
+def judas_sweep(candles, st, spot, trend, L, strike_step=0.0):
+    """Judas swing (Umar's model A on the NSE clock): the opening range is
+    run AGAINST the bias, reclaimed, and structure then breaks with the bias.
+
+    Asia range -> opening range (`judas_or_minutes`, 15). London sweep
+    window -> 09:30 to `judas_sweep_end`. Trade window ends `judas_last_entry`.
+    Cancelled when a later close goes beyond the sweep extreme.
+    """
+    minutes = int(getattr(L, "judas_or_minutes", 15))
+    orr = opening_range(candles, minutes=minutes, start="09:15")
+    if orr is None:
+        return None
+    lo, hi = orr
+    days = by_day(candles)
+    today = days[-1][1]
+    off = len(candles) - len(today)
+    now_m = _minutes_of(candles[-1]) or 0
+    hh, mm = (int(x) for x in str(getattr(L, "judas_last_entry", "11:30")).split(":"))
+    if now_m > hh * 60 + mm:
+        return None
+    se_h, se_m = (int(x) for x in str(getattr(L, "judas_sweep_end", "10:30")).split(":"))
+    or_end = 9 * 60 + 15 + minutes
+    sweep = None
+    for k, r in enumerate(today[:-1]):
+        t = _minutes_of(r) or 0
+        if t < or_end or t >= se_h * 60 + se_m:
+            continue
+        if trend == BULL and r[3] < lo <= r[4]:
+            sweep = (off + k, r[3]); break
+        if trend == BEAR and r[2] > hi >= r[4]:
+            sweep = (off + k, r[2]); break
+        # A close beyond the pool first is a breakout, not a Judas swing.
+        if (trend == BULL and r[4] < lo) or (trend == BEAR and r[4] > hi):
+            return None
+    if sweep is None:
+        return None
+    at, ext = sweep
+    n = len(candles)
+    if any((trend == BULL and candles[j][4] < ext) or (trend == BEAR and candles[j][4] > ext)
+           for j in range(at + 1, n)):
+        return None
+    fresh = int(getattr(L, "trigger_fresh_bars", 5) or 5)
+    ev = st.last("BOS_UP" if trend == BULL else "BOS_DOWN",
+                 "CHOCH_UP" if trend == BULL else "CHOCH_DOWN", after=at)
+    if ev is not None and (n - 1 - ev[0]) <= fresh:
+        conf = ("break_of_structure", f"{ev[1]} at {ev[2]:.1f}")
+    elif engulfing(candles) == trend:
+        conf = ("engulfing", "engulfing after the reclaim")
+    else:
+        return None
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    pad = float(getattr(L, "sweep_stop_pad_atr", 0.05)) * a
+    return Setup(
+        name="judas_sweep", side=trend,
+        steps=[("opening_range", f"{minutes}m {lo:.1f}-{hi:.1f}"),
+               ("liquidity_sweep", f"{'low' if trend == BULL else 'high'} run to {ext:.1f}, reclaimed"),
+               conf],
+        invalidation=ext - pad if trend == BULL else ext + pad,
+        note="false move against the bias, then the real one")
+
+
+def ote_mss(candles, st, spot, trend, L, strike_step=0.0):
+    """ICT 2022 model: sweep -> market-structure shift with displacement ->
+    retrace into the optimal trade entry (0.62-0.79 of the displacement leg).
+
+    The sweep is the leg's origin taking out the swing before it; the shift is
+    a BOS/CHoCH with a bar of body >= `ote_displacement_atr` x ATR in the leg;
+    the entry is the first bar to trade into the OTE band and close back out
+    of its deep edge, with a reaction. The stop is beyond the leg's origin.
+    """
+    window = int(getattr(L, "ote_window_bars", 30))
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    if a <= 0:
+        return None
+    ev = st.last("BOS_UP" if trend == BULL else "BOS_DOWN",
+                 "CHOCH_UP" if trend == BULL else "CHOCH_DOWN")
+    n = len(candles)
+    if ev is None or (n - 1 - ev[0]) > window:
+        return None
+    e = ev[0]
+    lo_k = max(0, e - 20)
+    seg = range(lo_k, e + 1)
+    o_i = (min(seg, key=lambda k: candles[k][3]) if trend == BULL
+           else max(seg, key=lambda k: candles[k][2]))
+    origin = candles[o_i][3] if trend == BULL else candles[o_i][2]
+    prior = range(max(0, o_i - 30), max(0, o_i - 2))
+    if not prior:
+        return None
+    if trend == BULL and not origin < min(candles[k][3] for k in prior):
+        return None
+    if trend == BEAR and not origin > max(candles[k][2] for k in prior):
+        return None
+    disp = float(getattr(L, "ote_displacement_atr", 0.8)) * a
+    if not any(abs(candles[k][4] - candles[k][1]) >= disp and
+               (candles[k][4] - candles[k][1]) * trend > 0 for k in range(o_i, e + 1)):
+        return None
+    ext_seg = range(o_i, n - 1)
+    x_i = (max(ext_seg, key=lambda k: candles[k][2]) if trend == BULL
+           else min(ext_seg, key=lambda k: candles[k][3]))
+    extreme = candles[x_i][2] if trend == BULL else candles[x_i][3]
+    leg = abs(extreme - origin)
+    if leg < float(getattr(L, "ote_min_leg_atr", 2.0)) * a or x_i >= n - 1:
+        return None
+    f1, f2 = (float(x) for x in getattr(L, "ote_band", (0.62, 0.79)))
+    near = extreme - trend * f1 * leg
+    deep = extreme - trend * f2 * leg
+    band = (min(near, deep), max(near, deep))
+    if not _first_touch(candles, band[0], band[1], x_i + 1, trend):
+        return None
+    if (trend == BULL and candles[-1][4] < deep) or (trend == BEAR and candles[-1][4] > deep):
+        return None
+    react = _held(candles, trend)
+    if react is None:
+        return None
+    pad = float(getattr(L, "zone_stop_pad_atr", 0.10)) * a
+    return Setup(
+        name="ote_mss", side=trend,
+        steps=[("liquidity_sweep", f"leg origin {origin:.1f} took the prior swing"),
+               ("break_of_structure", f"{ev[1]} at {ev[2]:.1f} with displacement"),
+               ("ote", f"{band[0]:.1f}-{band[1]:.1f} ({f1:g}-{f2:g})"),
+               (react, "defended in the OTE band")],
+        invalidation=origin - pad if trend == BULL else origin + pad,
+        zone=band, note="sweep, shift, optimal-entry retrace")
+
+
+def eqhl_sweep(candles, st, spot, trend, L, strike_step=0.0):
+    """Equal lows (highs) are a pool of stops: two swing points within
+    `eq_tol_atr` x ATR. A wick through both that closes back inside, then a
+    break of structure (or an engulfing bar) with the bias."""
+    a = atr(candles, period=int(getattr(L, "atr_period", 20)))
+    if a <= 0:
+        return None
+    n = len(candles)
+    highs, lows = _swings(candles[:-1], int(getattr(L, "swing_strength", 2)))
+    pts = lows if trend == BULL else highs
+    pts = [k for k in pts if k >= n - 90]
+    tol = float(getattr(L, "eq_tol_atr", 0.10)) * a
+    pool = None
+    for i2 in reversed(pts):
+        for i1 in reversed([k for k in pts if k <= i2 - 3]):
+            p1 = candles[i1][3] if trend == BULL else candles[i1][2]
+            p2 = candles[i2][3] if trend == BULL else candles[i2][2]
+            if abs(p1 - p2) <= tol:
+                pool = (i2, min(p1, p2) if trend == BULL else max(p1, p2))
+                break
+        if pool:
+            break
+    if pool is None:
+        return None
+    after, level = pool
+    within = int(getattr(L, "sweep_lookback_bars", 8))
+    sweep = None
+    for j in range(max(after + 1, n - 1 - within), n):
+        h, l, c = candles[j][2], candles[j][3], candles[j][4]
+        if trend == BULL and l < level <= c:
+            sweep = (j, l)
+        elif trend == BEAR and h > level >= c:
+            sweep = (j, h)
+    if sweep is None:
+        return None
+    at, ext = sweep
+    if any((trend == BULL and candles[j][4] < ext) or (trend == BEAR and candles[j][4] > ext)
+           for j in range(at + 1, n)):
+        return None
+    ev = st.last("BOS_UP" if trend == BULL else "BOS_DOWN",
+                 "CHOCH_UP" if trend == BULL else "CHOCH_DOWN", after=at - 1)
+    if ev is not None and (n - 1 - ev[0]) <= int(getattr(L, "trigger_fresh_bars", 5) or 5):
+        conf = ("break_of_structure", f"{ev[1]} at {ev[2]:.1f}")
+    elif engulfing(candles) == trend:
+        conf = ("engulfing", "engulfing on the reclaim")
+    else:
+        return None
+    pad = float(getattr(L, "sweep_stop_pad_atr", 0.05)) * a
+    return Setup(
+        name="eqhl_sweep", side=trend,
+        steps=[("equal_levels", f"{'lows' if trend == BULL else 'highs'} at {level:.1f}"),
+               ("liquidity_sweep", f"run to {ext:.1f}, reclaimed"), conf],
+        invalidation=ext - pad if trend == BULL else ext + pad,
+        note="equal-level pool run, then structure agreed")
+
+
 PLAYBOOKS = {
     "choch_bos": choch_bos,
     "sweep_bos": sweep_bos,
@@ -639,6 +1019,12 @@ PLAYBOOKS = {
     "ob_fvg_retest": ob_fvg_retest,
     "ib_breakout": ib_breakout,
     "vwap_pullback": vwap_pullback,
+    "breaker_retest": breaker_retest,
+    "ifvg_retest": ifvg_retest,
+    "silver_bullet": silver_bullet,
+    "judas_sweep": judas_sweep,
+    "ote_mss": ote_mss,
+    "eqhl_sweep": eqhl_sweep,
 }
 
 

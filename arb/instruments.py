@@ -5,6 +5,8 @@ import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from arb.fileio import write_json
+
 IST = timezone(timedelta(hours=5, minutes=30))
 SCRIP_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
@@ -46,10 +48,7 @@ def load_scrip_master(max_age_hours=12, force=False, tries=3, retry_sec=10.0, st
                 data = json.loads(resp.read().decode("utf-8"))
             if not isinstance(data, list) or not data:
                 raise ValueError("empty or malformed scrip master")
-            tmp = path + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(data, fh)
-            os.replace(tmp, path)
+            write_json(path, data)
             return data, "downloaded"
         except Exception as e:                  # network, timeout, bad JSON
             err = e
