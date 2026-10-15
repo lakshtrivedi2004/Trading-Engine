@@ -1,0 +1,201 @@
+module: M08
+title: Currency and Commodity Futures
+summary: Currency history, forex market, pairs/quotes/pips, RBI reference rate and cross rates, macro drivers (trade deficit, rates, inflation, GDP, central bank stance), Brexit, carry trade and interest rate parity, USDINR/EURINR/GBPINR/JPYINR futures & options, calendar spreads, correlation, seasonality test, TA on currencies; MCX commodities - gold (London fix, import parity, drivers), silver, crude oil (2014-16 crash, value chain, WTI vs Brent, inventories, USD link, mini-big arbitrage), copper, aluminium, lead, nickel, agri (monsoons, cardamom, mentha), natural gas, Sumitomo and Amaranth lessons, commodity options (Black-76, CTM, devolvement). (Interest rate futures were announced but not covered.)
+global_caveat: "Contract specs, lot sizes, margins and trading hours are from 2016-17 and change frequently (e.g. USDINR lot size, MCX contract variants, option expiries). Verify current exchange specs."
+nodes:
+  - id: currency_basics
+    type: Concept
+    name: Currency Market Basics (Forex)
+    aliases: [Forex, FX]
+    chapter: 1
+    summary: Currencies evolved from barter -> metal -> gold standard -> Bretton Woods (USD pegged to gold) -> floating market rates; forex trades ~$5.4T/day (2013 BIS), 24h x 6 days following the sun; participants include central banks, corporates (hedging), banks, travellers, traders.
+    facts: [Most active window when US, UK, Japan and Australia overlap; India's time zone overlaps Asia and Europe.]
+    links: [{to: currency_pair, rel: RELATED_TO}]
+
+  - id: currency_pair
+    type: Concept
+    name: Currency Pairs, Quotes and Pips
+    aliases: [Base currency, Quote currency, Pip, Cable]
+    chapter: [1, 2, 4]
+    summary: Quoted as BASE/QUOTE = units of quote per 1 base; buying the pair = long base, short quote (dual view). Two-way quote bid/ask (e.g. EUR/USD 1.1269/70); a pip is the minimum move (USDINR 0.0025).
+    formula:
+      pnl: "lot_size * lots * points_moved"
+      pnl_per_tick: "(lot_size / quotation_unit) * tick_size"
+    facts:
+      - Pair up = base strengthens/quote weakens.
+      - GBP/USD is nicknamed 'Cable'.
+    links: [{to: currency_futures_india, rel: RELATED_TO}]
+
+  - id: rbi_reference_rate
+    type: Process
+    name: RBI Reference Rate and Cross Rates
+    chapter: 2
+    summary: RBI polls randomly selected contributing banks for USDINR two-way quotes daily (11:30-12:30) and averages them; EURINR/GBPINR/JPYINR are derived by crossing through USD. Currency futures settle on the reference rate.
+    formula: {eurinr_ask: "usdinr_ask * eurusd_ask"}
+    example: "USDINR ask 67.0740 x EURUSD ask 1.1140 = EURINR 74.72."
+    caveats: [Reference rate is now published by FBIL, not RBI - verify.]
+    links: [{to: currency_futures_india, rel: RELATED_TO}]
+
+  - id: currency_drivers
+    type: Concept
+    name: Fundamental Drivers of Currencies
+    aliases: [Hawkish, Dovish, Trade deficit, Current account deficit]
+    chapter: [2, 3]
+    summary: Pair moves on the dominant of two economies' factors - exports strengthen domestic currency, imports weaken it; narrowing trade deficit is positive; higher interest rates attract capital (carry) and strengthen currency; hawkish stance strengthens, dovish weakens; high inflation -> expected hawkishness -> stronger currency (per source); higher GDP growth -> stronger currency.
+    facts:
+      - Major events (Brexit Jun 2016 - GBP -8.6%, 31-yr low) create extreme moves; uncertainty is what markets hate.
+      - "'When in confusion, do nothing' is itself a good trade."
+      - FII inflows into Indian equities strengthen INR - USDINR and Nifty are inversely correlated (~-0.12, 2015).
+    caveats: [Simplified textbook causality; relationships are unstable.]
+    links: [{to: interest_rates, rel: USES}, {to: inflation, rel: USES}, {to: interest_rate_parity, rel: RELATED_TO}, {to: monetary_policy, rel: RELATED_TO}]
+
+  - id: interest_rate_parity
+    type: Formula
+    name: Interest Rate Parity, Forward Premia and the 'Fairy' Carry Trade
+    chapter: 3
+    summary: Borrowing in a low-rate currency to invest in a high-rate one (carry trade) is neutralised by the forward rate; the higher-yielding currency trades at a forward discount.
+    formula:
+      forward: "S * (1 + r_quote * N) / (1 + r_base * N)"
+      approx: "S * (1 + (r_quote - r_base))"
+    example: "USDINR 67, INR 7%, USD 0.5% -> 1-yr forward ~71.33."
+    links: [{to: futures_pricing, rel: RELATED_TO}, {to: currency_drivers, rel: RELATED_TO}]
+
+  - id: currency_futures_india
+    type: Contract
+    name: Indian Currency Derivatives (USDINR, EURINR, GBPINR, JPYINR)
+    chapter: [4, 5, 6]
+    summary: NSE/BSE currency futures quoted to 4 decimals, tick 0.0025; lot $1000 / EUR1000 / GBP1000 / JPY100000 (JPY quoted per 100 yen); margins ~2-4% (JPY highest); expiry 2 working days before month's last business day, trading till 12:30 on expiry; cash settled in INR at reference rate; USDINR options European, premium in INR, strikes at 0.25 intervals, 3 monthly expiries.
+    facts:
+      - Currencies move in tight ranges, hence high leverage.
+      - Liquidity preference - USDINR futures > USDINR ATM options > GBPINR > EURINR > JPYINR futures.
+      - USDINR volatility far lower than Nifty (2015 annualised ~4.9% vs ~15.7%); daily SD 0.311% (2015).
+      - Retail cannot access USDINR spot, so spot-futures arbitrage is unavailable -> trade calendar spreads (exchange spread contracts exist).
+    example: "Short 10 lots USDINR 67.69 on 15m bearish marubozu, exit 67.60 -> 0.09 x 1000 x 10 = Rs 900; P&L per pip Rs 2.5/lot."
+    caveats: [Lot sizes, cross-currency pairs (EURUSD etc.) and hours have changed since.]
+    links: [{to: currency_pair, rel: USES}, {to: calendar_spread, rel: RELATED_TO}, {to: rbi_reference_rate, rel: USES}]
+
+  - id: futures_bull_bear_spread
+    type: Strategy
+    name: Futures Bull / Bear Calendar Spread (currency)
+    chapter: 5
+    summary: Futures bull spread - long near, short far; bear spread - short near, long far; trade when the inter-month spread deviates from its normal level and exit on convergence; backtest the 'normal' spread first; use exchange spread contracts to reduce leg risk.
+    example: "USDINR Jul 67.3075 / Aug 67.6900 spread 0.3825 vs believed normal 0.20 -> long Jul, short Aug, exit at <= 0.20."
+    links: [{to: calendar_spread, rel: VARIANT_OF}]
+
+  - id: correlation
+    type: Formula
+    name: Correlation
+    chapter: [5, 9]
+    summary: -1..+1 measure of co-movement of two series; compute on returns (stationary) not prices (trending); says direction tendency, not magnitude.
+    formula: {corr: "CORREL(returns_a, returns_b)"}
+    example: "Nifty vs USDINR -0.12 (2015); Gold vs Silver intraday 0.7, EOD ~0.8."
+    links: [{to: pair_trading, rel: RELATED_TO}]
+
+  - id: seasonality_test
+    type: Model
+    name: Seasonality Test (Holt-Winters) on USDINR
+    chapter: 6
+    summary: Comparing Holt-Winters models with vs without seasonal component (chi-square on errors) found no weekly or monthly seasonality in USDINR - it behaves like a random walk; treat 'it always falls in December' claims as noise.
+    bot_use: Validate any calendar/seasonal edge statistically before trading it.
+    links: [{to: backtesting, rel: RELATED_TO}]
+
+  - id: ta_on_currencies_commodities
+    type: Rule
+    name: TA Applies Equally to Currencies and Commodities
+    chapter: [6, 8, 9, 13, 14]
+    summary: Fundamental analysis of currencies/commodities is complex (two economies, global supply-demand), so price action/TA is the practical approach for short-term (2-3 day) trades; same patterns (piercing, marubozu, S&R, EMAs) apply.
+    example: "Gold - long-term view from 2-yr chart (primary trend up, double bottom 2015); short-term entry above resistance 30956 (also 9/21 EMA), target 31418, SL 30700, RRR 1.8."
+    links: [{to: technical_analysis, rel: USES}]
+
+  - id: mcx_commodity_futures
+    type: Contract
+    name: MCX Commodity Futures (general rules)
+    aliases: [MCX, NCDEX]
+    chapter: [7, 9, 12, 13, 14, 15, 16]
+    summary: MCX (metals, energy, some agri) and NCDEX (agri); prices include import duties/taxes; most contracts physically deliverable - intent to deliver must be given before tender period (brokers often force exit before); each contract maps to a designated spot delivery centre; trade the current/near month for liquidity; agri traded till 5 PM, no MIS for agri.
+    formula: {contract_value: "price * lot_size / quotation_unit", pnl_per_tick: "(lot_size / quotation_unit) * tick_size"}
+    facts:
+      - "Gold (1 kg, quote per 10 g, tick Rs1 -> Rs100/tick, expiry 5th, bi-monthly), Gold Mini (100 g, Rs10/tick), Guinea, Petal (illiquid) - margins ~4-5%."
+      - "Silver (30 kg, quote per kg, Rs30/tick, compulsory delivery), Silver Mini/Micro (cash-settle option) - margin ~5-6%."
+      - "Crude oil (100 bbl, quote per bbl, Rs100/tick, expiry ~19th, 6 months listed, margin ~9% NRML / 4.5% MIS); Crude Mini (10 bbl, Rs10/tick); MCX crude tracks Brent (per source)."
+      - "Copper (1 MT, quote per kg, tick 0.05 -> Rs50, ~7.8%); Aluminium (5 MT, Rs250/tick, ~5.6%) and Mini (1 MT); Lead (5 MT, Rs250/tick, ~11.7%) and Mini; Nickel (250 kg, tick 0.10 -> Rs25, ~10%) and Mini (100 kg); base metals expire last day of month."
+      - "Cardamom (100 kg, Rs10/tick, expiry 15th, ~10.5%); Mentha oil (360 kg, Rs36/tick, ~8.5%) - most liquid agri on MCX."
+      - "Natural gas (1250 mmBtu, tick 0.10 -> Rs125, expiry 25th, ~15% NRML) - mirrors NYMEX."
+    caveats: [Specs as of 2016-17; MCX crude now references WTI-linked pricing and many specs changed - verify.]
+    links: [{to: futures_contract, rel: IS_A}, {to: ta_on_currencies_commodities, rel: RELATED_TO}]
+
+  - id: gold_drivers
+    type: Concept
+    name: Gold - Pricing and Drivers
+    aliases: [London fix, Bullion]
+    chapter: [7, 8]
+    summary: International price set by London AM/PM fix (banks only); Indian price = international + CIF + customs duty + cess + bank costs, so MCX vs CME gold differences are not arbitrage. Gold is a safe haven - rises on uncertainty (e.g. Brexit), inversely related to the US dollar (not always), long-run ~8% CAGR in USD (1970-2016).
+    formula: {grams_per_troy_oz: "31.1035", inr_per_10g_naive: "usd_per_oz / 3.11035 * usdinr (+ duties)"}
+    links: [{to: currency_drivers, rel: RELATED_TO}, {to: silver, rel: RELATED_TO}]
+
+  - id: silver
+    type: Concept
+    name: Silver
+    chapter: 9
+    summary: Precious + industrial metal (demand ~1170 mn oz, supply ~1040 mn oz - slight deficit); 'bullion twin' of gold (corr ~0.7 intraday, ~0.8 EOD) - candidate for gold-silver pair trading; weak correlation with crude.
+    links: [{to: gold_drivers, rel: RELATED_TO}, {to: pair_trading, rel: RELATED_TO}]
+
+  - id: crude_oil
+    type: Concept
+    name: Crude Oil - Drivers and Ecosystem
+    aliases: [Brent, WTI, OPEC]
+    chapter: [10, 11, 12]
+    summary: 2014-16 crash ($110 -> $28) driven by US shale supply, OPEC failing to cut, China slowdown, and heavy shorts; oil-producer breakevens (Russia needs ~$105) and fiscal stress. Upstream (ONGC, Cairn, RIL, Oil India) benefits from high oil; downstream OMCs (BPCL, HPCL, IOC) benefit from low oil; midstream wants stability.
+    facts:
+      - WTI (API 39.6, sulphur 0.26%) is lighter/sweeter than Brent (API ~38, 0.37%); Brent is the global benchmark.
+      - Weekly US EIA inventory - rising inventory bearish for oil/upstream; falling inventory bullish.
+      - Oil and the US dollar index are generally inversely related (not always).
+      - For India, low oil eases subsidy, fiscal deficit and inflation but can hurt exports to oil economies.
+    bot_use: Cross-asset signals - crude moves for OMC vs upstream stock pairs; EIA release event risk.
+    links: [{to: crude_arbitrage, rel: RELATED_TO}, {to: natural_gas, rel: RELATED_TO}, {to: inflation, rel: AFFECTS}]
+
+  - id: crude_arbitrage
+    type: Strategy
+    name: Crude Big vs Mini Arbitrage
+    chapter: 12
+    summary: Same underlying, different lot sizes - if prices diverge, buy the cheaper and sell the dearer in equal notional (10 minis vs 1 big) to lock the spread until convergence.
+    example: "Crude 3221 vs Mini 3217 -> short 1 big, long 10 minis -> +4 pts regardless of convergence level."
+    links: [{to: arbitrage, rel: IS_A}]
+
+  - id: base_metals
+    type: Concept
+    name: Base Metals (Copper, Aluminium, Lead, Nickel)
+    chapter: [13, 14]
+    summary: Copper - 3rd most consumed metal, global-growth sensitive (China+Japan ~half of demand); aluminium - abundant, power-intensive (17.4 MWh/t), tracks LME; lead - stable supply-demand, range-bound, batteries; nickel - ~65% to stainless steel, oversupplied. Trade price action, not fundamentals, for short horizons.
+    links: [{to: mcx_commodity_futures, rel: RELATED_TO}]
+
+  - id: agri_commodities
+    type: Concept
+    name: Agri Commodities and Monsoons
+    aliases: [Kharif, Rabi]
+    chapter: 15
+    summary: 2/3 of Indian arable land is rain-fed; SW monsoon (Jun-Sep) -> Kharif crops (rice, pulses, cotton, cardamom); NE monsoon (Dec-Mar) -> Rabi crops (wheat, mustard). Track monsoon forecasts and sowing data before trading agri - author lost his account long pepper ahead of a bumper monsoon.
+    links: [{to: mcx_commodity_futures, rel: RELATED_TO}]
+
+  - id: natural_gas
+    type: Concept
+    name: Natural Gas
+    chapter: 16
+    summary: Methane-based fuel (power, heating, fertiliser); MCX contract mirrors NYMEX; drivers - US inventory data (up = bearish), harsh US winters and hurricanes (bullish), crude oil (historically correlated).
+    links: [{to: crude_oil, rel: RELATED_TO}]
+
+  - id: commodity_risk_lessons
+    type: Rule
+    name: Commodity Blow-ups (Sumitomo copper, Amaranth natural gas)
+    chapter: [13, 16]
+    summary: Sumitomo's Hamanaka cornered ~5% of world copper with leveraged LME longs; Chinese supply crashed prices -> ~$5bn loss (1995/96). Amaranth's Brian Hunter took leveraged nat-gas bets on weather, doubled down at 8:1 leverage after a 20% fall -> ~$6bn loss (2006). Lesson - risk management sits above all; never double down on leveraged losers.
+    links: [{to: risk_management, rel: RELATED_TO}, {to: averaging_down, rel: CONTRADICTS}]
+
+  - id: commodity_options
+    type: Contract
+    name: Commodity Options (options on futures)
+    aliases: [Black 76, CTM, Devolvement]
+    chapter: 17
+    summary: Underlying is the commodity futures contract; price with Black-76 (not Black-Scholes); European; on expiry ITM options devolve into futures at the strike. CTM = 2 strikes above/below ATM (by daily settlement price) - need explicit instruction to exercise else worthless; other ITM auto-exercise unless contrary instruction; devolvement margin collected in the days before expiry.
+    formula: {black76_call: "e^{-rT} [F N(d1) - K N(d2)], d1 = (ln(F/K) + sigma^2 T/2)/(sigma sqrt T)"}
+    links: [{to: black_scholes, rel: VARIANT_OF}, {to: mcx_commodity_futures, rel: RELATED_TO}]

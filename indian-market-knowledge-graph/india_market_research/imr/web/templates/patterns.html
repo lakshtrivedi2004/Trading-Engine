@@ -1,0 +1,89 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}Pattern lab{% endblock %}{% block heading %}Pattern lab{% endblock %}
+{% block content %}
+<p>Research-backed rules are tested on older data (<b>in-sample</b>) and then checked on newer data they have never seen
+(<b>out-of-sample</b>). Signals use only information available at day t's close and are applied to day t+1; every rule
+passes an automatic look-ahead check first. Costs are deducted.</p>
+<form class="bar" method="post" action="{{ url_for('patterns', mode=mode) }}">
+  <label>Cost per buy or sell (basis points)<input type="number" name="cost_bp" min="0" max="100" step="0.5" value="{{ '%.1f'|format(form.cost_bp) }}"></label>
+  <label>In-sample share<input type="number" name="train" min="0.5" max="0.85" step="0.05" value="{{ '%.2f'|format(form.train) }}"></label>
+  <label>Gap between periods (sessions)<input type="number" name="gap" min="1" max="20" value="{{ form.gap }}"></label>
+  <label>Walk-forward<span><input type="checkbox" name="wf" {% if form.wf %}checked{% endif %}> re-choose parameters each year on past data only</span></label>
+  <button>Run tests</button>
+</form>
+<p class="note">1 bp = 0.01%. Include brokerage, STT, exchange charges and slippage. Every run is recorded: changing a
+setting and re-running is another test.</p>
+
+{% if not lab %}
+<div class="warnbox">Choose settings and press <b>Run tests</b>.</div>
+{% elif lab.res|length == 0 %}
+<div class="errbox">No tests could be run.</div>
+{% else %}
+<div class="cards">
+  <div class="card"><div class="label">Tests in this run</div><div class="value">{{ lab.res|length }}</div></div>
+  <div class="card"><div class="label">Independent (near-duplicates merged)</div><div class="value">{{ n_fam }}</div></div>
+  <div class="card"><div class="label">Tests run on this database, all time</div><div class="value">{{ lab.total }}</div></div>
+</div>
+<p class="note">With {{ n_fam }} independent tests, about {{ '%.1f'|format(lucky) }} would show |t| ≥ 2 in-sample by pure
+chance. Only out-of-sample survival counts.</p>
+<p>{% for v, k in counts.items() %}<span class="{{ v|vclass }}">{{ v }}</span>: {{ k }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+
+<form class="bar" method="get">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  <label>Indices<select name="index" multiple size="{{ all_idx|length }}">{% for a in all_idx %}<option {% if a in sel %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <button class="secondary">Filter</button>
+</form>
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th class="l">Rule</th><th>In-sample effect</th><th>t in</th>
+<th>n in</th><th>Out-of-sample effect</th><th>t out</th><th>n out</th><th class="l">Verdict</th><th class="l">Note</th></tr></thead><tbody>
+{% for _, r in show.iterrows() %}<tr><td class="l">{{ r['index'] }}</td><td class="l">{{ r['rule'] }}</td>
+<td>{% if r['kind'] == 'timing' %}{{ r['effect_in']|pct(1) }}/yr{% else %}{{ r['effect_in']|pct(3) }}/day{% endif %}</td>
+<td>{{ '%+.1f'|format(r['t_in']) }}</td><td>{{ r['n_in'] }}</td>
+<td>{% if r['kind'] == 'timing' %}{{ r['effect_out']|pct(1) }}/yr{% else %}{{ r['effect_out']|pct(3) }}/day{% endif %}</td>
+<td>{{ r['t_out']|num(1) }}</td><td>{{ r['n_out'] }}</td><td class="l {{ r['verdict']|vclass }}">{{ r['verdict'] }}</td>
+<td class="l">{{ r.get('warning') if r.get('warning') is string else '' }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="note">Effect: timing rules = extra return per year versus simply holding the index (after costs); other
+patterns = average return on those days minus all other days. n = days (or cases) used.</p>
+
+{% set timing = show[show['kind'] == 'timing'] %}
+{% if timing|length %}
+<details><summary>Timing rules: risk comparison (out-of-sample)</summary>
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th class="l">Rule</th><th>Sharpe rule vs hold</th>
+<th>Worst fall rule vs hold</th><th>Invested</th><th>Trades/yr</th><th class="l">Risk comparison</th></tr></thead><tbody>
+{% for _, r in timing.iterrows() %}<tr><td class="l">{{ r['index'] }}</td><td class="l">{{ r['rule'] }}</td>
+<td>{{ r['sharpe_out']|num }} vs {{ r['bh_sharpe_out']|num }}</td><td>{{ r['maxdd_out']|pct(0) }} vs {{ r['bh_maxdd_out']|pct(0) }}</td>
+<td>{{ r['invested_out']|pct(0, False) }}</td><td>{{ r['trades_per_year_out']|num(1) }}</td><td class="l">{{ r['risk_comparison'] }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="note">A rule can lower drawdowns without beating buy-and-hold; that is a risk preference, not evidence of an edge.</p>
+</details>
+{% endif %}
+
+<h2>Near-duplicates merged</h2>
+<div class="tablewrap"><table><thead><tr><th class="l">Family</th><th class="l">Rule</th><th class="l">Indices</th>
+<th class="l">Best verdict in family</th><th class="l">All agree</th><th>t out range</th></tr></thead><tbody>
+{% for r in families.itertuples() %}<tr><td class="l">{{ r.family }}</td><td class="l">{{ r.rule }}</td><td class="l">{{ r.indices }}</td>
+<td class="l {{ r.best_verdict|vclass }}">{{ r.best_verdict }}</td><td class="l">{{ 'yes' if r.all_agree else 'no' }}</td>
+<td>{{ r.t_out_range }}</td></tr>{% endfor %}</tbody></table></div>
+
+<h2>What the verdicts mean</h2>
+<ul>{% for v in ['Strong: holds out-of-sample', 'Moderate: holds, but weakly', 'Faded: did not hold out-of-sample', 'No reliable evidence'] %}
+<li><span class="{{ v|vclass }}">{{ v }}</span> — {{ verdict_text(v) }}</li>{% endfor %}</ul>
+<details><summary>How to read t-statistics</summary><p>{{ t_guide }}</p></details>
+
+<h2>Pattern stability: is the effect fading?</h2>
+<form class="bar autosubmit" method="get">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  {% for i in sel %}<input type="hidden" name="index" value="{{ i }}">{% endfor %}
+  <label>Index<select name="s_index">{% for a in sel %}<option {% if a == s_idx %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <label>Rule<select name="s_rule">{% for _, o in opts.iterrows() %}<option value="{{ o['rule_id'] }}" {% if o['rule_id'] == s_rule %}selected{% endif %}>{{ o['rule'] }}</option>{% endfor %}</select></label>
+</form>
+{{ chart(stab_chart, 300) }}
+<p class="note">Each point uses the previous ~2 years. In-sample ended {{ train_end.strftime('%d %b %Y') }}; points after
+that date are out-of-sample. Dashed lines at ±2. A line drifting toward zero suggests a fading effect (McLean &amp; Pontiff 2016).</p>
+{% if lab.notes %}<details><summary>Notes ({{ lab.notes|length }})</summary><ul>{% for n in lab.notes %}<li>{{ n }}</li>{% endfor %}</ul></details>{% endif %}
+{% endif %}
+
+<details><summary>Rule sources</summary><ul>
+{% for r in rules %}<li><b>{{ r.name.replace('{n}', 'N').replace('{lookback}', 'N').replace('{k}', 'k').replace('{size:.1%}', '0.5%') }}</b> — {{ r.explain }} <i>({{ r.source }})</i>{% if r.grid %} Parameters tried in-sample: {{ r.grid }}.{% endif %}</li>{% endfor %}
+</ul></details>
+{% endblock %}

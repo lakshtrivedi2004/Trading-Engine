@@ -37,6 +37,7 @@ config/calibration.json
 .vscode/
 
 # Runtime
+*.lock
 .engine.pid
 .trading_mode
 

@@ -1,0 +1,699 @@
+module: M02
+title: Technical Analysis
+summary: TA assumptions, chart types, timeframes, 16 candlestick patterns with entry/stop rules, support & resistance, volume, moving averages, RSI, MACD, Bollinger Bands, Fibonacci, Dow Theory, range breakouts, flags, RRR, the 6-point checklist, scanning process, scalping, and supplementary indicators (ADX, Alligator, Aroon, ATR, ATR bands, Supertrend, VWAP).
+nodes:
+  - id: technical_analysis
+    type: Concept
+    name: Technical Analysis (TA)
+    aliases: [TA]
+    chapter: [1, 2]
+    summary: Research technique identifying trading opportunities from market participants' actions (price/volume) visualised as charts and patterns.
+    facts:
+      - Best for short-term trades (minutes to weeks); use FA for long-term investments; FA investors can use TA to time entries/exits.
+      - Expect small but consistent profits from frequent short-term trades, not windfalls.
+      - Cut losses quickly; do not hold losing TA trades hoping to recover.
+      - Applicable to any asset with OHLCV time series - equities, commodities, FX, fixed income; indicators work identically across assets.
+      - TA vs FA is not a contest; prudent traders learn both.
+      - "Assumptions - (1) markets discount everything, (2) 'how' matters more than 'why', (3) price moves in trends, (4) history tends to repeat itself."
+      - History repeats only when the same set of factors recurs (factor addendum).
+      - Indian market hours 9:15 to 15:30.
+    links: [{to: fundamental_analysis, rel: CONTRADICTS}, {to: ohlc, rel: USES}, {to: candlestick, rel: USES}, {to: ta_checklist, rel: USES}, {to: dow_theory, rel: RELATED_TO}]
+
+  - id: close_price_importance
+    type: Concept
+    name: Closing Price is Most Important
+    chapter: [2, 17]
+    summary: Close is the final evaluation of the period, the reference for next session and the basis of most indicators; close > open = positive day.
+    links: [{to: ohlc, rel: PART_OF}, {to: dow_theory, rel: PART_OF}]
+
+  - id: chart_types
+    type: Concept
+    name: Chart Types (Line, Bar, Candlestick)
+    chapter: 3
+    summary: Line chart plots closes only (trend view, little info); bar chart shows OHLC with left tick open/right tick close (hard to read); Japanese candlestick is the default.
+    facts:
+      - Bar length (high-low) is the range.
+      - Candlesticks originated with rice trader Homma Munehisa (18th c.), popularised in the West by Steve Nison.
+    links: [{to: candlestick, rel: RELATED_TO}]
+
+  - id: candlestick
+    type: Concept
+    name: Japanese Candlestick Anatomy
+    aliases: [Candle, Real body, Shadow, Wick]
+    chapter: 3
+    summary: Real body connects open and close; upper shadow to high, lower shadow to low; bullish (blue/green) if close > open, bearish (red) if close < open.
+    formula:
+      body: "abs(close - open)"
+      upper_shadow: "high - max(open, close)"
+      lower_shadow: "min(open, close) - low"
+      range: "high - low"
+      bullish: "close > open"
+      bearish: "close < open"
+    facts: [Long body = strong buying/selling; short body = little activity.]
+    links: [{to: ohlc, rel: USES}, {to: candlestick_rules, rel: RELATED_TO}]
+
+  - id: timeframe
+    type: Concept
+    name: Timeframes and Look-back Period
+    chapter: [3, 19]
+    summary: Monthly (12 candles/yr), weekly (52), daily (~252), intraday 30m (~12/day), 15m (25/day), 5m (75/day); choose to filter information from noise.
+    facts:
+      - Long-term investors - weekly/monthly; swing/positional - EOD; scalpers - 1m/5m.
+      - Higher timeframe signals are more reliable (15m engulfing > 5m engulfing).
+      - Look-back - swing trader 6-12 months; scalper ~5 days; S&R plotting at least 2 years (or 3-6 months for short-term S&R, 12-18 months for long-term S&R).
+      - Beginners should start with positional/swing trades (hold a few days), not day trading.
+    params: {daily_candles_per_year: 252, swing_lookback_months: [6, 12], sr_lookback_years: 2}
+    links: [{to: technical_analysis, rel: PART_OF}]
+
+  - id: candlestick_rules
+    type: Rule
+    name: Candlestick Trading Rules (3 assumptions)
+    chapter: 4
+    summary: (1) Buy strength, sell weakness - buy on a blue day, sell on a red day; (2) be flexible but quantify and verify deviations; (3) look for a prior trend - bullish patterns need a prior downtrend, bearish need a prior uptrend.
+    facts:
+      - Marubozu is the only pattern exempt from the prior-trend rule.
+      - Each pattern carries built-in entry and stop-loss; targets come from S&R.
+      - Risk taker enters at ~3:20 PM on the pattern's last day after validating; risk averse enters next day near close only if that day confirms (blue for long, red for short).
+      - The more days in a pattern, the better to enter on the pattern day itself (stars - enter on P3).
+      - Long stop = lowest low of the pattern; short stop = highest high of the pattern.
+      - Avoid trading candles with range < 1% (too subdued) or > 10% (stop too deep).
+      - Once in a trade, do nothing until target or stop hits (trailing stops allowed).
+    conditions:
+      confirmation_long: "next_day.close > next_day.open"
+      confirmation_short: "next_day.close < next_day.open"
+      tradable_range: "0.01 <= (high - low)/close <= 0.10"
+      stop_long: "min(low over pattern candles)"
+      stop_short: "max(high over pattern candles)"
+    bot_use: Implement pattern detectors with tolerance params; require prior trend filter; enter at close of signal bar (aggressive) or next bar close with colour confirmation (conservative).
+    links: [{to: candlestick, rel: USES}, {to: prior_trend, rel: USES}, {to: support_resistance, rel: RELATED_TO}]
+
+  - id: prior_trend
+    type: Rule
+    name: Prior Trend Requirement
+    chapter: [4, 7, 9]
+    summary: Reversal patterns are valid only after an opposing trend; a perfect hammer without a prior downtrend is not a pattern.
+    conditions:
+      prior_downtrend_proxy: "close[t-1] < close[t-1-n] (e.g. n=5..10) or close below falling short EMA"
+      prior_uptrend_proxy: "close[t-1] > close[t-1-n] or close above rising short EMA"
+    caveats: [Source defines prior trend visually; the proxies are implementation choices.]
+    links: [{to: candlestick_rules, rel: PART_OF}, {to: trend, rel: USES}]
+
+  - id: bullish_marubozu
+    type: CandlestickPattern
+    name: Bullish Marubozu
+    chapter: 5
+    summary: Long blue candle with no shadows (open = low, close = high) showing buying at every price; bullish regardless of prior trend.
+    conditions:
+      identify: "close > open and abs(open - low) <= tol*high and abs(high - close) <= tol*high"
+      tol_example: "ACC 0.17% deviation accepted"
+      entry: "near close of marubozu (risk taker) or next day close if next day is blue (risk averse)"
+      stop: "low of marubozu"
+      target: "nearest resistance"
+    example: "ACC O 971.8 H 1030.2 L 970.1 C 1028.4 -> buy ~1028.4, SL 970."
+    links: [{to: bearish_marubozu, rel: OPPOSITE_OF}, {to: candlestick_rules, rel: USES}]
+
+  - id: bearish_marubozu
+    type: CandlestickPattern
+    name: Bearish Marubozu
+    chapter: 5
+    summary: Long red candle with no shadows (open = high, close = low); extreme selling; bearish regardless of prior trend.
+    conditions:
+      identify: "close < open and abs(high - open) <= tol*high and abs(close - low) <= tol*high"
+      entry: "short near close (or next day close if red)"
+      stop: "high of marubozu"
+    example: "BPCL O 355.4 H 356 L 341 C 341.7 -> short 341.7, SL 356."
+    links: [{to: bullish_marubozu, rel: OPPOSITE_OF}]
+
+  - id: spinning_top
+    type: CandlestickPattern
+    name: Spinning Top
+    chapter: 6
+    summary: Small real body with roughly equal upper and lower shadows; colour irrelevant; indecision - bulls and bears both failed.
+    conditions:
+      identify: "body small relative to range and upper_shadow ~= lower_shadow"
+    facts:
+      - In a downtrend - either more selling or reversal (~50/50); test with half quantity, add if reversal confirms.
+      - In an uptrend - bulls pausing or fatigued; book profit on ~50% of holding.
+      - Calm before the storm - a move is coming, direction uncertain; reduce position size.
+    bot_use: Treat as volatility-expansion/indecision flag; reduce size or scale out; not an entry signal alone.
+    links: [{to: doji, rel: RELATED_TO}]
+
+  - id: doji
+    type: CandlestickPattern
+    name: Doji
+    chapter: 6
+    summary: Open ~= close (no or wafer-thin body), shadows any length; indecision like spinning top; often appear in clusters.
+    conditions: {identify: "abs(close - open) <= small_frac * (high - low)"}
+    facts: [A doji following a recognisable pattern (e.g. after a bearish engulfing) amplifies the move - 'panic plus uncertainty'.]
+    links: [{to: spinning_top, rel: RELATED_TO}, {to: bearish_engulfing, rel: CONFIRMS}]
+
+  - id: paper_umbrella
+    type: CandlestickPattern
+    name: Paper Umbrella
+    chapter: 7
+    summary: Small body near top of range with long lower shadow >= 2x body; called Hammer after a downtrend, Hanging Man after an uptrend.
+    conditions: {identify: "lower_shadow >= 2*body and upper_shadow small"}
+    example: "O 100 H 103 L 94 C 102 - body 2, lower shadow 6."
+    links: [{to: hammer, rel: RELATED_TO}, {to: hanging_man, rel: RELATED_TO}]
+
+  - id: hammer
+    type: CandlestickPattern
+    name: Hammer
+    chapter: 7
+    summary: Paper umbrella at the bottom of a downtrend; bulls rejected new lows; bullish reversal. Longer lower shadow = more bullish; blue body slightly preferred.
+    conditions:
+      prior_trend: downtrend
+      identify: "lower_shadow >= 2*body and abs(close-open)/open within ~1-2% and close near high"
+      entry: "near close of hammer day (risk taker) or next day close if blue (risk averse)"
+      stop: "low of hammer"
+    example: "Cipla 15m - risk taker buy 444, risk averse 445.4, SL 441.5."
+    facts: [Author trusts hammer more than hanging man.]
+    links: [{to: paper_umbrella, rel: VARIANT_OF}, {to: hanging_man, rel: OPPOSITE_OF}]
+
+  - id: hanging_man
+    type: CandlestickPattern
+    name: Hanging Man
+    chapter: 7
+    summary: Paper umbrella at the top of an uptrend; bears entered intraday; bearish reversal (less reliable than hammer per author because price recovered).
+    conditions:
+      prior_trend: uptrend
+      identify: "lower_shadow >= 2*body"
+      entry: "short near close (or next day close if red)"
+      stop: "high of candle"
+    example: "BPCL O 592 H 593.75 L 587 C 593 -> short 593, SL above 593.75."
+    links: [{to: paper_umbrella, rel: VARIANT_OF}]
+
+  - id: shooting_star
+    type: CandlestickPattern
+    name: Shooting Star
+    chapter: 7
+    summary: Inverted umbrella at top of uptrend - small body near low with upper shadow >= 2x body; bears pushed price back from new high; bearish. Red body slightly more reliable.
+    conditions:
+      prior_trend: uptrend
+      identify: "upper_shadow >= 2*body and lower_shadow small and close ~= low"
+      entry: "short near close (or next day if red)"
+      stop: "high of shooting star"
+    example: "O 1426 H 1453 L 1410 C 1417 -> short 1417, SL 1453."
+    links: [{to: hammer, rel: OPPOSITE_OF}]
+
+  - id: bullish_engulfing
+    type: CandlestickPattern
+    name: Bullish Engulfing
+    chapter: 8
+    summary: Two-candle bottom reversal - P1 red, P2 blue whose real body engulfs P1's real body.
+    conditions:
+      prior_trend: downtrend
+      identify: "P1.close < P1.open and P2.close > P2.open and P2.open <= P1.close and P2.close > P1.open"
+      entry: "close of P2 (preferred - multi-day pattern) or day after if blue"
+      stop: "min(P1.low, P2.low)"
+    example: "DLF P1 O163 H168 L158.5 C160; P2 O159.5 H170.2 L159 C169 -> buy 169, SL 158.5."
+    facts: [Engulfing real bodies is sufficient; shadows need not be engulfed. Preferred over piercing pattern.]
+    links: [{to: bearish_engulfing, rel: OPPOSITE_OF}, {to: piercing_pattern, rel: VARIANT_OF}]
+
+  - id: bearish_engulfing
+    type: CandlestickPattern
+    name: Bearish Engulfing
+    chapter: 8
+    summary: Two-candle top reversal - P1 blue, P2 red whose body engulfs P1's body.
+    conditions:
+      prior_trend: uptrend
+      identify: "P1.close > P1.open and P2.close < P2.open and P2.open >= P1.close and P2.close < P1.open"
+      entry: "short at close of P2"
+      stop: "max(P1.high, P2.high)"
+    example: "Ambuja P1 O214 H220 L213.3 C218.75; P2 O220 H221 L207.3 C209.4 -> short 209, SL 221."
+    facts: [A doji after a bearish engulfing is a highly profitable setup per author.]
+    links: [{to: dark_cloud_cover, rel: VARIANT_OF}]
+
+  - id: piercing_pattern
+    type: CandlestickPattern
+    name: Piercing Pattern
+    chapter: 8
+    summary: Like bullish engulfing but P2's blue body covers 50% to <100% of P1's red body.
+    conditions:
+      prior_trend: downtrend
+      identify: "P1 red, P2 blue, 0.5*P1.body <= (P2.close - P1.close) < P1.body"
+      stop: "pattern low"
+    links: [{to: bullish_engulfing, rel: VARIANT_OF}, {to: dark_cloud_cover, rel: OPPOSITE_OF}]
+
+  - id: dark_cloud_cover
+    type: CandlestickPattern
+    name: Dark Cloud Cover
+    chapter: 8
+    summary: Like bearish engulfing but P2's red body covers 50% to <100% of P1's blue body; trade setup same as bearish engulfing.
+    conditions:
+      prior_trend: uptrend
+      identify: "P1 blue, P2 red, 0.5*P1.body <= (P1.close - P2.close) < P1.body"
+      stop: "pattern high"
+    links: [{to: bearish_engulfing, rel: VARIANT_OF}]
+
+  - id: bullish_harami
+    type: CandlestickPattern
+    name: Bullish Harami
+    chapter: 9
+    summary: Bottom reversal - long red P1 then small blue P2 contained within P1's body ('pregnant'); surprise strength unnerves bears.
+    conditions:
+      prior_trend: downtrend
+      identify: "P1 long red; P2 blue; P2.open > P1.close; P2.close < P1.open"
+      entry: "close of P2 or next day if blue"
+      stop: "min(P1.low, P2.low)"
+    example: "Axis Bank P1 O868 H874 L810 C815; P2 O824 H847 L818 C835 -> buy 835, SL 810."
+    links: [{to: bearish_harami, rel: OPPOSITE_OF}]
+
+  - id: bearish_harami
+    type: CandlestickPattern
+    name: Bearish Harami
+    chapter: 9
+    summary: Top reversal - long blue P1 then small red P2 inside P1's body.
+    conditions:
+      prior_trend: uptrend
+      identify: "P1 long blue; P2 red; P2.open < P1.close; P2.close > P1.open"
+      entry: "short at close of P2 or next day if red"
+      stop: "max(P1.high, P2.high)"
+    example: "IDFC P1 O124 H129 L122 C127; P2 O126.9 H129.7 L125 C124.8 -> short ~125, SL 129.7."
+    links: [{to: bullish_harami, rel: OPPOSITE_OF}]
+
+  - id: gaps
+    type: Concept
+    name: Gap Up / Gap Down
+    chapter: 10
+    summary: Gap up = open above prior close (buyer enthusiasm, bullish); gap down = open below prior close (bearish); no trades occur in the gap.
+    conditions: {gap_up: "open > prev_close (strict: open > prev_high)", gap_down: "open < prev_close"}
+    links: [{to: morning_star, rel: PART_OF}, {to: evening_star, rel: PART_OF}]
+
+  - id: morning_star
+    type: CandlestickPattern
+    name: Morning Star (and Morning Doji Star)
+    chapter: 10
+    summary: Three-candle bottom reversal - long red P1, gap-down doji/spinning top P2, gap-up blue P3 closing above P1's open.
+    conditions:
+      prior_trend: downtrend
+      identify: "P1 red (long); P2 gaps down and is doji/spinning top; P3 gaps up, blue, P3.close > P1.open"
+      entry: "close of P3 for both risk types"
+      stop: "lowest low of P1..P3"
+    facts: [If P2 is a doji it is called a morning doji star.]
+    links: [{to: evening_star, rel: OPPOSITE_OF}, {to: doji, rel: USES}, {to: gaps, rel: USES}]
+
+  - id: evening_star
+    type: CandlestickPattern
+    name: Evening Star (and Evening Doji Star)
+    chapter: 10
+    summary: Three-candle top reversal - long blue P1, gap-up doji/spinning top P2, gap-down red P3 closing below P1's open.
+    conditions:
+      prior_trend: uptrend
+      identify: "P1 blue; P2 gaps up, doji/spinning top; P3 gaps down, red, P3.close < P1.open"
+      entry: "short at close of P3"
+      stop: "highest high of P1..P3"
+    links: [{to: morning_star, rel: OPPOSITE_OF}]
+
+  - id: support_resistance
+    type: Concept
+    name: Support and Resistance (S&R)
+    aliases: [Support, Resistance, S&R, Price action zone]
+    chapter: 11
+    summary: Price zones expected to attract maximum buying (support, below CMP) or selling (resistance, above CMP); used for targets, entries and stop placement.
+    facts:
+      - Long trade target = nearest resistance; short trade target = nearest support.
+      - "Construction: (1) load 3-6 months (short-term, for intraday/BTST) or 12-18 months (long-term, for swing) of data; (2) find price action zones - hesitation after up move, hesitation after down move, sharp reversals; (3) find >= 3 zones at the same price, well spaced in time (e.g. >= 2 weeks apart); (4) fit a horizontal line."
+      - More zones and wider time spacing = stronger level.
+      - Treat S&R as a zone (e.g. 429 +/- 3), not a point.
+      - Well-constructed S&R is usually respected but it is probabilistic.
+      - Accumulation creates support; distribution creates resistance (Dow).
+    conditions:
+      level_valid: "count(swing pivots within +/-tol of level) >= 3 and pivots spaced in time"
+      is_support: "level < cmp"
+      is_resistance: "level > cmp"
+    example: "Ambuja CMP 206, marubozu low 202 -> entry 206, SL 202, target 215 (resistance)."
+    bot_use: Detect swing pivots, cluster by price with tolerance, keep clusters with >=3 well-spaced touches; use nearest opposite level as target and require stop near a level.
+    links: [{to: ta_checklist, rel: PART_OF}, {to: reward_risk_ratio, rel: USES}, {to: pivot_points, rel: RELATED_TO}]
+
+  - id: volume
+    type: Concept
+    name: Volume and the Volume-Price Trend Table
+    aliases: [Volume trend table, Smart money]
+    chapter: 12
+    summary: Shares traded (one buy + one sell of 100 = volume 100); used to confirm trends; high volume implies institutional 'smart money'.
+    conditions:
+      high_volume: "volume > SMA(volume, 10)"
+      low_volume: "volume < SMA(volume, 10)"
+      price_up_vol_up: bullish
+      price_up_vol_down: "caution - weak hands buying / possible bull trap"
+      price_down_vol_up: bearish
+      price_down_vol_down: "caution - weak hands selling / possible bear trap"
+    facts: [Volume figure in terminals is cumulative for the day. Avoid trading on low-volume days.]
+    bot_use: Volume filter for entries - require volume >= 10-day average on the signal bar.
+    links: [{to: ta_checklist, rel: PART_OF}, {to: breakout, rel: CONFIRMS}]
+
+  - id: moving_average
+    type: Indicator
+    name: Moving Averages (SMA / EMA)
+    aliases: [SMA, EMA, Simple moving average, Exponential moving average, MA]
+    chapter: 13
+    summary: Rolling average of closes; SMA weights equally, EMA weights recent data more and reacts faster (preferred). Lagging trend-following tool.
+    formula:
+      sma: "mean(close[t-n+1..t])"
+      ema: "ema_t = alpha*close_t + (1-alpha)*ema_{t-1}, alpha = 2/(n+1)"
+    facts:
+      - Bullish when price > EMA; bearish when price < EMA.
+      - Works brilliantly in trends, whipsaws in sideways markets.
+      - Take all signals - many small losses, one big winner pays for them; can't pick the winner in advance.
+    links: [{to: ma_price_crossover_system, rel: RELATED_TO}, {to: ma_crossover_system, rel: RELATED_TO}, {to: macd, rel: RELATED_TO}]
+
+  - id: ma_price_crossover_system
+    type: Strategy
+    name: Price vs 50-day EMA System
+    chapter: 13
+    summary: Long when close crosses above 50 EMA; exit when close crosses below.
+    conditions:
+      entry_long: "close crosses above EMA(close, 50)"
+      exit_long: "close crosses below EMA(close, 50)"
+    params: {ema: 50}
+    example: "Ambuja - +22, +4, +50 per share across three trades; middle trade in sideways market."
+    caveats: [Many marginal/losing signals in sideways markets.]
+    links: [{to: moving_average, rel: USES}, {to: ma_crossover_system, rel: RELATED_TO}]
+
+  - id: ma_crossover_system
+    type: Strategy
+    name: Moving Average Crossover System
+    chapter: 13
+    summary: Long when fast EMA crosses above slow EMA; exit when fast crosses below; fewer whipsaws than single MA.
+    conditions:
+      entry_long: "EMA(fast) crosses above EMA(slow)"
+      exit_long: "EMA(fast) crosses below EMA(slow)"
+    params:
+      short_term: [9, 21]
+      medium_term: [25, 50]
+      few_months: [50, 100]
+      long_term: [100, 200]
+      intraday: ["15m x 30m", "5m x 10m"]
+    facts: [Longer timeframe combos give fewer signals. 'The trend is your friend'.]
+    bot_use: Baseline trend-following strategy; combine with ADX/regime filter to avoid sideways whipsaw.
+    links: [{to: moving_average, rel: USES}, {to: trend, rel: MEASURES}]
+
+  - id: leading_lagging_indicators
+    type: Concept
+    name: Leading vs Lagging Indicators; Oscillators; Momentum
+    chapter: 14
+    summary: Leading indicators (mostly bounded oscillators like RSI) signal reversals in advance but give false signals; lagging indicators (MAs) confirm after the fact. Momentum = rate of price change.
+    links: [{to: rsi, rel: RELATED_TO}, {to: moving_average, rel: RELATED_TO}]
+
+  - id: rsi
+    type: Indicator
+    name: Relative Strength Index (RSI)
+    aliases: [RSI]
+    chapter: 14
+    summary: J. Welles Wilder's 0-100 momentum oscillator of internal strength; strongest in sideways markets.
+    formula:
+      rs: "avg_gain(n) / avg_loss(n)"
+      rsi: "100 - 100/(1 + RS)"
+    params: {period: 14, oversold: 30, overbought: 70, author_pref: [20, 80]}
+    example: "14 closes, gains 29, losses 10 -> RS 2.899 -> RSI 74.35."
+    conditions:
+      classical_long: "RSI < 30 (oversold)"
+      classical_short: "RSI > 70 (overbought)"
+      persistent_overbought: "RSI stuck > 70 for long -> look to BUY (excess positive momentum)"
+      persistent_oversold: "RSI stuck < 30 for long -> look to SELL"
+      exit_oversold: "RSI crosses back above 30 after prolonged oversold -> long"
+      exit_overbought: "RSI crosses back below 70 after prolonged overbought -> short"
+    facts: [Shorter lookback = more volatile RSI. Parameters are not sacred - develop your own edge. Rarely used standalone.]
+    links: [{to: leading_lagging_indicators, rel: IS_A}, {to: ta_checklist, rel: PART_OF}]
+
+  - id: macd
+    type: Indicator
+    name: MACD (Moving Average Convergence Divergence)
+    aliases: [MACD]
+    chapter: 15
+    summary: Gerald Appel's momentum/trend indicator - MACD line = 12 EMA - 26 EMA; signal line = 9-period EMA of MACD.
+    formula:
+      macd_line: "EMA(close,12) - EMA(close,26)"
+      signal_line: "EMA(macd_line, 9)"
+      histogram: "macd_line - signal_line"
+    params: {fast: 12, slow: 26, signal: 9}
+    conditions:
+      centerline_bull: "macd_line crosses above 0"
+      centerline_bear: "macd_line crosses below 0"
+      signal_bull: "macd_line crosses above signal_line"
+      signal_bear: "macd_line crosses below signal_line"
+    facts: [Sign = direction of momentum; magnitude = strength but scales with price level. Works in trends, poor sideways.]
+    links: [{to: moving_average, rel: COMPUTED_FROM}, {to: ta_checklist, rel: PART_OF}]
+
+  - id: bollinger_bands
+    type: Indicator
+    name: Bollinger Bands
+    aliases: [BB]
+    chapter: 15
+    summary: John Bollinger's 20 SMA with +/-2 standard deviation bands; mean-reversion tool.
+    formula:
+      middle: "SMA(close,20)"
+      upper: "middle + 2*stdev(close,20)"
+      lower: "middle - 2*stdev(close,20)"
+    conditions:
+      short: "price touches upper band -> target middle"
+      long: "price touches lower band -> target middle"
+      failure: "envelope expansion (bands widening as price rides a band) = trending market, signals fail"
+    facts: [Works in sideways markets, fails in trends. Expect the trade to work almost immediately; if not, suspect envelope expansion.]
+    links: [{to: standard_deviation, rel: USES}, {to: mean_reversion, rel: RELATED_TO}, {to: atr_bands, rel: RELATED_TO}]
+
+  - id: fibonacci_retracement
+    type: Indicator
+    name: Fibonacci Retracements
+    chapter: 16
+    summary: After a sharp move (trough to peak = 100%), price tends to retrace to 23.6%, 38.2% or 61.8% before resuming the trend.
+    formula:
+      level_up_move: "peak - ratio*(peak - trough)"
+      level_down_move: "trough + ratio*(peak - trough)"
+      ratios: "[0.236, 0.382, 0.618]"
+    example: "380 -> 489 move of 109; 61.8% retracement = 489 - 67.36 = 421.6."
+    facts: [Use only as a confirmation tool; strong buy when stop coincides with Fib level plus pattern, S&R and volume.]
+    links: [{to: ta_checklist, rel: CONFIRMS}]
+
+  - id: dow_theory
+    type: Concept
+    name: Dow Theory
+    chapter: [17, 18]
+    summary: Charles Dow's framework (compiled by Hamilton) - 9 tenets on trends, confirmation and market phases.
+    facts:
+      - Indices discount everything.
+      - Three trends - primary (1 to several years), secondary (counter-trend corrections, weeks to months), minor (daily noise).
+      - All indices must confirm each other (Nifty, midcap, smallcap move together).
+      - Volume must confirm - in uptrend volume rises on up moves, falls on dips; opposite in downtrend.
+      - Sideways markets can substitute for secondary trends.
+      - Close is the most sacred price.
+      - Before going long on a pattern, check primary trend; trading against a secondary counter-trend needs caution.
+    links: [{to: market_phases, rel: PART_OF}, {to: double_top_bottom, rel: PART_OF}, {to: trading_range, rel: PART_OF}, {to: flag_pattern, rel: PART_OF}, {to: ta_checklist, rel: PART_OF}]
+
+  - id: market_phases
+    type: Concept
+    name: Market Phases (Accumulation, Mark-up, Distribution, Mark-down)
+    chapter: 17
+    summary: Cycle - smart money accumulates after steep sell-off (creates support), mark-up is a fast rally that leaves public behind, distribution when public buys near highs (creates resistance), then mark-down sell-off.
+    facts: [No two cycles are the same; can span months to years.]
+    links: [{to: dow_theory, rel: PART_OF}, {to: support_resistance, rel: RELATED_TO}]
+
+  - id: double_top_bottom
+    type: ChartPattern
+    name: Double / Triple Top and Bottom
+    chapter: 17
+    summary: Reversal patterns where a price level is tested twice (or thrice) with tests well spaced in time (>= ~2 weeks); triple is stronger than double.
+    conditions:
+      double_bottom: "two lows within tolerance, separated by >= ~10 sessions with a rebound between -> bullish"
+      double_top: "two highs within tolerance (e.g. 336 vs 332 accepted) -> bearish"
+    facts: [Best when the second test forms a candlestick pattern (e.g. shooting star on 2nd top).]
+    links: [{to: dow_theory, rel: PART_OF}, {to: support_resistance, rel: RELATED_TO}]
+
+  - id: trading_range
+    type: ChartPattern
+    name: Trading Range (Sideways Market)
+    chapter: 18
+    summary: Price oscillates between fixed support and resistance for weeks to years; buy near the bottom, short near the top.
+    facts:
+      - Causes - no fundamental triggers, or waiting for a big announcement (short-lived).
+      - Longer range duration -> wider range.
+    links: [{to: breakout, rel: RELATED_TO}, {to: support_resistance, rel: USES}]
+
+  - id: breakout
+    type: Strategy
+    name: Range Breakout / Breakdown
+    chapter: 18
+    summary: Breakout of a range often starts a new trend; true breakouts have high volume and high momentum; false breakouts have low volume and fall back into range.
+    conditions:
+      entry_long: "close > range_high with volume > avg volume"
+      stop_long: "range_high (the broken resistance)"
+      entry_short: "close < range_low with high volume"
+      stop_short: "range_low"
+      min_target: "breakout_level +/- range_width"
+    example: "Range 125/128-165/168; long 170 SL 165; target 168 + 43 = 211."
+    links: [{to: trading_range, rel: USES}, {to: volume, rel: USES}, {to: week52_high_low, rel: RELATED_TO}]
+
+  - id: flag_pattern
+    type: ChartPattern
+    name: Flag Formation
+    chapter: 18
+    summary: Steep rally (pole) then 5-15 session low-volume correction in a parallel channel; price then resumes sharply upward - second chance to buy.
+    conditions:
+      identify: "sharp rally then 5-15 bar pullback within parallel lines on declining volume"
+      entry: "break above flag channel (act fast)"
+    facts: [Pullback is retail profit-taking; smart money stays invested.]
+    links: [{to: dow_theory, rel: PART_OF}]
+
+  - id: reward_risk_ratio
+    type: Formula
+    name: Reward-to-Risk Ratio (RRR)
+    aliases: [RRR, Risk reward]
+    chapter: 18
+    summary: Expected reward per unit of risk; trades below your RRR threshold must be dropped regardless of setup quality.
+    formula:
+      long_rrr: "(target - entry) / (entry - stop)"
+      short_rrr: "(entry - target) / (stop - entry)"
+    params: {min_beginner: "as high as possible", min_active_trader: 1.5, aggressive: 1.0, cautious: 2.0, scalping_ok: [0.5, 0.75]}
+    example: "Entry 107 SL 102 Target 114 -> RRR 1.4; Entry 55.75 SL 53.55 T 57.2 -> 0.65 reject."
+    links: [{to: ta_checklist, rel: PART_OF}, {to: support_resistance, rel: USES}, {to: expectancy, rel: RELATED_TO}]
+
+  - id: ta_checklist
+    type: Rule
+    name: Grand 6-Point TA Checklist
+    chapter: [11, 12, 15, 18]
+    summary: (1) recognisable candlestick pattern; (2) stop near S&R (long - pattern low near support; short - pattern high near resistance); (3) volume >= 10-day average; (4) Dow Theory context (primary/secondary trend, double/triple/range/flag); (5) indicators (RSI/MACD) confirm -> scale size up, else proceed at reduced size; (6) RRR >= threshold (1.5 for active traders).
+    conditions:
+      must_have: [candlestick_pattern, sr_near_stop, volume_confirm, rrr_ok]
+      sr_distance_max: "abs(stop - sr_level)/stop <= 0.04 else skip"
+      indicator_rule: "if indicators confirm: size = full (e.g. 500); else size = reduced (e.g. 300)"
+      trade_quality: "satisfy at least 3-4 checklist points; prefer stock with more points over prettier pattern"
+    facts:
+      - Discipline is ~80% of trading success; checklist enforces it.
+      - Engulfing preferred over piercing/dark cloud when checklist scores tie.
+      - Choosing not to trade is itself a big trading decision.
+    bot_use: Encode as a scoring function; hard filters for 1,2,3,6 and size multiplier for 5.
+    links: [{to: candlestick_rules, rel: USES}, {to: support_resistance, rel: USES}, {to: volume, rel: USES}, {to: dow_theory, rel: USES}, {to: rsi, rel: USES}, {to: macd, rel: USES}, {to: reward_risk_ratio, rel: USES}, {to: swing_scan_process, rel: RELATED_TO}]
+
+  - id: swing_scan_process
+    type: Process
+    name: Swing Trade Scanning Process
+    chapter: 19
+    summary: Universe Nifty 50, EOD charts, 6-12 month look-back (2 yr for S&R); Part 1 shortlist charts with a pattern in last 3-4 candles; Part 2 evaluate 4-5 shortlisted charts against checklist; at most 1-2 qualify.
+    facts:
+      - "Evaluation order: pattern strength -> prior trend -> volume >= 10-day avg -> S&R within 4% of stop -> Dow patterns & primary/secondary trend -> RRR >= 1.5 (target = S&R) -> MACD/RSI for sizing."
+      - Positional trades may be squared off intraday if target hits same day.
+      - Opportunity universe criteria - liquid (tight bid-ask, e.g. >= 5 lakh shares/day), EQ segment, not operator-driven; index stocks satisfy these.
+    bot_use: Direct blueprint for an EOD scanner pipeline.
+    links: [{to: ta_checklist, rel: USES}, {to: opportunity_universe, rel: USES}]
+
+  - id: opportunity_universe
+    type: Concept
+    name: Opportunity Universe
+    chapter: 19
+    summary: Fixed list of liquid stocks you scan daily (e.g. Nifty 50).
+    conditions: {liquidity: "avg daily volume >= 500000 or tight bid-ask spread", segment: "EQ"}
+    links: [{to: liquidity, rel: USES}]
+
+  - id: scalping
+    type: Strategy
+    name: Scalping
+    chapter: 19
+    summary: Large-size trades held minutes on 1m/5m charts for small moves; for seasoned traders.
+    facts:
+      - Use candlestick pattern + volume from checklist; RRR 0.5-0.75 acceptable.
+      - Only liquid stocks; quick to book losses; watch bid-ask and global markets (e.g. Hang Seng); low-cost broker essential; don't over-leverage; stop trading on bad days.
+    example: "Short 1000 Infosys 3980 at 10:15, cover 3976 at 10:25 -> Rs 2653 net."
+    links: [{to: trader_types, rel: RELATED_TO}, {to: transaction_charges, rel: RELATED_TO}]
+
+  - id: adx
+    type: Indicator
+    name: ADX / +DI / -DI (Directional Movement)
+    aliases: [ADX, DMI]
+    chapter: supplementary
+    summary: Wilder's trend-strength system; ADX measures strength (not direction), +DI/-DI give direction.
+    params: {period: 14}
+    conditions:
+      strong_trend: "ADX > 25"
+      weak_trend: "ADX < 20"
+      buy: "ADX >= 25 and +DI crosses above -DI"
+      sell: "ADX >= 25 and -DI crosses above +DI"
+      stop: "low (long) / high (short) of signal candle; trade valid until stop breached"
+    bot_use: Regime filter - enable trend systems when ADX > 25, mean-reversion when ADX < 20.
+    links: [{to: trend, rel: MEASURES}]
+
+  - id: alligator
+    type: Indicator
+    name: Alligator (Bill Williams)
+    chapter: supplementary
+    summary: Three displaced SMAs - jaw 13, teeth 8, lips 5.
+    conditions:
+      buy: "close > SMA5 > SMA8 > SMA13 and lines separated"
+      sell: "close < SMA5 < SMA8 < SMA13 and lines separated"
+      no_trade: "lines intertwined/flat"
+    links: [{to: moving_average, rel: USES}]
+
+  - id: aroon
+    type: Indicator
+    name: Aroon and Aroon Oscillator
+    chapter: supplementary
+    summary: Tushar Chande's time-since-high/low indicator (0-100); default 25 (Kite 14).
+    formula:
+      aroon_up: "100*(n - periods_since_n_high)/n"
+      aroon_down: "100*(n - periods_since_n_low)/n"
+      oscillator: "aroon_up - aroon_down"
+    conditions:
+      buy: "aroon_up > 50 and aroon_down < 30"
+      sell: "aroon_down > 50 and aroon_up < 30"
+      strong_up: "oscillator > 50"
+      strong_down: "oscillator < -50"
+    links: [{to: trend, rel: MEASURES}]
+
+  - id: atr
+    type: Indicator
+    name: Average True Range (ATR)
+    aliases: [ATR, True range]
+    chapter: supplementary
+    summary: Wilder's volatility measure including gaps; no direction; in price units.
+    formula:
+      true_range: "max(high-low, abs(high-prev_close), abs(low-prev_close))"
+      atr: "Wilder smoothing / average of TR over n"
+    params: {period: 14}
+    conditions:
+      expected_range: "price +/- ATR"
+      volatility_stop_long: "stop <= entry - ATR"
+      volatility_stop_short: "stop >= entry + ATR"
+      skip: "if ATR-based stop violates RRR, skip trade"
+    example: "ATR 48 at 1320 -> range 1272-1368; long 1325 stop <= 1272."
+    bot_use: Volatility-normalised stops and position sizing.
+    links: [{to: supertrend, rel: RELATED_TO}, {to: atr_bands, rel: RELATED_TO}, {to: volatility, rel: MEASURES}, {to: position_sizing, rel: RELATED_TO}]
+
+  - id: atr_bands
+    type: Indicator
+    name: ATR Bands
+    chapter: supplementary
+    summary: MA (default 5) +/- ATR envelope; price piercing a band suggests continuation in that direction; alternative to Bollinger.
+    links: [{to: atr, rel: USES}, {to: bollinger_bands, rel: RELATED_TO}]
+
+  - id: supertrend
+    type: Indicator
+    name: Supertrend
+    chapter: supplementary
+    summary: ATR-based trailing trend line (Kite default period 7, multiplier 3); green below price in uptrends, red above in downtrends.
+    formula:
+      basic_upper: "(high+low)/2 + mult*ATR"
+      basic_lower: "(high+low)/2 - mult*ATR"
+    params: {period: 7, multiplier: 3, suggested_multiplier: [3, 4]}
+    conditions:
+      buy: "close crosses above supertrend (turns green)"
+      sell: "close crosses below supertrend (turns red)"
+      trail: "hold long until close below green line"
+    facts: [Fewer false signals than MA systems; works best in trending markets. Higher multiplier = fewer signals.]
+    links: [{to: atr, rel: USES}, {to: trailing_stop, rel: RELATED_TO}]
+
+  - id: vwap
+    type: Indicator
+    name: VWAP (Volume Weighted Average Price)
+    aliases: [VWAP]
+    chapter: supplementary
+    summary: Intraday cumulative volume-weighted typical price; gauges intraday direction and execution quality.
+    formula:
+      typical_price: "(high + low + close)/3"
+      vwap: "cumsum(typical_price*volume)/cumsum(volume) (reset daily)"
+    conditions:
+      intraday_bull: "price > VWAP"
+      intraday_bear: "price < VWAP"
+      good_long_fill: "buy price < VWAP"
+      good_short_fill: "short price > VWAP"
+    caveats: [Intraday only; ignore jump at 9:15 open; lags price.]
+    links: [{to: volume, rel: USES}, {to: execution, rel: RELATED_TO}]

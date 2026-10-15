@@ -1,0 +1,21 @@
+# Calendar events for the event studies. Add rows any time; one row per event.
+# date = YYYY-MM-DD. If the date was a holiday, day 0 becomes the next trading day.
+# Add RBI monetary policy decision dates from rbi.org.in (type: RBI policy) for a much
+# larger sample: about 6 per year.
+date,type,description
+2015-02-28,Union Budget,Budget 2015-16 (Saturday special session)
+2016-02-29,Union Budget,Budget 2016-17
+2017-02-01,Union Budget,Budget 2017-18
+2018-02-01,Union Budget,Budget 2018-19
+2019-02-01,Union Budget,Interim Budget 2019
+2019-07-05,Union Budget,Budget 2019-20
+2020-02-01,Union Budget,Budget 2020-21 (Saturday special session)
+2021-02-01,Union Budget,Budget 2021-22
+2022-02-01,Union Budget,Budget 2022-23
+2023-02-01,Union Budget,Budget 2023-24
+2024-02-01,Union Budget,Interim Budget 2024
+2024-07-23,Union Budget,Budget 2024-25
+2025-02-01,Union Budget,Budget 2025-26 (Saturday special session)
+2014-05-16,Election result,Lok Sabha 2014 results
+2019-05-23,Election result,Lok Sabha 2019 results
+2024-06-04,Election result,Lok Sabha 2024 results

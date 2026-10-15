@@ -1,0 +1,76 @@
+{
+  "asof": "2026-10-07",
+  "strategies": {
+    "vwap_revert": {
+      "n": 42,
+      "wins": 8,
+      "pf": 0.033,
+      "exp": -20.54,
+      "net": -862.49,
+      "edge_r": -0.4917
+    },
+    "sweep": {
+      "n": 21,
+      "wins": 4,
+      "pf": 0.211,
+      "exp": -15.25,
+      "net": -320.21,
+      "edge_r": -0.3264
+    }
+  },
+  "symbols": {
+    "vwap_revert|KOTAKBANK": {
+      "n": 8,
+      "exp": -22.51
+    },
+    "sweep|HDFCBANK": {
+      "n": 5,
+      "exp": -27.41
+    },
+    "vwap_revert|HDFCBANK": {
+      "n": 7,
+      "exp": -17.16
+    },
+    "sweep|ICICIBANK": {
+      "n": 4,
+      "exp": -14.77
+    },
+    "sweep|INFY": {
+      "n": 2,
+      "exp": 1.42
+    },
+    "vwap_revert|NTPC": {
+      "n": 1,
+      "exp": -16.05
+    },
+    "vwap_revert|BAJFINANCE": {
+      "n": 7,
+      "exp": -19.38
+    },
+    "vwap_revert|TATASTEEL": {
+      "n": 7,
+      "exp": -18.37
+    },
+    "sweep|TATASTEEL": {
+      "n": 6,
+      "exp": -1.98
+    },
+    "vwap_revert|AXISBANK": {
+      "n": 3,
+      "exp": -29.13
+    },
+    "vwap_revert|INFY": {
+      "n": 7,
+      "exp": -17.9
+    },
+    "sweep|KOTAKBANK": {
+      "n": 4,
+      "exp": -28.76
+    },
+    "vwap_revert|ITC": {
+      "n": 2,
+      "exp": -34.66
+    }
+  },
+  "enabled": []
+}

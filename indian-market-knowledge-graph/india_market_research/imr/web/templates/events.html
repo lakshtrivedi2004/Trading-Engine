@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}Events{% endblock %}{% block heading %}Events{% endblock %}
+{% block content %}
+<p>Every past occurrence of an event is lined up on <b>day 0</b> and returns are averaged after subtracting a
+<i>normal</i> day measured over the 250 sessions <b>before</b> each event (MacKinlay 1997). Occurrences within 5 sessions
+of each other count once.</p>
+<form class="bar" method="get">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  <label>Indices<select name="index" multiple size="4">{% for a in names %}<option {% if a in sel_idx %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <label>Event types<select name="cat" multiple size="4">{% for a in cats %}<option {% if a in sel_cat %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <label>Events<select name="event" multiple size="8">{% for a in labels %}<option {% if a in sel_lbl %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <button>Show</button>
+  <span class="note">Hold Ctrl to select several.</span>
+</form>
+{{ chart(path_chart, 380) }}
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th class="l">Event</th><th>Cases</th><th>Day 0 excess</th>
+<th>t (day 0)</th><th>Up on day 0</th><th>Size vs normal</th><th>5 days before</th><th>Next 5 days</th><th>t (next 5)</th>
+<th class="l">Last case</th><th class="l">Warning</th></tr></thead><tbody>
+{% for r in rows %}<tr><td class="l">{{ r.index }}</td><td class="l">{{ r.label }}</td><td>{{ r.n }}</td>
+<td class="{{ r.day0_mean|sign }}">{{ r.day0_mean|pct }}</td><td>{{ r.day0_t|num(1) }}</td><td>{{ r.day0_up_share|pct(0, False) }}</td>
+<td>{{ r.move_size_ratio|num(1) }}x</td><td>{{ r.pre5_mean|pct }}</td><td class="{{ r.post5_mean|sign }}">{{ r.post5_mean|pct }}</td>
+<td>{{ r.post5_t|num(1) }}</td><td class="l">{{ r.dates[-1].strftime('%d %b %Y') }}</td><td class="l">{{ r.warning }}</td></tr>{% endfor %}
+</tbody></table></div>
+<h3>In plain language</h3>
+<ul>{% for n, t, w in texts %}<li><b>{{ n }}</b> — {{ t }}{% if w %} <span class="pill">⚠ {{ w }}</span>{% endif %}</li>{% endfor %}</ul>
+<p class="note">|t| ≥ 2 means an effect this large would rarely appear by chance in a single test. Events with few cases
+(budgets, elections) rarely reach that bar: treat them as descriptive history, not reliable patterns. Nifty/Sensex and
+Bank Nifty/Bankex are near-duplicates: the same result in both is ONE finding.</p>
+{% for n in notes %}<div class="warnbox">{{ n }}</div>{% endfor %}
+{% endblock %}

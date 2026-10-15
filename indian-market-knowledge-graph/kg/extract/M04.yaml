@@ -1,0 +1,288 @@
+module: M04
+title: Futures Trading
+summary: Forwards vs futures, futures trade mechanics, leverage and linear payoff, margins (SPAN + exposure) and daily M2M, margin calls, expiry/rollover, product types (NRML/MIS/CO/BO), trailing stops, shorting, Nifty futures and impact cost, futures pricing (spot-futures parity), cash & carry and calendar spreads, hedging with beta, open interest.
+nodes:
+  - id: derivatives
+    type: Concept
+    name: Derivatives
+    chapter: 1
+    summary: Securities whose value is derived from an underlying (stock, index, bond, commodity, currency); earliest reference in Kautilya's Arthashastra (320 BC).
+    links: [{to: forward_contract, rel: RELATED_TO}, {to: futures_contract, rel: RELATED_TO}, {to: options, rel: RELATED_TO}]
+
+  - id: forward_contract
+    type: Instrument
+    name: Forward Contract
+    chapter: 1
+    summary: OTC private agreement to exchange an asset at a fixed price on a future date; settled physically or in cash.
+    facts:
+      - Risks - liquidity (finding counterparty), default/counterparty, regulatory (unregulated), rigidity (cannot exit mid-way).
+      - Buyer profits if price rises above agreed price; seller profits if it falls; linear payoff.
+    links: [{to: futures_contract, rel: VARIANT_OF}]
+
+  - id: futures_contract
+    type: Instrument
+    name: Futures Contract
+    aliases: [Futures, Stock futures, Index futures]
+    chapter: [2, 3, 4]
+    summary: Exchange-traded, standardised, SEBI-regulated, transferable, time-bound, mostly cash-settled agreement whose price mimics the underlying.
+    formula:
+      contract_value: "lot_size * futures_price"
+      pnl: "(exit_price - entry_price) * lot_size * lots * direction"
+    facts:
+      - Lot size = minimum tradable quantity; multiples of lot only.
+      - Margin (a % of contract value) is blocked on entry for both buyer and seller.
+      - Can square off any time before expiry; squaring off transfers risk to a counterparty.
+      - P&L credited/debited the same day (M2M).
+      - Zero-sum game - money transfers, not created.
+      - Linear payoff instrument.
+      - Indian equity derivatives expired on the last Thursday of the month (per source; expiry days have since changed - verify).
+      - Unclosed positions are auto-settled at spot on expiry as futures and spot converge.
+    bot_use: Express short-term directional views with leverage; trade shorts overnight; hedge portfolios.
+    links: [{to: leverage, rel: USES}, {to: margin, rel: USES}, {to: mark_to_market, rel: USES}, {to: expiry, rel: PART_OF}, {to: futures_pricing, rel: RELATED_TO}, {to: sebi, rel: REGULATED_BY}]
+
+  - id: spot_market
+    type: Concept
+    name: Spot Market vs Futures Market
+    chapter: [2, 4]
+    summary: Spot = regular cash market; futures price moves in tandem with spot. Spot delivery buying is unleveraged, no time pressure, but T+settlement; futures are leveraged and time-bound.
+    example: "TCS 2362->2519 over 9 days - spot 42 shares +5.79%; futures 2 lots on 82,670 margin +47%."
+    links: [{to: futures_contract, rel: RELATED_TO}]
+
+  - id: leverage
+    type: Concept
+    name: Leverage
+    chapter: 4
+    summary: Controlling a large contract value with a small margin; double-edged - magnifies gains and losses.
+    formula:
+      leverage: "contract_value / margin"
+      wipeout_move: "1 / leverage"
+    example: "TCS 295,250/41,335 = 7.14x -> 14% adverse move wipes out margin; 42x -> 2.3% move."
+    params: {author_max_leverage: [10, 12]}
+    bot_use: Cap effective leverage (e.g. <= 10x); compute margin-wipeout distance before entry.
+    links: [{to: margin, rel: RELATED_TO}, {to: position_sizing, rel: RELATED_TO}]
+
+  - id: margin
+    type: Concept
+    name: Margins (Initial, SPAN, Exposure, Maintenance)
+    aliases: [SPAN margin, Exposure margin, Initial margin, Maintenance margin]
+    chapter: [5, 6, 7]
+    summary: Initial margin = SPAN + exposure, blocked while position is open; SPAN (exchange minimum, volatility-driven) acts as maintenance margin; exposure ~4-5% of CV extra cushion.
+    formula:
+      initial_margin: "span + exposure"
+    facts:
+      - Margin varies daily with futures price and volatility (higher expected volatility -> higher SPAN).
+      - Hedged positions (spreads) get large margin benefit (e.g. Bharat Forge long Jan + short Feb needed ~7.2k vs ~75k).
+      - Index futures margin ~12-15%; single stocks can be 45-60% (source era).
+    caveats: [Margin rules changed after 2020 SEBI peak-margin regime; intraday leverage limits differ now.]
+    links: [{to: margin_call, rel: RELATED_TO}, {to: mark_to_market, rel: RELATED_TO}, {to: product_types, rel: RELATED_TO}]
+
+  - id: mark_to_market
+    type: Process
+    name: Mark to Market (M2M)
+    aliases: [M2M, MTM]
+    chapter: 5
+    summary: Daily settlement of futures P&L using previous close as reference; reference price resets to each day's close.
+    formula:
+      daily_m2m: "(close_t - ref_price) * qty * direction, ref = entry on day 1 else close_{t-1}"
+    facts: [Sum of daily M2M = total P&L. M2M plus margins virtually eliminate counterparty default.]
+    example: "Hindalco long 165, closes 168.3/172.4/171.6, exit 170.1 -> M2M +6600 +8200 -1600 -3000 = +10,200."
+    links: [{to: margin, rel: RELATED_TO}, {to: clearing_corporation, rel: RELATED_TO}]
+
+  - id: margin_call
+    type: Event
+    name: Margin Call
+    chapter: 5
+    summary: When cash balance after M2M falls below SPAN (maintenance) margin, broker demands funds or force-closes positions.
+    conditions: {trigger: "cash_balance + m2m < span_margin"}
+    example: "HDFC Bank 955->880 (-8%) on 1 lot (250) -> M2M -18,750 leaves 14,659 < SPAN 16,500 -> margin call."
+    bot_use: Monitor margin utilisation intraday; reduce positions before forced liquidation.
+    links: [{to: margin, rel: USES}]
+
+  - id: expiry
+    type: Concept
+    name: Expiry, Contract Months and Rollover
+    aliases: [Near month, Mid month, Far month, Rollover]
+    chapter: 6
+    summary: Three concurrent monthly contracts (current/near, mid, far); price usually near < mid < far; on expiry a new far month is listed. Rollover = closing near-month and opening next month near expiry.
+    facts:
+      - Directional view must play out before expiry.
+      - Near month is most liquid, hence rollover is common.
+      - Rollover data - rolling longs = bullish perception, rolling shorts = bearish (perception only).
+    links: [{to: futures_contract, rel: PART_OF}, {to: calendar_spread, rel: RELATED_TO}]
+
+  - id: product_types_fo
+    type: Concept
+    name: F&O Product Types (NRML, MIS, CO, BO)
+    aliases: [Cover order, Bracket order, NRML]
+    chapter: 7
+    summary: More risk information to broker RMS -> lower margin. NRML = carry forward (full SPAN+exposure); MIS = intraday (lower); CO = intraday + mandatory stop (lower still); BO = intraday + stop + target + optional trailing (same margin as CO).
+    facts: [MIS/CO/BO auto-squared off ~3:20 PM. RMS cares about risk not reward, so target doesn't lower margin.]
+    caveats: [Bracket orders were later discontinued by many brokers; check availability.]
+    links: [{to: product_types, rel: VARIANT_OF}, {to: trailing_stop, rel: RELATED_TO}, {to: margin, rel: AFFECTS}]
+
+  - id: overnight_risk
+    type: Concept
+    name: Overnight Risk
+    chapter: 7
+    summary: Risk of adverse news/moves while markets are closed (e.g. crude spikes overnight hitting BPCL longs); longer holding = more risk = more margin.
+    links: [{to: gaps, rel: RELATED_TO}]
+
+  - id: trailing_stop
+    type: Rule
+    name: Trailing Stop Loss
+    chapter: 7
+    summary: Move the stop in the trade's favour as price advances to lock in profit and ride momentum beyond the original target.
+    conditions:
+      step_rule: "for every N points of favourable move, raise stop by N (example N=15)"
+    example: "Infosys long 2175, SL 2150, target 2220; trailing every 15 pts -> exited 2230 for +55 vs planned +45."
+    bot_use: Implement fixed-step, ATR-based or Supertrend trailing stops.
+    links: [{to: stop_loss, rel: VARIANT_OF}, {to: supertrend, rel: RELATED_TO}]
+
+  - id: short_selling_mechanics
+    type: Rule
+    name: Shorting - Spot vs Futures
+    chapter: 8
+    summary: Spot shorts must be squared off intraday (else short delivery -> auction penalty up to ~20%); futures shorts can be carried overnight with same margin and M2M as longs; short stop is always above entry.
+    links: [{to: short_position, rel: RELATED_TO}, {to: futures_contract, rel: USES}]
+
+  - id: index_futures
+    type: Instrument
+    name: Nifty (Index) Futures
+    aliases: [Nifty futures, Bank Nifty futures]
+    chapter: 9
+    summary: Futures on the Nifty index; most liquid derivative in India.
+    facts:
+      - Benefits vs stock futures - diversified (no unsystematic risk), hard to manipulate, very liquid (impact cost ~0.0125%), lower margins (12-15% vs up to 45-60%), broad economic call, TA works better, lower volatility (~16-17% vs 30%+ for stocks).
+      - Lot size changes over time (25 in 2015; verify current).
+    bot_use: Preferred instrument for systematic index strategies and portfolio hedges.
+    links: [{to: market_index, rel: COMPUTED_FROM}, {to: impact_cost, rel: RELATED_TO}, {to: hedging, rel: RELATED_TO}]
+
+  - id: liquidity
+    type: Concept
+    name: Liquidity
+    chapter: 9
+    summary: Ease of buying/selling without moving price; liquid instruments have tight spreads, low impact cost, attract institutions, and lower volatility.
+    links: [{to: impact_cost, rel: MEASURES}, {to: bid_ask, rel: RELATED_TO}, {to: open_interest, rel: RELATED_TO}]
+
+  - id: impact_cost
+    type: Formula
+    name: Impact Cost
+    chapter: 9
+    summary: Round-trip loss (buy at best ask, sell at best bid) as % of mid price; proxy for liquidity and market-order slippage.
+    formula: {impact_cost: "(best_ask - best_bid) / ((best_ask + best_bid)/2)"}
+    example: "MRF 98.7/38315.6 = 0.3% (illiquid); Nifty futures 1.1/8769.35 = 0.0125% (benchmark)."
+    conditions: {avoid_market_orders: "impact_cost >> 0.0125%"}
+    bot_use: Slippage model in backtests; liquidity filter for universe.
+    links: [{to: liquidity, rel: MEASURES}, {to: bid_ask, rel: COMPUTED_FROM}]
+
+  - id: futures_pricing
+    type: Formula
+    name: Futures Pricing (Spot-Futures Parity)
+    aliases: [Fair value, Basis, Premium, Discount, Contango, Backwardation, Cost of carry]
+    chapter: 10
+    summary: Futures fair value = spot adjusted for risk-free carry minus dividends; basis (spread) = futures - spot; converges to zero at expiry.
+    formula:
+      fair_value: "spot * (1 + rf * days_to_expiry/365) - dividend"
+      basis: "futures - spot"
+    params: {rf_proxy: "RBI 91-day T-bill yield"}
+    facts:
+      - Market price differs slightly from fair value due to costs, taxes, margins, expected dividends; gap widens with days to expiry.
+      - Futures > spot = premium (contango); futures < spot = discount (backwardation, from short-term demand/supply imbalance).
+    example: "Infosys spot 2280.5, rf 8.3528%, 7 days -> 2283 (market 2284); 34 days -> 2299; 80 days -> 2322."
+    links: [{to: cash_and_carry, rel: RELATED_TO}, {to: calendar_spread, rel: RELATED_TO}, {to: interest_rates, rel: USES}]
+
+  - id: cash_and_carry
+    type: Strategy
+    name: Cash & Carry Arbitrage
+    chapter: 10
+    summary: When futures trade far above fair value, buy spot and sell futures to lock the spread; unwind near expiry as prices converge.
+    conditions:
+      entry: "futures_market - fair_value >> costs"
+      legs: "long spot, short futures (equal quantity)"
+      exit: "just before expiry (sell spot, buy futures)"
+    example: "Wipro spot 653, fair futures 658, market 700 -> locked +47 regardless of expiry price."
+    links: [{to: futures_pricing, rel: USES}, {to: arbitrage, rel: IS_A}]
+
+  - id: calendar_spread
+    type: Strategy
+    name: Calendar Spread (Futures)
+    chapter: [6, 10]
+    summary: Buy one expiry and sell another of the same underlying when their spread deviates from fair value; sell the expensive, buy the cheap.
+    conditions:
+      entry: "near-month trades far above fair value while mid-month near fair -> short near, long mid"
+      assumption: "mid month stays near fair value; near converges to spot at expiry"
+    example: "Wipro near 700 (fair 658), mid 665 (fair 663) -> short near/long mid locks ~35."
+    facts: [Hedged, so margins are much lower; not entirely risk-free (liquidity, execution, volatility).]
+    links: [{to: futures_pricing, rel: USES}, {to: expiry, rel: USES}]
+
+  - id: hedging
+    type: Concept
+    name: Hedging
+    chapter: 11
+    summary: Taking an offsetting position to insulate an existing position from adverse moves (like a fence around a garden).
+    facts:
+      - Why hedge rather than hold or sell - a 25% fall needs a 33.3% rise to recover; selling and re-buying requires timing, loses LTCG benefit and adds costs.
+      - Single stock hedge - short equal quantity of its futures; position becomes market-neutral.
+      - Stocks without futures or small positions - use beta-adjusted Nifty futures; positions smaller than one Nifty lot need options.
+    formula: {recovery_needed: "1/(1 - loss) - 1"}
+    links: [{to: beta, rel: USES}, {to: systematic_risk, rel: HEDGES}, {to: portfolio_hedge, rel: RELATED_TO}]
+
+  - id: systematic_risk
+    type: Concept
+    name: Systematic vs Unsystematic Risk
+    aliases: [Unsystematic risk, Market risk, Company-specific risk]
+    chapter: 11
+    summary: Unsystematic (company-specific - revenue/margin decline, leverage, misconduct) is diversifiable (~21 stocks enough); systematic (GDP, rates, inflation, fiscal deficit, geopolitics) is not diversifiable but can be hedged.
+    links: [{to: diversification, rel: RELATED_TO}, {to: hedging, rel: RELATED_TO}]
+
+  - id: diversification
+    type: Concept
+    name: Diversification
+    chapter: 11
+    summary: Spreading capital across stocks/sectors to reduce unsystematic risk; benefit flattens beyond ~20-21 stocks.
+    links: [{to: systematic_risk, rel: RELATED_TO}, {to: portfolio_size, rel: RELATED_TO}]
+
+  - id: beta
+    type: Formula
+    name: Beta
+    chapter: 11
+    summary: Sensitivity of a stock's returns to market returns; market beta = 1; <1 low beta, >1 high beta, <0 inverse.
+    formula:
+      beta: "slope(stock_daily_returns, index_daily_returns) = cov(rs, rm)/var(rm)"
+      daily_return: "close_t/close_{t-1} - 1"
+    params: {lookback: "~6 months daily"}
+    example: "2015 betas - DLF 1.86, SBI 1.58, L&T 1.43, BPCL 1.42, Axis 1.40, Reliance 1.27, ACC 1.22, Maruti 0.95, Cipla 0.59, Infosys 0.43; TCS 0.62."
+    links: [{to: portfolio_hedge, rel: PART_OF}, {to: systematic_risk, rel: MEASURES}]
+
+  - id: portfolio_hedge
+    type: Strategy
+    name: Portfolio Hedge with Nifty Futures
+    chapter: 11
+    summary: Short beta-weighted value of Nifty futures to neutralise systematic risk of a long portfolio.
+    formula:
+      portfolio_beta: "sum(weight_i * beta_i)"
+      hedge_value: "portfolio_beta * portfolio_value"
+      lots: "hedge_value / (nifty_futures_price * lot_size)"
+    example: "8 lakh portfolio, beta 1.223 -> hedge 9.78 lakh -> 4.33 lots (choose 4 under-hedge or 5 over-hedge); Nifty -500 pts -> futures +54,125 vs portfolio -54,240."
+    caveats: [Fractional lots impossible - perfect hedge rarely possible.]
+    bot_use: Automated beta-hedging overlay for long equity books.
+    links: [{to: beta, rel: USES}, {to: index_futures, rel: USES}, {to: hedging, rel: IS_A}]
+
+  - id: open_interest
+    type: Concept
+    name: Open Interest (OI)
+    aliases: [OI]
+    chapter: 12
+    summary: Number of outstanding (open) derivative contracts; rises when new positions are created, falls when positions are closed, unchanged on transfers. Continuous across days unlike volume.
+    conditions:
+      long_buildup: "price up & OI up -> bullish"
+      short_buildup: "price down & OI up -> bearish"
+      short_covering: "price up & OI down -> shorts covering (bearish trend may end)"
+      long_unwinding: "price down & OI down -> longs exiting (bullish trend may end)"
+      caution: "abnormally high OI with rapid price move = euphoria/leverage; small trigger can cause panic"
+    facts:
+      - Sum of signed positions is always zero (zero-sum).
+      - Higher OI = more liquid market.
+      - "Volume-price for derivatives - price up & volume up = more longs; price down & volume up = more shorts; price up & volume down = short covering; price down & volume down = long unwinding."
+    bot_use: Classify each bar as long buildup/short buildup/short covering/long unwinding as a positioning feature.
+    links: [{to: volume, rel: RELATED_TO}, {to: liquidity, rel: RELATED_TO}]

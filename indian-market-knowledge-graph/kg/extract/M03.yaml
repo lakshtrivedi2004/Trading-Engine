@@ -1,0 +1,445 @@
+module: M03
+title: Fundamental Analysis
+summary: Investor mindset, compounding, qualitative and quantitative investable-grade attributes, reading annual reports and the three financial statements, profitability/leverage/operating/valuation ratios, DuPont, index valuation, equity research process with 10-point checklist, DCF valuation, margin of safety, when to sell and portfolio size.
+nodes:
+  - id: fundamental_analysis
+    type: Concept
+    name: Fundamental Analysis (FA)
+    aliases: [FA]
+    chapter: 1
+    summary: Holistic study of a business to identify investment-grade companies for long-term (3-5+ yr) wealth creation, separating business performance from short-term price noise.
+    facts:
+      - Wealth creators (Infosys, TCS, Page, Eicher, Bosch, Nestle, TTK Prestige) compounded >20% CAGR for 10+ years; wealth destroyers include Suzlon, Reliance Power, Sterling Biotech.
+      - At 20% CAGR money doubles in ~3.5 years (rule of 72).
+      - Skills needed - reading financial statements, understanding business in its industry, basic arithmetic.
+      - Tools - annual report, industry data, news, Excel.
+      - TA and FA should coexist (Eicher flat 2006-2010 then multi-bagger - short-term trades fill the gap).
+    links: [{to: technical_analysis, rel: RELATED_TO}, {to: core_satellite, rel: RELATED_TO}, {to: investable_grade_attributes, rel: USES}, {to: equity_research_process, rel: USES}]
+
+  - id: core_satellite
+    type: Strategy
+    name: Core-Satellite Capital Allocation
+    chapter: 1
+    summary: Split capital (e.g. 60/40) - core in fundamentally strong long-term holdings (expect 12-15% CAGR), satellite for active TA trading in equity/F&O (expect 10-12% absolute/yr).
+    params: {core_pct: 60, satellite_pct: 40}
+    bot_use: Allocate a capped satellite bucket to algorithmic strategies while core remains long-term.
+    links: [{to: asset_allocation, rel: RELATED_TO}]
+
+  - id: speculator_trader_investor
+    type: Concept
+    name: Speculator vs Trader vs Investor
+    chapter: 2
+    summary: Speculator bets on blind faith/outside views; trader designs and backtests trades (e.g. selling high-IV options before RBI expecting volatility drop); investor ignores short-term noise and may buy more on overreaction.
+    facts: [Doing nothing is itself a market action. A trader 'designs all his trades and not just speculates on an outcome'.]
+    links: [{to: backtesting, rel: RELATED_TO}, {to: iv_crush, rel: RELATED_TO}]
+
+  - id: compounding
+    type: Concept
+    name: Compounding Effect
+    chapter: [1, 2]
+    summary: Reinvesting gains lets money grow on itself; the longer you stay invested, the faster absolute wealth grows.
+    formula: {future_value: "P * (1 + r) ** n"}
+    example: "Rs 100 at 20% - took ~6 yrs to reach 300, next 300 in just 4 yrs; reinvesting gives 173 vs 160 when withdrawing profits after 3 yrs."
+    links: [{to: cagr, rel: RELATED_TO}, {to: time_value_of_money, rel: RELATED_TO}]
+
+  - id: investable_grade_attributes
+    type: Rule
+    name: Investable-Grade Attributes (Qualitative + Quantitative)
+    chapter: 2
+    summary: Qualitative (weighted more by author) - management background, ethics, corporate governance, minority shareholder treatment, clandestine promoter share transactions, related-party transactions, promoter salaries, operator activity, significant shareholders, political affiliation, promoter lifestyle. Quantitative - profit/margin/earnings growth, expenses, efficiency, pricing power, taxes, dividends, cash flows, debt, working capital, assets, ratios.
+    facts:
+      - A red flag in any qualitative factor overrides great margins - the market eventually punishes poor governance.
+      - Sector-specific metrics matter (retail - stores, sales/sq ft; oil & gas - reserves, exploration costs).
+      - Hold as long as attributes remain intact; sell when they crumble (not because of price alone).
+    links: [{to: fa_checklist, rel: RELATED_TO}, {to: when_to_sell, rel: RELATED_TO}]
+
+  - id: annual_report
+    type: Concept
+    name: Annual Report
+    chapter: 3
+    summary: Official yearly disclosure (data as of 31 March) - financial highlights, chairman's message, MD&A, 10-yr highlights, directors' report, corporate governance, financial statements, notice.
+    facts:
+      - Prefer AR over media websites (reclassification can distort).
+      - MD&A is the most important section - macro, industry, segment performance, outlook; compare with peers' ARs.
+      - Check chairman's realism (e.g. claims 10% growth when history is 4-5% = red flag).
+      - Standalone vs consolidated statements - prefer consolidated (includes subsidiaries).
+      - Line items reference notes/schedules with details.
+    links: [{to: profit_and_loss, rel: PART_OF}, {to: balance_sheet, rel: PART_OF}, {to: cash_flow_statement, rel: PART_OF}]
+
+  - id: profit_and_loss
+    type: Concept
+    name: Profit & Loss Statement (Income Statement)
+    aliases: [P&L, Income statement]
+    chapter: [4, 5]
+    summary: Revenue, expenses, tax and EPS for a period (year/quarter); top line = revenue, bottom line = PAT.
+    formula:
+      net_revenue_from_ops: "sale of products (net of excise) + services + other operating revenue"
+      total_revenue: "revenue_from_operations + other_income"
+      pbt: "total_revenue - total_expenses - exceptional_items"
+      pat: "pbt - taxes"
+      eps: "pat / shares_outstanding"
+    facts:
+      - Other income (interest, dividends, royalty) should be small; large other income is a red flag.
+      - Depreciation spreads tangible asset cost over useful life; amortisation for intangibles; P&L doesn't show the actual capex outflow (cash flow does).
+      - Exceptional items are one-off.
+      - Negative 'change in inventories' means more produced than sold.
+    links: [{to: eps, rel: PART_OF}, {to: ebitda, rel: RELATED_TO}]
+
+  - id: balance_sheet
+    type: Concept
+    name: Balance Sheet
+    chapter: [6, 7]
+    summary: Cumulative (flow-basis) statement of assets, liabilities and shareholders' equity; Assets = Liabilities + Equity.
+    formula:
+      equation: "assets = shareholders_funds + non_current_liabilities + current_liabilities"
+      equity: "share_capital + reserves + surplus"
+      share_capital: "face_value * shares"
+      shares_outstanding: "share_capital / face_value"
+      net_block: "gross_block - accumulated_depreciation"
+    facts:
+      - Shareholders' funds appear on liability side because the company owes them to shareholders.
+      - Reserves - capital, securities premium, general; surplus accumulates PAT, pays dividends.
+      - Non-current liabilities (>12 months) - long-term borrowings, deferred tax liability (depreciation timing), long-term provisions (employee benefits).
+      - Current liabilities - short-term borrowings (working capital), trade payables, other, short-term provisions.
+      - Non-current assets - tangible/intangible fixed assets, CWIP, investments, long-term loans/advances.
+      - Current assets - inventory, trade receivables, cash & equivalents, short-term loans/advances.
+      - No debt is good but ask why (can't borrow? not expanding?).
+      - P&L links - PAT -> surplus; credit sales -> receivables; purchases -> payables/inventory; capex -> depreciation; debt -> finance cost.
+    links: [{to: profit_and_loss, rel: RELATED_TO}, {to: cash_flow_statement, rel: RELATED_TO}]
+
+  - id: cash_flow_statement
+    type: Concept
+    name: Cash Flow Statement
+    chapter: 8
+    summary: True cash generated/consumed across operating, investing and financing activities; net cash flow ties to balance sheet cash.
+    formula: {net_cash_flow: "CFO + CFI + CFF"}
+    facts:
+      - Revenue can include credit sales not yet collected - cash flow shows real liquidity.
+      - Liabilities up -> cash up; assets up -> cash down.
+      - Positive cash from operations is a sign of financial well-being; investors should focus on CFO.
+      - Healthy investing outflow signals expansion.
+    links: [{to: free_cash_flow, rel: RELATED_TO}]
+
+  - id: financial_ratios
+    type: Concept
+    name: Financial Ratios (overview)
+    chapter: 9
+    summary: Popularised by Benjamin Graham; categories - profitability, leverage, valuation, operating. A ratio alone is mute - compare with peers and its own trend; adjust for accounting policy changes; use averages of opening/closing balance sheet values.
+    links: [{to: ebitda, rel: PART_OF}, {to: roe, rel: PART_OF}, {to: debt_to_equity, rel: PART_OF}, {to: pe_ratio, rel: PART_OF}, {to: operating_ratios, rel: PART_OF}]
+
+  - id: ebitda
+    type: Ratio
+    name: EBITDA and EBITDA Margin
+    aliases: [Operating profit margin]
+    chapter: 9
+    summary: Operating profitability excluding other income, finance cost and D&A; reflects management efficiency.
+    formula:
+      ebitda: "(total_revenue - other_income) - (total_expenses - finance_cost - depreciation)"
+      ebitda_margin: "ebitda / (total_revenue - other_income)"
+    example: "ARBL FY14 EBITDA 560 Cr on 3436 Cr = 16.3%; 4-yr EBITDA CAGR 21%."
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: pat_margin
+    type: Ratio
+    name: PAT Margin (Net Profit Margin)
+    chapter: 9
+    summary: Overall profitability after all expenses and tax.
+    formula: {pat_margin: "pat / total_revenue"}
+    example: "ARBL 367/3482 = 10.5%."
+    links: [{to: dupont, rel: PART_OF}]
+
+  - id: roe
+    type: Ratio
+    name: Return on Equity (RoE)
+    aliases: [ROE]
+    chapter: 9
+    summary: Profit per unit of shareholders' equity; key investable attribute. Top Indian companies average 14-16%; author prefers >18-20% (checklist >25%) without high debt.
+    formula: {roe: "net_profit / avg_shareholders_equity"}
+    caveats: [Debt inflates RoE (pizza oven example 25% -> 31% -> 50% as debt rises); always inspect with DuPont and debt levels.]
+    links: [{to: dupont, rel: COMPUTED_FROM}, {to: debt_to_equity, rel: RELATED_TO}]
+
+  - id: dupont
+    type: Formula
+    name: DuPont Model
+    chapter: 9
+    summary: RoE = Net profit margin x Asset turnover x Financial leverage; reveals quality of returns.
+    formula:
+      roe: "(net_profit/net_sales) * (net_sales/avg_total_assets) * (avg_total_assets/avg_equity)"
+    example: "ARBL 9.2% x 1.75 x 1.61 ~ 25.9%."
+    links: [{to: roe, rel: COMPUTED_FROM}, {to: asset_turnover, rel: USES}, {to: financial_leverage_ratio, rel: USES}]
+
+  - id: roa
+    type: Ratio
+    name: Return on Assets (RoA)
+    chapter: 9
+    summary: Efficiency of asset use, adding back after-tax interest (tax shield) since lenders fund assets.
+    formula: {roa: "(net_income + interest*(1 - tax_rate)) / avg_total_assets"}
+    example: "ARBL (367.4 + 4.76)/1955 = 19.03%."
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: roce
+    type: Ratio
+    name: Return on Capital Employed (ROCE)
+    chapter: 9
+    summary: Return on total capital (debt + equity).
+    formula: {roce: "EBIT / (short_term_debt + long_term_debt + equity)"}
+    example: "ARBL 537.7/1446.2 = 37.18%."
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: interest_coverage
+    type: Ratio
+    name: Interest Coverage Ratio
+    chapter: 10
+    summary: Ability to service interest from operating earnings; low coverage = default risk.
+    formula: {icr: "EBIT / interest_expense", ebit: "EBITDA - D&A"}
+    example: "Jain Irrigation FY14 565.44/467.64 = 1.21x (weak)."
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: debt_to_equity
+    type: Ratio
+    name: Debt to Equity Ratio
+    chapter: 10
+    summary: Total (short + long-term) debt relative to equity; >1 indicates high leverage.
+    formula: {de: "total_debt / total_equity"}
+    example: "Jain Irrigation 3686.6/2175.5 = 1.69."
+    conditions: {caution: "de > 1"}
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: debt_to_asset
+    type: Ratio
+    name: Debt to Asset Ratio
+    chapter: 10
+    summary: Share of assets financed by debt.
+    formula: {da: "total_debt / total_assets"}
+    example: "Jain Irrigation ~45%."
+    links: [{to: financial_ratios, rel: PART_OF}]
+
+  - id: financial_leverage_ratio
+    type: Ratio
+    name: Financial Leverage Ratio
+    chapter: [9, 10]
+    summary: Assets supported per unit of equity; higher = more leveraged.
+    formula: {fl: "avg_total_assets / avg_total_equity"}
+    example: "ARBL 1.61; Jain Irrigation 3.68."
+    links: [{to: dupont, rel: PART_OF}]
+
+  - id: operating_ratios
+    type: Ratio
+    name: Operating (Activity / Management) Ratios
+    chapter: 10
+    summary: Efficiency of converting assets into revenue.
+    formula:
+      fixed_asset_turnover: "operating_revenue / avg_net_fixed_assets_incl_cwip"
+      working_capital: "current_assets - current_liabilities"
+      working_capital_turnover: "revenue / avg_working_capital"
+      total_asset_turnover: "operating_revenue / avg_total_assets"
+      inventory_turnover: "COGS / avg_inventory"
+      inventory_days: "365 / inventory_turnover"
+      receivable_turnover: "revenue / avg_receivables"
+      dso: "365 / receivable_turnover"
+      cogs: "materials + stock-in-trade purchases + stores & spares + power & fuel"
+    example: "ARBL FAT 5.59, WCT 5.11, TAT 1.75, inventory turnover 7.8 (~47 days), receivables 8.24x (~44 days)."
+    caveats: [High inventory turnover could reflect low production capacity - investigate funding, raw material access, scalability.]
+    links: [{to: asset_turnover, rel: RELATED_TO}, {to: financial_ratios, rel: PART_OF}]
+
+  - id: asset_turnover
+    type: Ratio
+    name: Asset Turnover
+    chapter: [9, 10]
+    summary: Revenue generated per rupee of average total assets.
+    formula: {asset_turnover: "net_sales / avg_total_assets"}
+    links: [{to: dupont, rel: PART_OF}]
+
+  - id: gross_profit_margin
+    type: Ratio
+    name: Gross Profit Margin
+    chapter: 13
+    summary: (Net sales - COGS)/Net sales; >20% suggests a moat.
+    formula: {gpm: "(net_sales - cogs) / net_sales"}
+    conditions: {pass: "gpm > 0.20"}
+    links: [{to: fa_checklist, rel: PART_OF}, {to: economic_moat, rel: SIGNALS}]
+
+  - id: eps
+    type: Ratio
+    name: Earnings Per Share (EPS)
+    chapter: [5, 11, 13]
+    summary: PAT per outstanding share; EPS growth should track PAT growth (else dilution).
+    formula: {eps: "pat / shares_outstanding"}
+    links: [{to: pe_ratio, rel: PART_OF}]
+
+  - id: ps_ratio
+    type: Ratio
+    name: Price to Sales (P/S)
+    chapter: 11
+    summary: Price relative to sales per share; useful when earnings are cyclical or distorted.
+    formula: {ps: "price / (total_revenue / shares)"}
+    example: "ARBL 661/203.86 = 3.24x."
+    caveats: [Higher-margin firms justify higher P/S - check profit margin.]
+    links: [{to: valuation_ratios, rel: PART_OF}]
+
+  - id: pb_ratio
+    type: Ratio
+    name: Price to Book Value (P/BV)
+    chapter: 11
+    summary: Price relative to book (liquidation) value per share.
+    formula: {bvps: "(share_capital + reserves - revaluation_reserves) / shares", pb: "price / bvps"}
+    example: "ARBL BV 79.8, P/BV 8.3x."
+    links: [{to: valuation_ratios, rel: PART_OF}]
+
+  - id: pe_ratio
+    type: Ratio
+    name: Price to Earnings (P/E)
+    aliases: [PE]
+    chapter: 11
+    summary: Price paid per rupee of earnings - the 'financial ratio superstar'.
+    formula: {pe: "price / eps"}
+    example: "ARBL 661/21.49 = 30.76x."
+    facts:
+      - Author avoids buying stocks above 25-30x earnings regardless of sector.
+      - Earnings can be manipulated - watch frequent accounting policy changes, low depreciation provisions, earnings rising without cash flow and sales.
+    links: [{to: eps, rel: USES}, {to: index_valuation, rel: RELATED_TO}, {to: valuation_ratios, rel: PART_OF}]
+
+  - id: valuation_ratios
+    type: Concept
+    name: Valuation Ratios
+    chapter: 11
+    summary: Compare price with financial performance (P/S, P/BV, P/E); a mediocre business at a cheap valuation can beat an exciting one at a high valuation.
+    links: [{to: dcf, rel: RELATED_TO}]
+
+  - id: index_valuation
+    type: Rule
+    name: Nifty Index Valuation (P/E bands)
+    chapter: 11
+    summary: Nifty P/E historically 16-20x (avg ~18x); peaked 28x (Jan 2008, pre-crash), troughed ~11x (late 2008/09).
+    conditions:
+      caution: "nifty_pe >= 22"
+      attractive: "nifty_pe <= 16"
+    facts: [NSE publishes daily Nifty P/E, P/B, dividend yield (~6 PM).]
+    bot_use: Macro valuation regime filter for long-only equity allocation / leverage.
+    caveats: [Bands are from source era (2014); P/E methodology changed to consolidated earnings in 2021 - recalibrate.]
+    links: [{to: market_index, rel: MEASURES}, {to: pe_ratio, rel: USES}]
+
+  - id: stock_idea_generation
+    type: Process
+    name: Stock Idea Generation
+    chapter: 12
+    summary: General observation (Peter Lynch), stock screeners (e.g. ROE > 25% and PAT margin > 20%), macro trends, sectoral trends, special situations, circle of competence; maintain a watch list and re-evaluate.
+    links: [{to: equity_research_process, rel: PREREQUISITE}]
+
+  - id: economic_moat
+    type: Concept
+    name: Economic Moat
+    chapter: 12
+    summary: Sustainable competitive advantage (brand, pricing power, licence, market share) protecting long-term profits (Buffett).
+    example: "Royal Enfield brand (Eicher), Jockey licence (Page), labour arbitrage (Infosys)."
+    links: [{to: gross_profit_margin, rel: RELATED_TO}]
+
+  - id: equity_research_process
+    type: Process
+    name: 3-Stage Equity Research
+    chapter: [12, 13, 15]
+    summary: (1) Understand the business via Q&A from 5 years of annual reports (~15 hrs, summarise on one page; stop on any red flag); (2) apply the checklist; (3) valuation via DCF and margin of safety. Stages are sequential.
+    facts:
+      - "Key questions - what the company does, promoters' background, products, plants & capacity utilisation, raw material dependency (govt-regulated?), clients, competitors (monopoly/duopoly/oligopoly = higher margins), major shareholders, new products/geographies, revenue mix, regulation, bankers & auditors, labour issues, entry barriers, replicability in cheap-labour countries, number of subsidiaries."
+      - Author prefers businesses with little competition and little government intervention.
+      - Bear markets move prices, not fundamentals - conviction lets you buy in bear markets.
+    links: [{to: fa_checklist, rel: USES}, {to: dcf, rel: USES}, {to: margin_of_safety, rel: USES}]
+
+  - id: fa_checklist
+    type: Rule
+    name: 10-Point Fundamental Checklist
+    chapter: [12, 13]
+    summary: Screen for investable-grade financials.
+    conditions:
+      gross_profit_margin: "> 20%"
+      revenue_and_pat_growth: "in line with each other; author prefers revenue & PAT CAGR > 15%"
+      eps: "EPS growth consistent with net profit growth (no dilution)"
+      debt: "not highly leveraged; track Debt/EBIT trend and interest coverage"
+      inventory: "manufacturing - inventory growing with PAT; stable/declining inventory days"
+      sales_vs_receivables: "sales not driven by receivables (receivables % of sales stable/declining)"
+      cfo: "positive cash flow from operations"
+      roe: "> 25% (author elsewhere >20%), not debt-driven"
+      business_diversity: "1-2 simple business lines"
+      subsidiaries: "few (many subsidiaries can mean siphoning)"
+    bot_use: Direct screener rules for a fundamental-filtered universe.
+    links: [{to: gross_profit_margin, rel: USES}, {to: roe, rel: USES}, {to: debt_to_equity, rel: USES}, {to: operating_ratios, rel: USES}, {to: cash_flow_statement, rel: USES}]
+
+  - id: time_value_of_money
+    type: Formula
+    name: Time Value of Money (FV, PV, NPV)
+    chapter: 14
+    summary: Money's value changes over time due to opportunity cost; compounding moves money forward, discounting moves it back.
+    formula:
+      fv: "amount * (1 + r) ** n"
+      pv: "amount / (1 + r) ** n"
+      npv: "sum(cf_t / (1 + r) ** t)"
+    example: "5000 at 8.5% for 5 yrs = 7518.3; 10,000 in 6 yrs at 8.5% = 6129.5 today; pizza machine 5 lakh/yr x 10 yrs at 8.5% NPV = 32.8 lakh."
+    links: [{to: dcf, rel: PREREQUISITE}, {to: compounding, rel: RELATED_TO}]
+
+  - id: free_cash_flow
+    type: Formula
+    name: Free Cash Flow (FCF)
+    chapter: 15
+    summary: Operating cash after capex - cash available to shareholders; mark of a healthy business.
+    formula: {fcf: "cash_from_operations - capex"}
+    links: [{to: dcf, rel: PART_OF}, {to: cash_flow_statement, rel: COMPUTED_FROM}]
+
+  - id: dcf
+    type: Model
+    name: Discounted Cash Flow (DCF) Valuation
+    aliases: [DCF, Intrinsic value]
+    chapter: [14, 15, 16]
+    summary: Intrinsic value = PV of projected FCF + PV of terminal value, adjusted for net debt, divided by shares.
+    formula:
+      base_fcf: "average FCF of last 3 years (smooths cyclicality)"
+      projection: "stage 1 (yrs 1-5) growth g1 (e.g. 18%, 15% for large caps), stage 2 (yrs 6-10) g2 (e.g. 10%)"
+      terminal_value: "FCF_10 * (1 + g_t) / (r - g_t)"
+      pv_terminal: "TV / (1 + r) ** 10"
+      equity_value: "sum PV(FCF) + PV(TV) - net_debt"
+      net_debt: "total_debt - cash"
+      intrinsic_value_per_share: "equity_value / shares"
+      value_band: "IV * [0.9, 1.1]"
+    params: {discount_rate: 0.09, terminal_growth: [0.03, 0.04], max_fcf_growth: 0.20, years: 10}
+    conditions:
+      buy: "price < lower band"
+      hold: "lower band <= price <= upper band (no fresh buy)"
+      overvalued: "price > upper band (book profits or hold, never buy)"
+    example: "ARBL - avg FCF 140.36 Cr, PV FCF 1968 + PV TV 4111 = 6079 Cr; net debt -218.6; /17.081 Cr shares = Rs 368 (band 331-405) vs CMP 726."
+    caveats:
+      - Garbage in, garbage out - requires forecasting.
+      - Highly sensitive to terminal growth (3.5% -> 4% moves value 368 -> 394).
+      - Needs constant updates; useless for <1 yr horizon.
+      - Keep assumptions conservative - FCF growth <= 20%, terminal growth <= 4%, 10-year 2-stage.
+    links: [{to: free_cash_flow, rel: USES}, {to: time_value_of_money, rel: USES}, {to: margin_of_safety, rel: RELATED_TO}]
+
+  - id: margin_of_safety
+    type: Rule
+    name: Margin of Safety
+    chapter: 16
+    summary: Benjamin Graham's principle - buy only at a discount to intrinsic value; author takes a further >= 30% discount to the lower value band.
+    formula: {buy_price: "IV * 0.9 * 0.7"}
+    example: "ARBL IV 368 -> lower band 331 -> buy ~230 with conviction."
+    facts: [Bear markets offer such discounts - keep cash ready.]
+    links: [{to: dcf, rel: USES}]
+
+  - id: when_to_sell
+    type: Rule
+    name: When to Sell (Investing)
+    chapter: 16
+    summary: Hold while investable-grade attributes stay intact; sell when they deteriorate, not because of price gains alone.
+    links: [{to: investable_grade_attributes, rel: USES}]
+
+  - id: portfolio_size
+    type: Rule
+    name: Number of Stocks in a Portfolio
+    chapter: 16
+    summary: Author holds ~13, never >15; >20 is pointless. Klarman 10-15, Buffett 5-10, Graham 10-30, Keynes 2-3.
+    links: [{to: diversification, rel: RELATED_TO}]
+
+  - id: investing_principles
+    type: Rule
+    name: Investing Principles (Finale)
+    chapter: 16
+    summary: Expect realistic 15-18% CAGR; long-term approach; buy investable-grade attributes; character over numbers; ignore TV noise and apply checklist; respect margin of safety; avoid IPOs (usually overpriced) unless 3-stage research; keep learning.
+    facts: [Recommended books - Essays of Warren Buffett; Little Book that Beats the Market (Greenblatt); Little Book of Valuation (Damodaran); Little Book that Builds Wealth (Dorsey).]
+    links: [{to: ipo, rel: RELATED_TO}, {to: margin_of_safety, rel: USES}]

@@ -11,6 +11,7 @@ the broker and nothing else, so what paper trades is exactly what live trades.
 """
 import argparse
 import html
+import json
 import os
 import signal
 import sys
@@ -542,7 +543,20 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
             f"= min(configured Rs {L.capital_ceiling:,.2f}, the account), re-read every "
             f"{IntradayEngine.FUNDS_REFRESH_SEC:g} s while flat")
     else:
-        capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=L.capital_ceiling)
+        # Paper sizes like live: capped at the funds live last read from the
+        # broker, so it picks the same strikes and refuses the same trades a
+        # smaller real account would (owner, 15 Oct 2026: paper made money on a
+        # bigger purse while live could not afford those trades).
+        ceiling = L.capital_ceiling
+        try:
+            with open("journal/live/capital_live.json") as fh:
+                live_funds_seen = float((json.load(fh).get("synced") or {}).get("funds") or 0.0)
+        except (OSError, ValueError):
+            live_funds_seen = 0.0
+        if live_funds_seen > 0 and not args.capital:
+            ceiling = min(ceiling or live_funds_seen, live_funds_seen)
+            log(f"paper capital capped at live's last broker funds Rs {live_funds_seen:,.2f}")
+        capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=ceiling)
     interval = args.candle_interval or L.candle_interval
 
     journal = Journal(directory="journal/live") if mode == "live" else Journal()

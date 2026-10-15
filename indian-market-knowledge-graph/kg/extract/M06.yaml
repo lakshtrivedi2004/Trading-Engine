@@ -1,0 +1,210 @@
+module: M06
+title: Option Strategies
+summary: Behavioural warning on gambling with options; bull call/put spreads, call ratio back spread, bear call ladder, synthetic long and put-call-parity arbitrage, bear put/call spreads, put ratio back spread, long/short straddle and strangle, max pain and PCR. (The source lists further strategies - straps, strips, iron condor, butterfly, box, synthetic put, bull put ladder - but does not cover them.)
+nodes:
+  - id: option_strategy_principles
+    type: Rule
+    name: Option Strategy Principles
+    chapter: [1, 7]
+    summary: Know a handful of strategies well and map market view to strategy; never treat options as lottery tickets ('limited risk, unlimited profit' is a silent P&L killer); professionals prefer spreads for risk visibility even at lower profit; prefer net-credit strategies; always sum deltas to know a multi-leg position's directional bias.
+    facts:
+      - "Moderate move quantified by volatility - volatile stocks 5-8%, less volatile stocks and indices < 5%."
+      - Delta-neutral strategies react to volatility and time ('volatility based strategies').
+      - Winning on options can be addictive (reflexive vs reflective brain).
+    links: [{to: strategy_selector, rel: RELATED_TO}, {to: delta, rel: USES}, {to: trading_biases, rel: RELATED_TO}]
+
+  - id: strategy_selector
+    type: Rule
+    name: View -> Option Strategy Map
+    chapter: [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
+    summary: Map outlook and volatility view to a strategy.
+    conditions:
+      moderately_bullish_low_iv: bull_call_spread
+      moderately_bullish_after_fall_high_iv: bull_put_spread
+      outright_bullish: [call_ratio_back_spread, bear_call_ladder]
+      moderately_bearish_low_iv: bear_put_spread
+      moderately_bearish_after_rally_high_iv: bear_call_spread
+      outright_bearish: put_ratio_back_spread
+      big_move_unknown_direction_low_iv_rising: [straddle, strangle]
+      range_bound_high_iv_falling: [short_straddle, short_strangle]
+      replicate_futures: synthetic_long
+    bot_use: Rule table for an options strategy engine keyed on direction signal strength + IV regime + days to expiry.
+    links: [{to: bull_call_spread, rel: USES}, {to: bull_put_spread, rel: USES}, {to: call_ratio_back_spread, rel: USES}, {to: bear_call_ladder, rel: USES}, {to: bear_put_spread, rel: USES}, {to: bear_call_spread, rel: USES}, {to: put_ratio_back_spread, rel: USES}, {to: straddle, rel: USES}, {to: strangle, rel: USES}, {to: synthetic_long, rel: USES}]
+
+  - id: bull_call_spread
+    type: Strategy
+    name: Bull Call Spread (debit)
+    chapter: 2
+    summary: Moderately bullish - buy ATM (lower) call, sell OTM (higher) call, same expiry/underlying/quantity; caps profit to reduce cost.
+    formula:
+      net_debit: "premium_lower_call - premium_higher_call"
+      max_loss: "net_debit"
+      max_profit: "spread - net_debit"
+      breakeven: "lower_strike + net_debit"
+    example: "Nifty 7846 - buy 7800 CE 79, sell 7900 CE 25 -> debit 54, max profit 46, BE 7854."
+    conditions:
+      strike_first_half: "target in 5d -> far OTM pair; 15d -> slightly OTM; 25d/expiry -> ATM"
+      strike_second_half: "1-5d -> far OTM; 10d -> slightly OTM; expiry -> ATM"
+    facts: [Wider spread -> more profit potential but higher breakeven. Higher IV raises cost and lowers profit.]
+    links: [{to: bull_put_spread, rel: VARIANT_OF}, {to: bear_put_spread, rel: OPPOSITE_OF}]
+
+  - id: bull_put_spread
+    type: Strategy
+    name: Bull Put Spread (credit)
+    chapter: 3
+    summary: Moderately bullish after a fall when put premiums/IV are high and time is ample - buy OTM put, sell ITM put.
+    formula:
+      net_credit: "premium_higher_put - premium_lower_put"
+      max_profit: "net_credit"
+      max_loss: "spread - net_credit"
+      breakeven: "higher_strike - net_credit"
+    example: "Nifty 7805 - buy 7700 PE 72, sell 7900 PE 163 -> credit 91, max loss 109, BE 7809."
+    links: [{to: bull_call_spread, rel: VARIANT_OF}, {to: bear_call_spread, rel: OPPOSITE_OF}]
+
+  - id: call_ratio_back_spread
+    type: Strategy
+    name: Call Ratio Back Spread
+    chapter: 4
+    summary: Outright bullish - sell 1 ITM call, buy 2 OTM calls (strict 2:1), usually for net credit; unlimited upside, small profit if market falls, max loss at higher strike.
+    formula:
+      net_credit: "premium_lower - 2*premium_higher"
+      max_loss: "spread - net_credit (at higher strike)"
+      downside_payoff: "net_credit"
+      lower_breakeven: "lower_strike + net_credit"
+      upper_breakeven: "higher_strike + max_loss"
+    example: "Nifty 7743 - sell 7600 CE 201, buy 2x 7800 CE 78 -> credit 45, max loss 155 at 7800, BEs 7645/7955."
+    conditions:
+      strikes: "slightly ITM short + slightly OTM long when time is ample; in 2nd half use deep ITM short + slightly ITM long"
+      volatility: "rising IV helps with ample time; hurts with few days left; avoid starting when IV > ~2x normal"
+    links: [{to: bear_call_ladder, rel: RELATED_TO}, {to: put_ratio_back_spread, rel: OPPOSITE_OF}]
+
+  - id: bear_call_ladder
+    type: Strategy
+    name: Bear Call Ladder (actually bullish)
+    chapter: 5
+    summary: Sell 1 ITM call, buy 1 ATM and 1 OTM call (1:1:1) for net credit; profits big above upper breakeven, modest if market falls, loses if market stalls; best on stocks around quarterly results.
+    formula:
+      net_credit: "prem_ITM - prem_ATM - prem_OTM"
+      max_loss: "(ATM - ITM strike) - net_credit, between ATM and OTM strikes"
+      lower_breakeven: "ITM_strike + net_credit"
+      upper_breakeven: "ATM_strike + OTM_strike - ITM_strike - net_credit"
+    example: "Nifty 7790 - sell 7600 CE 247, buy 7800 CE 117 and 7900 CE 70 -> credit 60; loss zone 7660-8040."
+    links: [{to: call_ratio_back_spread, rel: VARIANT_OF}]
+
+  - id: synthetic_long
+    type: Strategy
+    name: Synthetic Long (and PCP Arbitrage)
+    chapter: 6
+    summary: Long ATM call + short ATM put replicates long futures (linear payoff); breakeven = strike + net premium. Arbitrage - synthetic long + short futures should net zero at expiry; a positive locked P&L after costs is an arbitrage.
+    formula:
+      synthetic_long: "+C(K) - P(K)"
+      arbitrage: "C(K) - P(K) - F + (F - K) ... P&L at expiry = (F - K) - (C - P) ; trade if > costs"
+    example: "Nifty 7304, fut 7316; long 7300 CE 79.5, short 7300 PE 73.85, short fut 7316 -> locks ~10.35 pts before costs."
+    facts:
+      - Arbitrage risks (fish-market analogy) - opportunity, liquidity, execution, transaction cost, competition erodes it.
+    links: [{to: put_call_parity, rel: USES}, {to: arbitrage, rel: IS_A}, {to: futures_contract, rel: RELATED_TO}]
+
+  - id: arbitrage
+    type: Concept
+    name: Arbitrage
+    chapter: 6
+    summary: Buying in the cheaper market and selling in the dearer one to lock a near-riskless spread; governed by simple parity equations; risks are opportunity, liquidity, execution, costs, and competition.
+    links: [{to: cash_and_carry, rel: RELATED_TO}, {to: synthetic_long, rel: RELATED_TO}]
+
+  - id: bear_put_spread
+    type: Strategy
+    name: Bear Put Spread (debit)
+    chapter: 7
+    summary: Moderately bearish (~4-5% fall) - buy ITM put, sell OTM put.
+    formula:
+      net_debit: "premium_higher_put - premium_lower_put"
+      max_loss: "net_debit"
+      max_profit: "spread - net_debit"
+      breakeven: "higher_strike - net_debit"
+    example: "Nifty 7485 - buy 7600 PE 165, sell 7400 PE 73 -> debit 92, max profit 108, BE 7508; position delta -0.276."
+    facts: [Volatility matters little early in series; in 2nd half deploy only if IV expected to rise.]
+    links: [{to: bull_call_spread, rel: OPPOSITE_OF}, {to: bear_call_spread, rel: VARIANT_OF}]
+
+  - id: bear_call_spread
+    type: Strategy
+    name: Bear Call Spread (credit)
+    chapter: 8
+    summary: Moderately bearish after a rally when call premiums are rich - buy OTM call, sell ITM call.
+    formula:
+      net_credit: "premium_lower_call - premium_higher_call"
+      max_profit: "net_credit"
+      max_loss: "spread - net_credit"
+      breakeven: "lower_strike + net_credit"
+    example: "Nifty 7222 - sell 7100 CE 136, buy 7400 CE 38 -> credit 98, max loss 202, BE 7198; delta -0.57."
+    links: [{to: bull_put_spread, rel: OPPOSITE_OF}, {to: bear_put_spread, rel: VARIANT_OF}]
+
+  - id: put_ratio_back_spread
+    type: Strategy
+    name: Put Ratio Back Spread
+    chapter: 9
+    summary: Outright bearish - sell 1 ITM put, buy 2 OTM puts (2:1) for net credit; unlimited downside profit, limited profit if market rises; never execute for a net debit.
+    formula:
+      net_credit: "premium_higher_put - 2*premium_lower_put"
+      max_loss: "spread - net_credit (at lower strike)"
+      lower_breakeven: "lower_strike - max_loss"
+      upper_breakeven: "lower_strike + max_loss"
+    example: "Nifty 7506 - sell 7500 PE 134, buy 2x 7200 PE 46 -> credit 42, max loss 258, BEs 6942/7458."
+    links: [{to: call_ratio_back_spread, rel: OPPOSITE_OF}]
+
+  - id: straddle
+    type: Strategy
+    name: Long / Short Straddle
+    aliases: [Long straddle, Short straddle]
+    chapter: [10, 11]
+    summary: Long - buy ATM call + ATM put (delta neutral) to profit from a large move either way; short - sell both to profit from range-bound markets / falling IV.
+    formula:
+      long_max_loss: "net premium paid (at strike)"
+      breakevens: "strike +/- net premium"
+      short_max_profit: "net premium received"
+    conditions:
+      long_requires: "low IV at entry, IV rising, large quick move before expiry, event outcome far from expectations"
+      short_requires: "high IV at entry, IV falling during hold (e.g. sell before events, exit at announcement)"
+    example: "Nifty 7579 long 7600 straddle BEs 7435/7765 (2.2% move needed); short straddle 7600 CE 77 + PE 88 = 165 credit."
+    caveats: [Long straddles bought into events often lose due to IV crush; theta hurts longs; deltas drift as market moves - dynamic re-hedging needed to stay neutral.]
+    links: [{to: strangle, rel: VARIANT_OF}, {to: delta_neutral, rel: IS_A}, {to: iv_crush, rel: RELATED_TO}, {to: vega, rel: USES}]
+
+  - id: strangle
+    type: Strategy
+    name: Long / Short Strangle
+    chapter: 12
+    summary: Like a straddle with OTM call and put (equidistant, equal lots) - cheaper but wider breakevens; short strangle sells OTM wings to collect premium in ranges.
+    formula:
+      long_max_loss: "net premium paid (between strikes)"
+      upper_breakeven: "call_strike + net_premium"
+      lower_breakeven: "put_strike - net_premium"
+    example: "Nifty 7921 - 7700 PE 28 + 8100 CE 32 = 60; BEs 7640/8160."
+    conditions:
+      short_strangle_setup: "stock in trading range (double/triple tops-bottoms) - write strikes outside range, watch for breakouts"
+    links: [{to: straddle, rel: VARIANT_OF}, {to: trading_range, rel: USES}]
+
+  - id: max_pain
+    type: Indicator
+    name: Max Pain (Option Pain)
+    chapter: 13
+    summary: Strike at which total intrinsic payout to option buyers (loss to writers) is minimum; theory says expiry gravitates there.
+    formula:
+      writer_loss_at_S: "sum_over_strikes(call_OI_k * max(0, S - k) + put_OI_k * max(0, k - S))"
+      max_pain: "argmin_S writer_loss_at_S over listed strikes"
+    conditions:
+      author_variant: "compute at ~15 days to expiry; add +5% buffer; expect expiry between max_pain and max_pain*1.05; write calls beyond the buffer; avoid writing puts; hold to expiry, no averaging"
+    caveats: [Controversial, no academic backing; the 5% buffer ~1.5-2 SD; backtest before use.]
+    links: [{to: open_interest, rel: USES}, {to: sd_option_writing, rel: RELATED_TO}]
+
+  - id: put_call_ratio
+    type: Indicator
+    name: Put-Call Ratio (PCR)
+    aliases: [PCR]
+    chapter: 13
+    summary: Total put OI / total call OI; contrarian sentiment indicator.
+    formula: {pcr: "sum(put_OI) / sum(call_OI)"}
+    conditions:
+      extreme_bearish_contrarian_long: "pcr > ~1.3 (oversold, expect bounce)"
+      extreme_bullish_contrarian_short: "pcr < ~0.5 (overbought, expect decline)"
+      neutral: "0.5 <= pcr <= 1"
+    caveats: [Calibrate extremes per instrument from 1-2 years of history; some use volume or traded value. Source's key-takeaway wording ('>1.3 bearish') refers to the crowd's positioning, interpretation is contrarian.]
+    links: [{to: open_interest, rel: USES}]

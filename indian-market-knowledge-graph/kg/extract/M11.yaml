@@ -1,0 +1,217 @@
+module: M11
+title: Personal Finance
+summary: Start saving early, interest/compounding/TVM math, retirement corpus planning with inflation and step-up SIPs, mutual fund structure/NAV/factsheet, equity and debt fund categories, bonds/YTM, index funds vs active, arbitrage funds, return measurement (absolute/CAGR/XIRR/rolling), expense ratio and direct vs regular, benchmarking/TRI, risk metrics (beta, alpha, SD, Sharpe, Sortino, capture ratios), fund analysis, MF portfolio construction, smart beta, asset allocation & sequence risk, ETFs, and macroeconomics (GDP, fiscal deficit).
+nodes:
+  - id: start_saving_early
+    type: Rule
+    name: Start Saving Early (time > amount)
+    chapter: 1
+    summary: Time in the market dominates amount invested - the triplet sisters example at 12% shows 4.5L invested age 20-28 grows to 4.89 Cr by 65, beating 19L invested age 28-65 (3.05 Cr).
+    links: [{to: compounding, rel: USES}]
+
+  - id: simple_vs_compound_interest
+    type: Formula
+    name: Simple vs Compound Interest
+    chapter: 2
+    summary: Simple interest only on principal; compound interest on principal plus accumulated interest.
+    formula: {simple: "P * r * t", compound_value: "P * (1 + r) ** n", cagr: "(end/start) ** (1/n) - 1"}
+    example: "1L at 10% for 5 yrs - simple +50k; compound +61,051."
+    links: [{to: compounding, rel: RELATED_TO}, {to: cagr, rel: RELATED_TO}]
+
+  - id: discount_rate_opportunity_cost
+    type: Formula
+    name: Discount Rate = Risk-free + Risk Premium
+    chapter: 3
+    summary: Opportunity cost used for PV/FV decisions = risk-free (government bond of matching tenor) + risk premium (~1.5-2%). Money today is worth more than money tomorrow.
+    example: "Land sold for 7.5 Cr in 15 yrs at 9% discount = 2.06 Cr today; 2L lump-sum scheme returning 4.5L in 15 yrs is worse than 7.5% G-sec (5.92L)."
+    links: [{to: time_value_of_money, rel: USES}, {to: interest_rates, rel: RELATED_TO}]
+
+  - id: retirement_planning
+    type: Model
+    name: Retirement Corpus Planning
+    chapter: [4, 5]
+    summary: Inflate today's annual expense for each retirement year (FV at inflation ~5%) and sum to get the corpus; build it via monthly SIPs into equity funds with annual step-ups, each instalment compounding for its remaining months.
+    formula:
+      expense_in_year_k: "annual_expense * (1 + inflation) ** years_from_now"
+      corpus: "sum over retirement years"
+      sip_fv: "sum_m installment_m * (1 + r) ** (months_remaining_m / 12)"
+      multi_asset_return: "sum(weight_i * expected_return_i)"
+    example: "50k/month today, retire in 25 yrs for 20 yrs at 5% inflation -> ~7.2 Cr; needs ~Rs 20k/month SIP stepped up 10% yearly at 11%."
+    params: {conservative_equity_cagr: [0.10, 0.11], inflation: [0.04, 0.05]}
+    links: [{to: inflation, rel: USES}, {to: sip, rel: USES}, {to: asset_allocation, rel: RELATED_TO}]
+
+  - id: mutual_fund
+    type: Instrument
+    name: Mutual Funds (structure, NAV, factsheet)
+    aliases: [AMC, NAV, Open-ended, Close-ended]
+    chapter: [6, 7, 8]
+    summary: Pooled vehicle - sponsor (promoter, holds licence) appoints trustee and AMC (investment manager); custodian holds assets; RTA services investors. Units issued at notional value; NAV moves with holdings. Factsheet - objective, open/close-ended, plans (direct vs regular), options (dividend/growth), riskometer.
+    links: [{to: expense_ratio, rel: RELATED_TO}, {to: equity_fund_categories, rel: RELATED_TO}, {to: debt_funds, rel: RELATED_TO}, {to: sebi, rel: REGULATED_BY}]
+
+  - id: equity_fund_categories
+    type: Concept
+    name: SEBI Equity Fund Categories
+    chapter: [9, 10]
+    summary: Market-cap classes - large cap = top 100 by full market cap, mid cap = 101-250, small cap = 251+. Large-cap funds >= 80% large caps; large & mid >= 35% each; also multi-cap, focused (max 30 stocks), dividend yield, ELSS (tax-saving, 3-yr lock-in), sectoral/thematic.
+    bot_use: Universe definitions for large/mid/small-cap strategies (rank by full market cap).
+    links: [{to: market_capitalisation, rel: USES}, {to: mutual_fund, rel: PART_OF}]
+
+  - id: market_capitalisation
+    type: Formula
+    name: Market Capitalisation
+    chapter: [9, 30]
+    summary: Share price x shares outstanding; market cap of the whole market tends to grow with GDP.
+    formula: {mcap: "price * shares_outstanding"}
+    links: [{to: free_float_market_cap, rel: RELATED_TO}, {to: gdp, rel: RELATED_TO}]
+
+  - id: debt_funds
+    type: Instrument
+    name: Debt Funds and Debt Risks
+    aliases: [Liquid fund, Overnight fund, Gilt fund, Credit risk fund, Macaulay duration, Modified duration]
+    chapter: [11, 12, 13, 14, 25]
+    summary: Companies borrow via bonds (>1 yr) and commercial paper (<1 yr), government via T-bills/G-secs; lenders face credit, interest-rate, liquidity and rating-change risk. Overnight (1-day, tri-party repo) < liquid (<=91 days) < ultra-short (3-6 m Macaulay) < low duration < short/medium duration; banking & PSU (lower credit risk); credit risk funds (avoid as retail); gilts (no credit risk, high rate risk).
+    facts:
+      - Bond prices move inversely to yields/interest rates; modified duration ~ % NAV change per 1% rate change.
+      - Liquid funds are not savings accounts (Taurus, Franklin Templeton 2020 wind-up, DHFL defaults).
+      - Watch fund borrowing (liquidity stress), concentrated corporate exposure, sub-investment-grade paper; hold at least the fund's average maturity.
+    links: [{to: interest_rates, rel: AFFECTS}, {to: bonds, rel: RELATED_TO}]
+
+  - id: bonds
+    type: Instrument
+    name: Bonds and Yield to Maturity
+    aliases: [YTM, Coupon, Accrued interest]
+    chapter: 15
+    summary: Coupon is % of face value; YTM is the effective yield given purchase price, coupons and maturity; buyer pays accrued interest to seller; tax-free bonds have tax-free coupons; PSU bonds carry implicit sovereign backing.
+    links: [{to: debt_funds, rel: RELATED_TO}]
+
+  - id: index_funds
+    type: Instrument
+    name: Index Funds (passive investing)
+    chapter: 16
+    summary: Track a benchmark cheaply; active management is a zero-sum game before costs and negative after costs - SPIVA India - ~82% of large-cap funds underperformed BSE 100 over 5 yrs (2019); expense gap ~1% compounds massively; paradox of skill; closet indexing. Use index funds for large (and increasingly mid) caps; combine active and passive if desired.
+    links: [{to: expense_ratio, rel: RELATED_TO}, {to: etf, rel: RELATED_TO}, {to: market_index, rel: USES}]
+
+  - id: arbitrage_fund
+    type: Instrument
+    name: Arbitrage Funds
+    chapter: 17
+    summary: At least 65% in hedged arbitrage (mainly cash-futures basis capture, also cross-exchange), rest in debt; equity taxation but debt-like returns (5-7%) - the real arbitrage is tax; not risk-free (debt defaults e.g. DHFL hit, slow recovery); check debt quality and no unhedged equity.
+    example: "Maruti spot 5714.4 vs futures 5735.6 -> lock 21.2 basis by expiry."
+    links: [{to: cash_and_carry, rel: USES}, {to: arbitrage, rel: IS_A}]
+
+  - id: return_measurement
+    type: Formula
+    name: Return Measurement (Absolute, CAGR, XIRR, Rolling)
+    aliases: [XIRR, Rolling returns, Point-to-point return]
+    chapter: [18, 19]
+    summary: Lump-sum or SIP < 1 yr - absolute return; lump sum > 1 yr - CAGR; SIP > 1 yr - XIRR (cash-flow-dated IRR). Point-to-point returns depend on the two dates; rolling n-year returns (CAGR for every start date) show the distribution - use average, min, max.
+    formula:
+      absolute: "end/start - 1"
+      cagr: "(end/start) ** (1/years) - 1"
+      xirr: "rate r s.t. sum(cf_i / (1 + r) ** ((t_i - t_0)/365)) = 0"
+      rolling_n: "for each date t: (nav_t / nav_{t - n years}) ** (1/n) - 1"
+    bot_use: Evaluate strategies with rolling-window returns, not single point-to-point backtests.
+    links: [{to: cagr, rel: RELATED_TO}, {to: absolute_return, rel: RELATED_TO}]
+
+  - id: expense_ratio
+    type: Concept
+    name: Expense Ratio (TER) and Direct vs Regular Plans
+    chapter: [20, 21]
+    summary: TER is an annual % fee charged daily via NAV; regular plans pay distributor commissions so have higher TER and lower NAV than direct plans - the gap compounds into large differences.
+    links: [{to: mutual_fund, rel: PART_OF}, {to: transaction_charges, rel: RELATED_TO}]
+
+  - id: benchmarking_tri
+    type: Concept
+    name: Benchmarking and Total Return Index (TRI)
+    chapter: 21
+    summary: Compare against TRI (price + dividends reinvested), not price index; index returns depend on constituent weights; set realistic personal benchmarks.
+    bot_use: Benchmark strategies against Nifty 50 TRI.
+    links: [{to: market_index, rel: RELATED_TO}]
+
+  - id: performance_metrics
+    type: Formula
+    name: Risk-Adjusted Performance Metrics (Beta, Alpha, SD, Sharpe, Sortino, Capture Ratios)
+    aliases: [Sharpe ratio, Sortino ratio, Jensen alpha, Upside capture, Downside capture]
+    chapter: [22, 23]
+    summary: Beta = relative risk vs benchmark (not inherent risk); alpha = risk-adjusted excess return; SD = inherent volatility; Sharpe = excess return per unit total volatility; Sortino = per unit downside deviation; capture ratios = share of benchmark up/down moves captured - prefer consistent low downside capture.
+    formula:
+      alpha: "(R_fund - Rf) - beta * (R_bench - Rf)"
+      sharpe: "(R - Rf) / sd"
+      sortino: "(R - Rf) / downside_deviation"
+      upside_capture: "fund_return_in_up_periods / bench_return_in_up_periods * 100"
+      downside_capture: "fund_return_in_down_periods / bench_return_in_down_periods * 100"
+    example: "Fund 10%, bench 7%, Rf 4%, beta 0.75 -> alpha 3.75% (beta 1.3 -> 2.1%); Fund A (14%, sd 28%) and B (16%, sd 34%) both Sharpe 0.29 at Rf 6%."
+    caveats: [Sharpe is meaningless for debt funds (ignores credit/rate risk).]
+    bot_use: Standard strategy scorecard - Sharpe, Sortino, beta/alpha vs Nifty, capture ratios, max drawdown.
+    links: [{to: beta, rel: USES}, {to: standard_deviation, rel: USES}]
+
+  - id: fund_analysis_process
+    type: Process
+    name: Analysing Equity and Debt Mutual Funds
+    chapter: [24, 25]
+    summary: Equity - hygiene (AUM, objective, manager, benchmark) -> 3/5/10-yr rolling returns vs benchmark (avg/min/max) -> risk-return matrix (is excess return from extra risk?) -> capture ratios. Debt - align with goal and horizon, check portfolio credit quality, concentration, duration vs holding period, YTM as risk signal, AUM.
+    links: [{to: return_measurement, rel: USES}, {to: performance_metrics, rel: USES}]
+
+  - id: mf_portfolio_construction
+    type: Rule
+    name: Mutual Fund Portfolio Construction
+    chapter: 26
+    summary: First health + term insurance, then emergency corpus; define goal by corpus and time; build by elimination with minimal non-overlapping funds (avoid multiple funds in same subcategory); conservative return assumptions; review yearly; keep it simple.
+    links: [{to: insurance_basics, rel: PREREQUISITE}, {to: emergency_fund, rel: PREREQUISITE}, {to: retirement_planning, rel: RELATED_TO}]
+
+  - id: emergency_fund
+    type: Rule
+    name: Emergency Corpus
+    chapter: 26
+    summary: Second priority after insurance - liquid reserve for unexpected expenses before investing for goals.
+    links: [{to: mf_portfolio_construction, rel: PART_OF}]
+
+  - id: smart_beta
+    type: Concept
+    name: Smart Beta / Factor Investing
+    chapter: 27
+    summary: Smart beta is marketing for factor or alternatively-weighted indices (value, quality, low volatility, momentum etc.); factors are cyclical and can underperform simple index funds for long periods; live fund results differ from index backtests; diversify across factors.
+    links: [{to: momentum_portfolio, rel: RELATED_TO}, {to: index_funds, rel: RELATED_TO}]
+
+  - id: asset_allocation_advanced
+    type: Rule
+    name: Asset Allocation, Sequence Risk and Diversification Vectors
+    chapter: 28
+    summary: Prediction is impossible (India beat US 2001-11, reversed next decade) - own a bit of all major assets. Sequence risk - an investor rarely gets average returns; bad years can cluster in your window. Diversify across real drivers (currency, market composition, panic flows - US bonds are safe havens, Indian bonds aren't; avoid bubble assets), not 'diworsification'. Simple start - Indian equity (large-cap index + mid-cap), US equity (cheap S&P 500 fund), short-term govt/PSU bonds, gold (Sovereign Gold Bonds), REITs; equal weight if unsure; stick to the plan.
+    caveats: [Financialisation raises correlations between assets (e.g. REITs vs stocks).]
+    links: [{to: asset_allocation, rel: VARIANT_OF}, {to: diversification, rel: RELATED_TO}, {to: correlation, rel: USES}]
+
+  - id: etf
+    type: Instrument
+    name: Exchange Traded Funds (ETFs)
+    aliases: [iNAV, Creation unit, Tracking error]
+    chapter: 29
+    summary: Exchange-traded index/commodity/debt wrappers with creation/redemption by market makers/APs; liquidity layers - screen depth, market makers, primary creation, underlying stocks (illiquid underlyings -> premiums/discounts).
+    conditions:
+      always: "use limit orders; compare price with iNAV/underlying index; avoid first 30-60 min after open; check average volumes and tracking vs TRI; prefer AMCs serious about ETFs; create units with AMC for large tickets"
+    facts: [ETFs suit tactical/active use of passive exposure; index funds suit set-and-forget.]
+    bot_use: Limit-order execution guard - never market-order an ETF; reject if price deviates from iNAV beyond threshold.
+    links: [{to: index_funds, rel: RELATED_TO}, {to: order_types, rel: RELATED_TO}, {to: liquidity, rel: RELATED_TO}]
+
+  - id: gdp
+    type: Concept
+    name: GDP, Real vs Nominal Growth, and Market Cap
+    chapter: 30
+    summary: GDP = total economic output; real growth = nominal - inflation; India ~$2.6-2.9T (5th/6th, 2020); as GDP grows, aggregate market cap tends to grow - basis for long-term equity investing.
+    formula: {real_gdp_growth: "nominal_growth - inflation"}
+    links: [{to: market_capitalisation, rel: RELATED_TO}, {to: fiscal_deficit, rel: RELATED_TO}]
+
+  - id: fiscal_deficit
+    type: Concept
+    name: Government Finances and Fiscal Deficit
+    chapter: 30
+    summary: Revenue = tax (direct - personal/corporate income tax; indirect - GST) + non-tax (PSU dividends, disinvestment); expenditure = revenue (subsidies, salaries, interest) + capital (infrastructure). Fiscal deficit = expenditure - revenue; India FY19 ~3.3% of GDP (govt aims < 4%); higher capex share and tax-to-GDP are positive signals.
+    formula: {fiscal_deficit_pct: "(total_expenditure - total_revenue) / GDP"}
+    links: [{to: union_budget, rel: RELATED_TO}, {to: gdp, rel: RELATED_TO}, {to: systematic_risk, rel: RELATED_TO}]
+
+  - id: sip
+    type: Strategy
+    name: Systematic Investment Plan (SIP)
+    chapter: [5, 18]
+    summary: Fixed amount invested at fixed intervals (e.g. monthly) into a fund; with annual step-ups it builds long-term corpus; measure SIP returns with XIRR.
+    links: [{to: retirement_planning, rel: RELATED_TO}, {to: return_measurement, rel: RELATED_TO}]

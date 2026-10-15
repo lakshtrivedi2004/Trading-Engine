@@ -1,0 +1,17 @@
+# F&O monthly expiry rules. ALL ROWS ARE UNCONFIRMED DRAFTS (confirmed=no).
+# Please verify each row against NSE/BSE circulars and set confirmed=yes, or correct it.
+# Columns: exchange,contract,valid_from,valid_to (blank = still valid),weekday,
+#          week_of_month (last = last <weekday> of the month; every = weekly),
+#          holiday_shift (previous / next trading day), confirmed (yes/no), note
+# Open questions: did NIFTY BANK monthly expiry move to Wednesday for a period around 2023-24?
+#                 SENSEX/BANKEX expiry history on BSE (Friday 2023? Tuesday 2025? Thursday Sept 2025?)
+#                 Bankex is not listed because I am not certain of its rules - please supply.
+exchange,contract,valid_from,valid_to,weekday,week_of_month,holiday_shift,confirmed,note
+NSE,NIFTY,2000-06-12,2025-08-31,Thursday,last,previous,no,draft: last Thursday of the month
+NSE,NIFTY,2025-09-01,,Tuesday,last,previous,no,draft: moved to Tuesday from Sept 2025?
+NSE,BANKNIFTY,2000-06-12,2025-08-31,Thursday,last,previous,no,draft: possible Wednesday period not modelled
+NSE,BANKNIFTY,2025-09-01,,Tuesday,last,previous,no,draft: moved to Tuesday from Sept 2025?
+BSE,SENSEX,2000-06-09,2023-05-14,Thursday,last,previous,no,draft: illiquid before 2023 relaunch
+BSE,SENSEX,2023-05-15,2024-12-31,Friday,last,previous,no,draft: Friday after May 2023 relaunch?
+BSE,SENSEX,2025-01-01,2025-08-31,Tuesday,last,previous,no,draft: Tuesday from 2025?
+BSE,SENSEX,2025-09-01,,Thursday,last,previous,no,draft: Thursday from Sept 2025?

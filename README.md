@@ -398,3 +398,18 @@ The suite's central check is that an arbitrage-free chain produces **zero**
 signals across four volatilities and four expiries, at zero cost and zero
 threshold. Planted violations are then verified to be detected at exactly the
 planted size.
+
+## Local LLM analyst (outside the trading path)
+
+`tools/analyst.py` uses Qwen3-8B through Ollama (open weights, CPU, ~5 GB). It never
+places or filters trades, and it refuses to load while an engine runs in market hours.
+
+```bash
+venv/bin/python tools/analyst.py review [--day 2026-10-15] [--telegram]   # after-close day review
+venv/bin/python tools/analyst.py ask "how does theta behave near expiry?"   # Varsity knowledge graph Q&A
+```
+
+The review's facts and conclusions are computed from the logs and journal; the model only words
+them, and any number it adds is flagged. Cron runs `review --telegram` at 15:45 Mon-Fri
+(`crontab -l`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
+trading filter it did not pass the year test (`research/event_filter_result.txt`).

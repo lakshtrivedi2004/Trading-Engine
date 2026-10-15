@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Updates{% endblock %}{% block heading %}Updates & Telegram{% endblock %}
+{% block content %}
+<p class="lead">Every update the platform prepares — daily summary, unusual-move alerts, data problems and the weekly pattern check — is listed here, whether or not it reached Telegram.</p>
+<div class="cards">
+  <div class="card {{ 'up' if secret else 'down' }}"><div class="label">Telegram</div>
+    <div class="value" style="font-size:1.2rem">{% if secret %}@{{ secret.bot_username or 'bot' }}{% else %}Not set up{% endif %}</div>
+    <div class="sub">{% if secret %}{{ secret.chat_ids|length }} linked chat(s){% else %}Run <code>imr telegram setup</code> in a terminal{% endif %}</div></div>
+  <div class="card {{ 'up' if heartbeat else '' }}"><div class="label">Command bot</div>
+    <div class="value" style="font-size:1.2rem">{{ 'Running' if heartbeat else 'Not running' }}</div>
+    <div class="sub">{% if heartbeat %}last seen {{ heartbeat[:16].replace('T', ' ') }} UTC{% else %}<code>imr telegram run</code> or <code>imr schedule install --bot</code>{% endif %}</div></div>
+  <div class="card"><div class="label">Messages enabled</div>
+    <div class="sub" style="margin-top:8px">
+      {{ '✅' if tg.daily_summary else '⬜' }} Daily summary<br>{{ '✅' if tg.unusual_alerts else '⬜' }} Unusual-move alerts<br>
+      {{ '✅' if tg.data_problem_alerts else '⬜' }} Data problems<br>{{ '✅' if tg.weekly_pattern_check else '⬜' }} Weekly pattern check ({{ tg.weekly_day }}s)</div></div>
+</div>
+<form class="bar" method="post" action="{{ url_for('updates', mode=mode) }}">
+  <button name="action" value="send_now">Prepare &amp; send due updates now</button>
+  <button name="action" value="test" class="secondary">Send a test message</button>
+  <span class="note">Bot commands: /today /movers /forecast /regime /health /patterns /status /help</span>
+</form>
+
+<h2>History</h2>
+{% if notes|length == 0 %}<p class="muted">No updates yet. They are created after each <code>imr update</code>.</p>{% endif %}
+{% for r in notes.itertuples() %}
+<details {% if loop.index <= 2 %}open{% endif %}>
+  <summary>{{ r.created_at[:16].replace('T', ' ') }} UTC · {{ r.kind }} ·
+    {% if r.status == 'sent' %}<span class="pill up">sent</span>{% elif r.status == 'failed' %}<span class="pill down">failed: {{ r.error }}</span>{% else %}<span class="pill warn">{{ r.status|replace('_', ' ') }}</span>{% endif %}</summary>
+  <div class="msg">{{ r.text|plain }}</div>
+</details>
+{% endfor %}
+{% endblock %}

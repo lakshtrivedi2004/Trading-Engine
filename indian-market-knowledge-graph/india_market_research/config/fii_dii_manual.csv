@@ -1,0 +1,5 @@
+# Optional history of daily FII/DII net cash-market activity, Rs crore (buy minus sell).
+# Source: NSE "FII/FPI & DII trading activity" (or NSE archives / NSDL for FPI history).
+# One row per trading day, date as YYYY-MM-DD. Optional extra columns: fii_buy,fii_sell,dii_buy,dii_sell
+# Rows downloaded automatically from NSE always take precedence over rows in this file.
+date,fii_net,dii_net

@@ -1,0 +1,153 @@
+module: M10
+title: Trading Systems
+summary: What a trading system is (quantified, backtestable process vs ad-hoc views), pair trading via ratio/spread/differential with z-score/density curve (Mark Whistler method), statistical arbitrage via linear regression, error ratio, cointegration/stationarity/ADF test and residual z-score trading with beta-neutral sizing and intercept caution, statistical futures calendar spreads, and cross-sectional momentum portfolios. (Volatility-based delta hedging was announced but not covered.)
+nodes:
+  - id: trading_system
+    type: Concept
+    name: Trading System
+    chapter: 1
+    summary: A defined, quantified, backtestable process that takes market inputs, applies fixed logic and outputs a trade decision; gut, tips, TV, broker calls and ad-hoc 'systematic deduction' are not systems. Not a holy grail - you design the logic once and follow it; backtesting is mandatory and must be redone as markets change.
+    links: [{to: backtesting, rel: USES}, {to: position_sizing, rel: USES}, {to: pair_trading, rel: RELATED_TO}, {to: momentum_portfolio, rel: RELATED_TO}, {to: statistical_calendar_spread, rel: RELATED_TO}]
+
+  - id: backtesting
+    type: Process
+    name: Backtesting
+    chapter: [1, 15, 16]
+    summary: Running a system's rules over historical data to measure frequency, win rate and P&L profile before risking capital; use clean, corporate-action-adjusted, date-aligned data; backtest per instrument and per direction (e.g. SBIN calendar spreads - shorts worked, longs mixed).
+    bot_use: Every node with 'conditions' should be backtested with realistic costs/slippage before deployment.
+    links: [{to: trading_system, rel: PART_OF}, {to: transaction_charges, rel: USES}, {to: impact_cost, rel: USES}]
+
+  - id: pair_trading
+    type: Strategy
+    name: Pair Trading (Relative Value / Statistical Arbitrage) - concept
+    aliases: [Relative value trading, Statistical arbitrage, RVT]
+    chapter: [2, 3]
+    summary: Two similar businesses (e.g. HDFC Bank & ICICI Bank) share drivers so their prices move together; a stock-specific 'local event' causes a temporary anomaly - buy the relatively cheap, sell the relatively expensive and profit when the relationship normalises.
+    facts:
+      - Origin - Gerry Bamberger / Nunzio Tartaglia at Morgan Stanley (1980s); DE Shaw adopted it.
+      - Not truly market-neutral (two different underlyings); a calendar spread is closer to market-neutral.
+      - Relationship measures - spread (difference of % changes), differential (price difference), ratio (price1/price2); divergence vs convergence trades.
+      - Qualify pairs with correlation (Whistler method wants > 0.75; compute on returns).
+      - Margin-hungry; expect 2-3 signals per pair per year - track many pairs.
+      - Main risk - the pair keeps diverging (relationship breaks).
+    links: [{to: pair_trading_ratio_method, rel: VARIANT_OF}, {to: pair_trading_regression_method, rel: VARIANT_OF}, {to: correlation, rel: USES}, {to: mean_reversion, rel: USES}]
+
+  - id: mean_reversion
+    type: Concept
+    name: Mean Reversion
+    chapter: [6, 7]
+    summary: A stationary series (pair ratio, residual, spread) that deviates from its mean tends to return to it; probability of reversion inferred from its standard-deviation distance.
+    links: [{to: normal_distribution, rel: USES}, {to: stationarity, rel: RELATED_TO}, {to: bollinger_bands, rel: RELATED_TO}]
+
+  - id: pair_trading_ratio_method
+    type: Strategy
+    name: Pair Trading Method 1 - Ratio z-score / Density Curve (Mark Whistler)
+    chapter: [4, 5, 6, 7]
+    summary: Track ratio = price_A / price_B; compute mean, SD (and SD table up to +/-3), and the cumulative normal 'density curve' value NORM.DIST(ratio, mean, sd, TRUE) daily; trade extremes, exit toward mean.
+    formula:
+      ratio: "price_A / price_B"
+      density: "Phi((ratio - mean)/sd)"
+    conditions:
+      long_pair: "density in ~[0.003, 0.025] (ratio at -2..-3 SD) -> buy A (numerator), sell B"
+      short_pair: "density in ~[0.975, 0.997] (+2..+3 SD) -> sell A, buy B"
+      exit: "ratio back inside 2 SD / toward mean (e.g. density ~0.16-0.84)"
+      density_map: "0.16=-1SD, 0.84=+1SD, 0.025=-2SD, 0.975=+2SD, 0.003=-3SD, 0.997=+3SD"
+    params: {lookback: "~2 years daily (496 bars)"}
+    example: "Axis/ICICI - 25-Oct-2017 density 0.052 (ratio 1.54) -> buy Axis 473, sell ICICI 305.7; exit 31-Oct at density 0.26 (Axis 523, ICICI 300.1)."
+    caveats: [Correlation of Axis-ICICI only ~0.5 in example; author considers this method a foundation - prefers regression method; consider rupee neutrality.]
+    links: [{to: pair_trading, rel: IS_A}, {to: normal_distribution, rel: USES}]
+
+  - id: linear_regression
+    type: Model
+    name: Linear Regression (for pairs)
+    chapter: [8, 9, 10]
+    summary: Fit y = M*x + c (+ residual) between two price series; outputs slope (beta/hedge ratio), intercept, residuals, standard error (SD of residuals) and standard error of intercept.
+    formula: {model: "y = beta*x + c + e", residual: "actual_y - (beta*x + c)"}
+    links: [{to: error_ratio, rel: RELATED_TO}, {to: pair_trading_regression_method, rel: PART_OF}]
+
+  - id: error_ratio
+    type: Formula
+    name: Error Ratio (choose X vs Y)
+    chapter: 10
+    summary: Regress both ways; pick the orientation with the lower error ratio (keeps intercept - the unhedged part - small).
+    formula: {error_ratio: "SE(intercept) / SE(regression)"}
+    example: "ICICI(x)->HDFC(y) 0.401; HDFC(x)->ICICI(y) 0.227 -> choose HDFC as X."
+    links: [{to: linear_regression, rel: USES}]
+
+  - id: stationarity
+    type: Concept
+    name: Stationarity, Cointegration and the ADF Test
+    aliases: [ADF, Augmented Dickey-Fuller, Cointegration]
+    chapter: 11
+    summary: Two prices are cointegrated if the regression residuals are stationary (constant mean, constant SD, no autocorrelation); test with Augmented Dickey-Fuller - p-value is probability of NON-stationarity; require p <= 0.05. Regression relations on non-stationary residuals are spurious.
+    conditions:
+      tradable_pair: "adf_pvalue(residuals) <= 0.05"
+      manual_checks: "means of 3 sub-samples similar; SDs similar; lag-1/lag-2 autocorrelation ~0"
+    bot_use: Weekly/biweekly re-screen of sector pairs (200-day lookback) with statsmodels.adfuller.
+    links: [{to: pair_trading_regression_method, rel: PART_OF}, {to: mean_reversion, rel: RELATED_TO}]
+
+  - id: pair_trading_regression_method
+    type: Strategy
+    name: Pair Trading Method 2 - Regression Residual z-score (Stat Arb)
+    chapter: [12, 13, 14]
+    summary: For same-sector pairs over 200 days - regress both ways, keep lower error ratio orientation, require ADF p <= 0.05, then trade the residual's z-score with beta-neutral quantities.
+    formula:
+      z: "today_residual / SE_of_residuals"
+      qty_x: "qty_y * beta (round to lot sizes; top up in cash market if needed)"
+      unexplained_share: "intercept / price_y"
+    conditions:
+      long_pair: "z <= -2.5 (book: -2) -> buy Y, sell beta*X"
+      short_pair: "z >= +2.5 -> sell Y, buy beta*X"
+      stop_loss: "z beyond -3 (long) / +3 (short)"
+      target: "z back to -1 (long) / +1 (short), ideally mean"
+      skip: "negative beta (often untradeable); large intercept relative to price_y (e.g. 1626/2024 = 80% unexplained)"
+    example: "Tata Motors (Y) vs TM-DVR (X), ADF 0.018, beta 1.59, z -2.54 -> long 1 lot TM (1500) / short 1 lot DVR (2400 ~ 2385); exited ~7 sessions later at z ~ -1 for ~Rs 14k. HDFC(Y)/ICICI(X) beta 0.79 -> 7 lots HDFC vs 1 lot ICICI but rejected for huge intercept."
+    facts:
+      - Price, S&R, RSI are irrelevant - only the residual z-score matters.
+      - Positions may stay open 7-25 sessions; keep M2M buffer.
+      - Beyond pairs - multivariate regression (stock A vs basket B+C).
+    bot_use: Complete stat-arb pipeline - nightly screen, z-score monitor intraday, beta-neutral sizing, z-based exits.
+    links: [{to: linear_regression, rel: USES}, {to: error_ratio, rel: USES}, {to: stationarity, rel: USES}, {to: pair_trading, rel: IS_A}, {to: beta, rel: RELATED_TO}]
+
+  - id: statistical_calendar_spread
+    type: Strategy
+    name: Statistical Futures Calendar Spread
+    chapter: 15
+    summary: Treat the next-month minus current-month futures price difference as a mean-reverting series (prices already embed carry, dividends etc.); trade +/-1 SD deviations back to the mean.
+    formula: {spread: "price_next_month - price_current_month", bands: "mean +/- 1*sd (200-day continuous futures)"}
+    conditions:
+      sell_spread: "spread > mean + 1sd -> sell next month, buy current month"
+      buy_spread: "spread < mean - 1sd -> buy next month, sell current month"
+      exit: "spread returns to mean"
+    example: "SBIN mean 1.227, sd 0.4935 -> bands 0.7335 / 1.7205; 6 short signals all profitable (closed next day), 28 long signals mixed."
+    facts: [Signals cluster near expiry; small P&L so costs must be minimal; directional risk removed so leverage can be higher; backtest per contract and per side.]
+    links: [{to: calendar_spread, rel: VARIANT_OF}, {to: mean_reversion, rel: USES}]
+
+  - id: momentum
+    type: Concept
+    name: Momentum
+    chapter: 16
+    summary: Rate of change of returns (use % not rupee changes); can be measured over any horizon (minutes for HFT to 12 months); consistency of returns matters.
+    links: [{to: momentum_portfolio, rel: RELATED_TO}, {to: rsi, rel: RELATED_TO}]
+
+  - id: momentum_portfolio
+    type: Strategy
+    name: Cross-Sectional Momentum Portfolio
+    chapter: 16
+    summary: From a tracking universe (e.g. BSE 500, or custom filters like mcap >= 1000 Cr; 150-200 stocks for a 12-15 stock portfolio), rank by trailing 12-month return, buy top 10-15 equally weighted on the first trading day of the month, rebalance monthly (sell drop-outs, buy new entrants).
+    formula: {score: "close_t / close_{t-252} - 1", rank: "descending score"}
+    conditions:
+      universe: "liquid, clean, corporate-action adjusted"
+      entry: "top N by 12m return, equal weight"
+      rebalance: "monthly after close on last trading day"
+      variations: "1m/2w/1w lookbacks; skewed weights; fundamental momentum (quarterly sales growth, EPS growth, margins) rebalanced quarterly"
+    caveats: [Works in up-trending markets; poor in choppy markets; bleeds more than the market in downtrends (author profited 2009-10, hit in 2011) - add a market regime filter; backtest first.]
+    bot_use: Monthly rebalancing bot with index-trend regime filter (e.g. Nifty above 200-DMA).
+    links: [{to: momentum, rel: USES}, {to: backtesting, rel: USES}, {to: index_valuation, rel: RELATED_TO}]
+
+  - id: systematic_deduction_example
+    type: Strategy
+    name: Event Overreaction Short Strangle (example of 'systematic deduction')
+    chapter: 1
+    summary: Oct 2017 PSU recapitalisation - PSU bank index +27%, but Bank Nifty +3% looked excessive given PSU weight ~10%, so authors sold a Bank Nifty short strangle to capture falling IV (worked); illustrates contrarian reasoning that is not yet a system.
+    links: [{to: strangle, rel: USES}, {to: iv_crush, rel: RELATED_TO}]

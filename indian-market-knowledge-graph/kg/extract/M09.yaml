@@ -1,0 +1,203 @@
+module: M09
+title: Risk Management and Trading Psychology
+summary: Systematic vs unsystematic risk, expected return, variance/covariance/correlation matrices, portfolio variance, equity curve, expected return ranges, portfolio optimisation and efficient frontier, Value at Risk/CVaR, gambler's fallacy, recovery trauma, equity estimation models, position sizing (unit per fixed amount, % margin, % volatility, % risk), Kelly criterion, and trading biases (illusion of control, recency, anchoring, functional fixedness, confirmation, attribution).
+nodes:
+  - id: risk_management
+    type: Concept
+    name: Risk Management (overview)
+    chapter: [1, 2]
+    summary: Successful trading is ~80% money management, 20% strategy (Mark Douglas). Risk differs for single positions, multiple positions and portfolios; diversify to reduce unsystematic risk, hedge to reduce systematic risk; no position is ever 'safe'.
+    example: "Satyam (Jan 2009) - company-specific fraud crashed the stock while the index fell far less - unsystematic risk."
+    links: [{to: systematic_risk, rel: RELATED_TO}, {to: position_sizing, rel: USES}, {to: portfolio_variance, rel: USES}, {to: value_at_risk, rel: USES}, {to: trading_biases, rel: RELATED_TO}]
+
+  - id: expected_return
+    type: Formula
+    name: Expected Portfolio Return
+    chapter: [2, 7]
+    summary: Weighted sum of asset expected returns; a probabilistic expectation, not a guarantee. Annualise daily mean x 252.
+    formula:
+      portfolio_er: "sum(w_i * R_i)"
+      annual_from_daily: "mean_daily_return * 252"
+    example: "50% Infy (20%) + 50% RIL (15%) -> 17.5%."
+    links: [{to: portfolio_variance, rel: RELATED_TO}]
+
+  - id: covariance_correlation_matrix
+    type: Formula
+    name: Variance, Covariance and Correlation Matrices
+    chapter: [3, 4, 5]
+    summary: Variance = dispersion of an asset's returns; covariance = co-movement sign of two assets; correlation = covariance / (sd_x sd_y). For k assets build the k x k variance-covariance matrix from the n x k excess-return matrix X, then the correlation matrix.
+    formula:
+      variance: "sum((x - mean)^2)/N"
+      covariance: "sum((r1 - mean1)(r2 - mean2)) / (n - 1)"
+      cov_matrix: "(1/n) * X^T X, X = returns - column means"
+      corr_matrix: "cov_matrix / (sd sd^T)"
+    facts:
+      - Diagonal of covariance matrix = variances; correlation matrix diagonal = 1, symmetric.
+      - Portfolio managers prefer low/negative covariance between holdings so they counterbalance.
+    example: "Cipla vs Idea covariance 0.0000523, correlation 0.106."
+    links: [{to: correlation, rel: RELATED_TO}, {to: portfolio_variance, rel: PART_OF}]
+
+  - id: portfolio_variance
+    type: Formula
+    name: Portfolio Variance (Risk)
+    chapter: [5, 6]
+    summary: Portfolio volatility from weights, individual SDs and the correlation matrix; equivalently the SD of the portfolio's own daily returns (equity curve) - both give the same number.
+    formula:
+      weighted_sd: "w_i * sd_i"
+      portfolio_sd: "sqrt( wsd^T * Corr * wsd )"
+      annualised: "daily_portfolio_sd * sqrt(252)"
+      range_1sd: "E[R] +/- sd_annual (68%), 2sd 95%, 3sd 99.7%"
+    example: "5-stock portfolio (Cipla 7%, Idea 16%, Wonderla 25%, PVR 30%, Alkem 22%) daily sd 1.11% -> annual 17.64%; E[R] 55.14% -> 1SD range 37.5%-72.8%."
+    caveats: [Short look-back in a bull market biases expected returns upward; use >= 1 year of data.]
+    links: [{to: covariance_correlation_matrix, rel: USES}, {to: equity_curve, rel: RELATED_TO}, {to: portfolio_optimization, rel: RELATED_TO}]
+
+  - id: equity_curve
+    type: Concept
+    name: Equity Curve
+    chapter: 6
+    summary: Portfolio value normalised to Rs 100 over time (each holding compounding its daily returns at its weight); visualises performance, benchmark against Nifty; SD of its daily returns = portfolio volatility.
+    bot_use: Core performance artefact for any strategy/portfolio; derive drawdown, volatility, Sharpe.
+    links: [{to: portfolio_variance, rel: RELATED_TO}, {to: backtesting, rel: RELATED_TO}]
+
+  - id: portfolio_optimization
+    type: Model
+    name: Portfolio Optimisation and Efficient Frontier
+    aliases: [Efficient frontier, Minimum variance portfolio, Markowitz]
+    chapter: [8, 9]
+    summary: Varying weights changes risk and return. Solve (e.g. Excel Solver) for minimum-variance portfolio (min sd s.t. sum w = 1), and for each fixed risk level the max- and min-return portfolios; the upper envelope from the min-variance point is the efficient frontier - always choose portfolios on it.
+    formula:
+      min_variance: "min_w sqrt(w^T Sigma w) s.t. sum(w) = 1"
+      max_return_at_risk: "max_w w^T mu s.t. sum(w)=1, sqrt(w^T Sigma w) = target"
+    example: "Min-variance 15.57% risk / 36.25% return (Cipla raised 7% -> 29.6%); at 17% risk max return 55.87%, min 18.35%."
+    caveats: [Add no-short (w >= 0) constraints for long-only; optimisation is sensitive to estimated returns.]
+    bot_use: Allocate across strategies/assets on the efficient frontier given a risk budget.
+    links: [{to: portfolio_variance, rel: USES}, {to: expected_return, rel: USES}]
+
+  - id: value_at_risk
+    type: Formula
+    name: Value at Risk (VaR) and CVaR (historical)
+    aliases: [VaR, CVaR, Expected shortfall]
+    chapter: 10
+    summary: Worst expected daily loss at a confidence level; historical method - check returns look normal (histogram), sort returns, VaR = worst value within best 95% of observations, CVaR = average of the worst 5%.
+    formula:
+      var_95: "5th percentile of daily portfolio returns"
+      cvar_95: "mean(returns <= var_95)"
+    example: "126 daily returns -> VaR -1.48%, CVaR -2.39%."
+    facts: [Born after Black Monday (19 Oct 1987, Dow -22.6%); JP Morgan's 4:15 PM report -> RiskMetrics.]
+    bot_use: Daily risk report and pre-trade risk limit (portfolio VaR <= budget).
+    links: [{to: normal_distribution, rel: USES}, {to: risk_management, rel: PART_OF}]
+
+  - id: gamblers_fallacy
+    type: Psychology
+    name: Gambler's Fallacy
+    chapter: 11
+    summary: Believing a streak must end - increasing size after losses ('next one will win') or cutting size after wins; each independent trade has the same odds. Antidote - systematic position sizing.
+    example: "Author lost 3 poker buy-ins chasing losses; with sizing discipline he lasted and won."
+    links: [{to: position_sizing, rel: RELATED_TO}, {to: trading_biases, rel: PART_OF}]
+
+  - id: recovery_trauma
+    type: Formula
+    name: Recovery Trauma (drawdown recovery math)
+    chapter: 11
+    summary: Gains needed to recover a loss grow non-linearly - small accounts that take big bets suffer most. Stay in the game ('if you lose all your chips you can't bet' - Larry Hite).
+    formula: {required_gain: "1/(1 - loss) - 1"}
+    example: "-5% needs +5.3%; -10% needs +11.1%; -50% needs +100%; -60% needs +150%."
+    bot_use: Hard max-drawdown circuit breakers; reduce size during drawdowns.
+    links: [{to: position_sizing, rel: RELATED_TO}, {to: hedging, rel: RELATED_TO}]
+
+  - id: equity_estimation_models
+    type: Rule
+    name: Equity Estimation Models (Van Tharp)
+    chapter: 12
+    summary: Core equity - subtract capital allocated to open trades (conservative); total equity - cash + margins blocked + open P&L (risky, counts unrealised); reduced total equity (author's preference) - core equity plus only locked-in profits (via trailing stops).
+    example: "5L capital, 20% rule, ACC long blocks 90k -> next trade 20% of 4.1L = 82k; ACC +50 pts, stop trailed to lock 10k -> 20% of 4.2L = 84k."
+    links: [{to: position_sizing, rel: PART_OF}, {to: trailing_stop, rel: USES}]
+
+  - id: position_sizing
+    type: Rule
+    name: Position Sizing Techniques
+    chapter: [11, 12, 13, 14]
+    summary: Decide how much capital/risk each trade gets. Methods - unit per fixed amount (e.g. 1 lot per 1L - simple, ignores risk, doesn't scale); percentage margin (fixed % of equity as margin per trade); percentage volatility (cap ATR-based volatility per position, e.g. 2% of equity); percentage risk (cap loss-at-stop at 1-3% of equity). Combine one equity model with one or two sizing methods.
+    formula:
+      pct_volatility_shares: "(equity * vol_pct) / ATR"
+      pct_risk_qty: "(equity * risk_pct) / (abs(entry - stop) * lot_size)  [lots]"
+      classic_5pct_rule: "max exposure per trade = 5% of capital"
+    params: {risk_per_trade_pct: [1, 3], author_example_pct: 1.5, vol_pct: 2}
+    example: "PEL ATR 76, equity 5L, 2% vol -> 10,000/76 = 131 shares; Tata Motors long 393.65 SL 390 lot 1500, 1.5% of 5L = 7,500 / 5,475 per lot -> 1 lot."
+    facts:
+      - Professional traders rarely risk > 1-3% per trade.
+      - Think about total portfolio volatility exposure (e.g. 15% of capital on a bad day - does it churn your stomach?).
+    bot_use: Mandatory sizing layer between signal and order - default to % risk with ATR/volatility stops, reduced-total-equity accounting.
+    links: [{to: equity_estimation_models, rel: USES}, {to: atr, rel: USES}, {to: kelly_criterion, rel: RELATED_TO}, {to: stop_loss, rel: USES}, {to: leverage, rel: RELATED_TO}]
+
+  - id: kelly_criterion
+    type: Formula
+    name: Kelly Criterion (and capped Kelly)
+    chapter: 14
+    summary: Optimal bet fraction from win rate and win/loss ratio; author scales a capped risk budget by Kelly% rather than betting full Kelly.
+    formula:
+      kelly_pct: "W - (1 - W)/R"
+      W: "winning trades / total trades"
+      R: "average win / average loss"
+      capped: "risk_this_trade = kelly_pct * max_risk_pct (e.g. 5%)"
+    example: "W 0.6, avg win 4532, avg loss 3274 -> R 1.384 -> Kelly ~31%; with 5% cap -> risk ~1.55% of capital."
+    caveats: [Full Kelly is too aggressive - a 70% Kelly still leaves a large chance of a huge loss; estimates of W and R are noisy.]
+    bot_use: Scale per-trade risk by rolling backtest/live Kelly, capped.
+    links: [{to: position_sizing, rel: RELATED_TO}, {to: expectancy, rel: RELATED_TO}]
+
+  - id: trading_biases
+    type: Psychology
+    name: Trading and Investing Biases
+    chapter: [15, 16]
+    summary: Biases are what stand between you and a profitable P&L. Forgotten investments (MRF shares held 25 yrs -> Rs 128 Cr) show how attention + bias leads to early selling.
+    links: [{to: illusion_of_control, rel: PART_OF}, {to: recency_bias, rel: PART_OF}, {to: anchoring_bias, rel: PART_OF}, {to: functional_fixedness, rel: PART_OF}, {to: confirmation_bias, rel: PART_OF}, {to: attribution_bias, rel: PART_OF}, {to: gamblers_fallacy, rel: PART_OF}]
+
+  - id: illusion_of_control
+    type: Psychology
+    name: Illusion of Control
+    chapter: 15
+    summary: Cluttering charts with many indicators creates false certainty; no analysis controls outcomes. Keep analysis simple and focus on statistics/odds.
+    links: [{to: trading_biases, rel: PART_OF}]
+
+  - id: recency_bias
+    type: Psychology
+    name: Recency Bias
+    chapter: 15
+    summary: Over-weighting the latest data (a green candle after a governance scandal) over the bigger picture; exit governance-tainted stocks regardless.
+    links: [{to: trading_biases, rel: PART_OF}]
+
+  - id: anchoring_bias
+    type: Psychology
+    name: Anchoring Bias (Focalism)
+    chapter: 16
+    summary: Fixating on the first price seen (author refused to pay 280-310 for Sundaram Clayton anchored at 270 and missed a multi-bagger); be willing to pay a small premium when thesis is intact.
+    links: [{to: trading_biases, rel: PART_OF}]
+
+  - id: functional_fixedness
+    type: Psychology
+    name: Functional Fixedness
+    chapter: 16
+    summary: Using tools only in conventional ways - e.g. treating NRML margin as locked; converting an overnight NRML position to MIS intraday frees margin for another intraday trade, then convert back before close.
+    links: [{to: product_types_fo, rel: RELATED_TO}]
+
+  - id: confirmation_bias
+    type: Psychology
+    name: Confirmation Bias
+    chapter: 16
+    summary: Seeking only information that supports your view (reading routine news as a trigger for your chart thesis); counter with critical 'so what?' questioning.
+    links: [{to: trading_biases, rel: PART_OF}]
+
+  - id: attribution_bias
+    type: Psychology
+    name: Attribution Bias
+    chapter: 16
+    summary: Crediting wins to skill and blaming losses on brokers/systems; counter by keeping a trading journal with entry and exit reasons.
+    links: [{to: trading_journal, rel: RELATED_TO}]
+
+  - id: trading_journal
+    type: Process
+    name: Trading Journal
+    chapter: 16
+    summary: Record why each trade was entered and exited to learn from your own behaviour and overcome attribution bias.
+    bot_use: Log every signal, filter decision, order, fill and exit reason for post-trade analysis.
+    links: [{to: attribution_bias, rel: RELATED_TO}]

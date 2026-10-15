@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}Regime{% endblock %}{% block heading %}Regime{% endblock %}
+{% block content %}
+<p>Where each index stands: trend versus its 50- and 200-day averages, volatility versus its own history, distance from
+its peak, India VIX and co-movement. The same signal behaves differently in calm and stressed markets (Moreira &amp;
+Muir 2017; Moskowitz, Ooi &amp; Pedersen 2012).</p>
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th>Close</th><th>1 day</th><th>1 month</th><th>1 year</th>
+<th class="l">Trend</th><th class="l">Volatility</th><th>From peak</th><th>Corr. with Nifty (60d)</th></tr></thead><tbody>
+{% for n, r in reg.iterrows() %}<tr><td class="l">{{ n }}</td><td>{{ r['close']|num(0) }}</td>
+<td class="{{ r['ret_1d']|sign }}">{{ r['ret_1d']|pct }}</td><td class="{{ r['ret_1m']|sign }}">{{ r['ret_1m']|pct }}</td>
+<td class="{{ r['ret_1y']|sign }}">{{ r['ret_1y']|pct }}</td><td class="l">{{ r['trend'] }}</td>
+<td class="l">{{ r['vol_regime'] }} ({{ r['vol_pct']|num(0) }}th pct)</td><td>{{ r['drawdown']|pct(1) }}</td>
+<td>{{ r.get('corr_nifty_60d')|num }}</td></tr>{% endfor %}</tbody></table></div>
+<ul>{% for l in lines %}<li>{{ l }}</li>{% endfor %}<li>{{ vix }}</li></ul>
+
+<form class="bar autosubmit" method="get">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  <label>Index<select name="index">{% for a in names %}<option {% if a == name %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <label>Years shown <span id="yout"></span><input type="range" name="years" min="1" max="16" value="{{ years }}" data-out="yout"></label>
+</form>
+{{ chart(price, 340) }}
+<div class="grid2">{{ chart(dd, 240) }}{{ chart(vol, 240) }}</div>
+{{ chart(vix_chart, 240) }}
+
+<h2>Correlations (daily returns, last 250 sessions)</h2>
+{% if cm|length %}
+<div class="tablewrap"><table><thead><tr><th></th>{% for c in cm.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for a, row in cm.iterrows() %}<tr><td class="l"><b>{{ a }}</b></td>
+{% for c in cm.columns %}<td style="background:{{ corr_color(row[c]) }}">{{ row[c]|num }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+<p class="note">Same-day correlations (blue positive, red negative). US series close after India, so their same-day
+correlation with Indian indices is naturally low; the decomposition uses the previous US session instead.</p>
+{% endif %}
+{% endblock %}
