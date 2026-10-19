@@ -242,16 +242,21 @@ class ContractSelector:
         return out[0]
 
 
-def structural_invalidation(structure, side, invalidation=None):
+def structural_invalidation(structure, side, invalidation=None, nearest=False):
     """The index level where the idea dies: the setup's own, when it is on the
-    correct side of price, else the last swing. 0.0 when neither exists."""
+    correct side of price, else the last swing. 0.0 when neither exists.
+
+    nearest (stop_nearest_swing, owner 19 Oct 2026: "stop at the closest
+    swing"): when both are valid, the one nearer to price."""
     ref = structure.closes[-1] if structure.closes else 0.0
     ok = lambda lvl: lvl and ref > 0 and (lvl < ref if side == BULL else lvl > ref)
     # A stop on the wrong side of price exits on the first tick: no level, no trade.
-    for lvl in (invalidation, structure.invalidation(side)):
-        if ok(lvl):
-            return lvl
-    return 0.0
+    levels = [lvl for lvl in (invalidation, structure.invalidation(side)) if ok(lvl)]
+    if not levels:
+        return 0.0
+    if nearest:
+        return max(levels) if side == BULL else min(levels)
+    return levels[0]
 
 
 def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
@@ -272,7 +277,8 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     on the correct side of spot; a stop above entry on a long is a bug in the
     setup, not a trade.
     """
-    invalid = structural_invalidation(structure, side, invalidation)
+    invalid = structural_invalidation(structure, side, invalidation,
+                                      nearest=bool(getattr(limits, "stop_nearest_swing", False)))
     if not invalid or invalid <= 0:
         return None
     spot_ref = structure.closes[-1] if structure.closes else 0.0

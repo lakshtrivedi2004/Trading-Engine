@@ -1219,6 +1219,26 @@ class IntradayEngine:
                      f"Rs {before:,.0f} -> Rs {after:,.0f}"
                      + (f" (min of configured Rs {ceiling:,.0f} and the account)" if ceiling else ""))
 
+    def _free_cash(self):
+        """Cash a new entry may spend. With market_orders the buy goes out as a
+        limit up to market_protection_pct over the ask (arb/execution.py), so
+        a lot chosen to cost all of the cash at the ask could need 2.5% more
+        than the account holds (entry-path review, 19 Oct 2026)."""
+        free = self.capital.capital - self.book.deployed()
+        if getattr(self.L, "market_orders", False):
+            free /= 1.0 + float(getattr(self.L, "market_protection_pct", 0.0) or 0.0) / 100.0
+        return free
+
+    def _risk_cap(self, pct):
+        """Rupees one new trade may lose: pct of capital, but never more than
+        what is left of the day's loss limit. The halt only fires on a REALISED
+        loss, so at a per-trade cap near the daily limit (15% / 15%) a stop-out
+        a few rupees under the limit left the next trade a full cap and the day
+        could end ~2x the limit down (entry-path review, 19 Oct 2026)."""
+        cap = self.capital.capital * float(pct) / 100.0
+        limit = abs(self._opening_capital() * self.L.max_daily_loss_pct / 100.0)
+        return max(0.0, min(cap, limit + min(0.0, getattr(self, "realised_pnl", 0.0))))
+
     def _check_daily_halt(self):
         if self.realised_pnl <= -abs(self._opening_capital() * self.L.max_daily_loss_pct / 100.0):
             self.halted = True
@@ -1256,9 +1276,8 @@ class IntradayEngine:
         if getattr(L, "grade_sizing", False):
             want = int(getattr(L, f"lots_grade_{(grade or 'c').lower()}", 1) or 1)
         want = max(1, want)
-        free = self.capital.capital - self.book.deployed()
-        by_cash = int(free // max(cand.lot_cost, 1e-9))
-        risk_cap = self.capital.capital * L.max_risk_pct_per_trade / 100.0
+        by_cash = int(self._free_cash() // max(cand.lot_cost, 1e-9))
+        risk_cap = self._risk_cap(L.max_risk_pct_per_trade)
         by_risk = int(risk_cap // max(plan.get("planned_risk_inr", plan["risk_inr"]), 1e-9))
         return max(0, min(want, by_cash, by_risk))
 
@@ -1564,7 +1583,7 @@ class IntradayEngine:
         cv = b.view(self.feed.store, time.perf_counter_ns(), time.time())
         # The contract exactly as hunt() picks it: the most delta whose loss at
         # the rule's own index stop fits max_risk_pct_per_trade, costs inside.
-        cap_inr = self.capital.capital * float(L.max_risk_pct_per_trade) / 100.0
+        cap_inr = self._risk_cap(L.max_risk_pct_per_trade)
         idx_risk = abs(close - stop)
         lot = max(int(cv.lot_size), 1)
         inside = self._costs_inside()
@@ -2184,7 +2203,7 @@ class IntradayEngine:
             self._note(gate)
             return
 
-        available = self.capital.capital - self.book.deployed()
+        available = self._free_cash()
         for und in sorted({b.underlying for b in self.bindings}):
             b = self._binding_for(und)
             if b is None:
@@ -2279,11 +2298,12 @@ class IntradayEngine:
             # Delta sizing: find the chart's stop first, then the most delta
             # that keeps a loss there inside the per-trade cap.
             max_delta = None
-            cap_inr = self.capital.capital * self.L.max_risk_pct_per_trade / 100.0
+            cap_inr = self._risk_cap(self.L.max_risk_pct_per_trade)
             lead0 = v.setups[0] if v.setups else None
             if str(getattr(self.L, "stop_policy", "delta")) == "delta":
                 inv = structural_invalidation(st, v.side,
-                                              lead0.invalidation if lead0 else None)
+                                              lead0.invalidation if lead0 else None,
+                                              nearest=bool(getattr(self.L, "stop_nearest_swing", False)))
                 ref = st.closes[-1] if st.closes else spot
                 idx_risk = abs(ref - inv) if inv else 0.0
                 if idx_risk <= 0:
@@ -2726,7 +2746,7 @@ class IntradayEngine:
         """
         L = self.L
         store = self.feed.store
-        cap_inr = self.capital.capital * stock_risk_pct(L) / 100.0
+        cap_inr = self._risk_cap(stock_risk_pct(L))
         for pick in list(self.stocks.active):
             sym = pick.symbol
             info = self.stocks.universe.get(sym) or {}

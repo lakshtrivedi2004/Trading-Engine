@@ -787,6 +787,31 @@ with tempfile.TemporaryDirectory() as tmp:
     cc.open_day("2026-10-01"); cc.record(+500.0); cc.close_day()
     check("without a ceiling the day's profit still compounds", abs(cc.capital - 10500.0) < 1e-6)
 
+from arb import trailing as _trailing
+tp = fresh()
+tp.index_entry, tp.index_risk, tp.index_target, tp.index_invalidation = 24000.0, 50.0, 24100.0, 23950.0
+tp.target = tp.entry * 100.0                       # parked, as live does with an index target
+note = _trailing.try_extend(tp, [], 24100.0, IntradayLimits(on_target="trail", extend_giveback_r=0.25))
+check("on_target=trail: the target is dropped, not taken, and the stop locks 0.25R behind it",
+      note and tp.index_target == 0.0 and abs(tp.index_invalidation - 24087.5) < 1e-6
+      and bk.review(tp, 130.0, index_px=24101.0)[0] == HOLD, f"{note} / {tp.index_invalidation}")
+
+tq = fresh()
+tq.side, tq.index_target, tq.index_invalidation = -1, 0.0, 24050.0
+check("a premium target (no index target) is never extended or trailed - a put's stop "
+      "is not locked at +g*R index points",
+      _trailing.try_extend(tq, [], 24000.0, IntradayLimits(on_target="trail")) == ""
+      and tq.index_invalidation == 24050.0, f"{tq.index_invalidation}")
+
+rc = SimpleNamespace(capital=SimpleNamespace(capital=11000.0), L=IntradayLimits(max_daily_loss_pct=15.0),
+                     _opening_capital=lambda: 11000.0, realised_pnl=0.0)
+check("a fresh day's trade may risk the full 15% cap", abs(IntradayEngine._risk_cap(rc, 15.0) - 1650.0) < 1e-6)
+rc.realised_pnl = -1600.0
+check("after a Rs 1,600 loss the next trade may risk only the Rs 50 left of the daily limit",
+      abs(IntradayEngine._risk_cap(rc, 15.0) - 50.0) < 1e-6, f"{IntradayEngine._risk_cap(rc, 15.0)}")
+rc.realised_pnl = +900.0
+check("a profit does not enlarge the per-trade cap", abs(IntradayEngine._risk_cap(rc, 8.0) - 880.0) < 1e-6)
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

@@ -1483,3 +1483,38 @@ they are wrong, only that switching would not help.
 - Dashboard controls refuse a POST from another site's page (Origin check).
 - Dead code, three unused config files and duplicated atomic-write code removed.
 
+
+## 23. Exits, risk size, pace, stops and the live-data check (16-19 Oct 2026)
+
+Year of real 1-minute NIFTY/BANKNIFTY/SENSEX bars (22 Sep 2025 - 30 Sep 2026,
+254 days), ob_fvg_retest, live gates, options priced by research/lab/realistic.py
+at Rs 11,000 (the live account), split 25 May 2026. A change counts only if
+better than live in BOTH halves.
+
+- **Exits** (`exit_sweep.py`, `trail_only_test.py`): live (momentum target +
+  extend) +Rs 11,081 (IN 3,572 / OUT 7,508). No target + swing trail (the
+  owner's 16 Oct rule) -3,807; it drops the momentum target's entry filter.
+  New `on_target: "trail"` (target as waypoint, then swing trail) +10,238. Fixed
+  1:2 / 1:3 / S/R targets lose. Retest window 3-15 bars: fewer trades, less
+  profit (3 bars: 73% win, +3,404). Best greedy combo (extend on any bar +
+  breakeven 0.5R) +12,125, DD 2,352, but OUT 5,171 < 7,508 - not adopted
+  (and the model moves only the index-side stop at 0.5R).
+- **Risk per trade** (`risk_size_study.py`): 1-3% take no trade; profit rises
+  to 8% and flattens past ~10% where cash binds (avg option ~Rs 10k of 11k).
+  Kelly on the R-multiples 21% (half 10.5%). 15% = "no cap": +12,408, DD 4,780.
+  Two lots never fit at Rs 11k. Owner approved 15% on 19 Oct.
+- **Pace / expiry / stops** (`pace_stop_test.py`, 120 rows): rising-pace gate
+  -12k to -16k; no gate -26k; day-extreme break or "live or rising" add trades
+  and lose. Same-day expiry +11,924 and min_stop_atr 0.5 +11,599 are better
+  OUT but worse IN. Nearest-swing stop (new `stop_nearest_swing`, off) +8,314,
+  pad 0 +6,442, swing strength 1 +4,318 - tighter stops lose (cf. Kaminski & Lo
+  2014; Osler 2003 on stops clustering beyond obvious levels). More trade-days
+  (29% -> 50-75%) always cost money.
+- **Live data** (`live_calibration.py`, 11 recorded days): the model's option
+  moves match real chains (slope 0.97-0.995, corr 0.97-0.99); NIFTY/SENSEX
+  spreads match; BANKNIFTY's real spread is 2.0, not 0.9 (model corrected).
+- **Confirmation** (spread 2.0): live 8% +10,949 (3,572 / 7,376), 15% +12,276
+  (4,879 / 7,398), DD 4,780, worst day -1,905, 76 trade-days.
+- **Bugs fixed**: per-trade risk now capped at what is left of the daily loss
+  limit (at 15%/15% the day could end ~27% down); free cash reserves the 2.5%
+  market-protection band; try_extend no longer acts on a premium target.

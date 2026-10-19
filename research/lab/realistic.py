@@ -6,7 +6,7 @@
   IV       20-day realised vol of the index + a premium fitted to the recorded
            books' ATM IVs (NIFTY 0.118, BANKNIFTY 0.150, SENSEX 0.122 at 1-9 DTE);
            x1.15 on expiry day (0DTE IV in the books)
-  fills    buy mid + spread/2, sell mid - spread/2 (NIFTY 0.25, BANKNIFTY 0.9,
+  fills    buy mid + spread/2, sell mid - spread/2 (NIFTY 0.25, BANKNIFTY 2.0,
            SENSEX 1.0 points; FIN/MIDCP 0.5% of premium), Rs 75 fees a lot
   exits    tools/backtest.py's index exits + the premium stop and +1R breakeven
            of arb/positions.py, checked on every bar
@@ -29,7 +29,9 @@ FEE, THETA_F, EXPIRY_IV_MULT, SPREAD_FRAC = 75.0, 0.55, 1.15, 0.005
 RULE = {"NIFTY": "weekly_tue", "SENSEX": "weekly_thu", "BANKNIFTY": "monthly_tue",
         "FINNIFTY": "monthly_tue", "MIDCPNIFTY": "monthly_tue"}
 IV_REF = {"NIFTY": 0.118, "BANKNIFTY": 0.150, "SENSEX": 0.122}
-SPREAD = {"NIFTY": 0.25, "BANKNIFTY": 0.9, "SENSEX": 1.0}
+# BANKNIFTY 0.9 -> 2.0: the median real spread at ATM +/- 3 on the traded expiry across
+# 11 live recorded days (research/live_calibration.py, 19 Oct 2026); NIFTY and SENSEX matched.
+SPREAD = {"NIFTY": 0.25, "BANKNIFTY": 2.0, "SENSEX": 1.0}
 INDICES = ["NIFTY", "BANKNIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"]
 
 def load_rows(name):
@@ -149,6 +151,7 @@ def reprice(t, ix, capital, next_expiry_on_expiry_day=False, costs_inside=False,
     fees = (leg_cost(ask0, lot, "BUY", "OPT", CM) + leg_cost(max(exit_px, 0.05), lot, "SELL", "OPT", CM)
             if exact_costs else FEE)
     return dict(net=(exit_px - ask0) * lot - fees, held=exit_k - i, why=why, expiry_day=expiry_today,
+                risk_inr=(prem_risk + extra) * lot,
                 dte=(exp - d0).days, prem=ask0, lot_cost=ask0 * lot, strike=K, delta=dlt)
 
 _C = None

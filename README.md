@@ -399,17 +399,24 @@ signals across four volatilities and four expiries, at zero cost and zero
 threshold. Planted violations are then verified to be detected at exactly the
 planted size.
 
-## Local LLM analyst (outside the trading path)
+## AI analyst (outside the trading path)
 
-`tools/analyst.py` uses Qwen3-8B through Ollama (open weights, CPU, ~5 GB). It never
-places or filters trades, and it refuses to load while an engine runs in market hours.
+`tools/analyst.py` uses Gemini and/or OpenAI by API key (`.ai.env`, git-ignored: `GEMINI_API_KEY`,
+`OPENAI_API_KEY`, optional `GEMINI_MODEL`, `OPENAI_MODEL`, `AI_PROVIDERS`). It never places or
+filters trades.
 
 ```bash
 venv/bin/python tools/analyst.py review [--day 2026-10-15] [--telegram]   # after-close day review
 venv/bin/python tools/analyst.py ask "how does theta behave near expiry?"   # Varsity knowledge graph Q&A
+venv/bin/python tools/analyst.py ask --live "NIFTY broke the day low - PE or wait?"  # live prices + news + engine
+venv/bin/python tools/analyst.py watch     # market hours: AI view every 15 min -> journal/ai_watch_<day>.jsonl
+venv/bin/python tools/analyst.py score     # those views vs what the index then did, vs a momentum baseline
 ```
 
 The review's facts and conclusions are computed from the logs and journal; the model only words
-them, and any number it adds is flagged. Cron runs `review --telegram` at 15:45 Mon-Fri
-(`crontab -l`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
+them, and any number it adds is flagged. `watch` shows the model index technicals (from Yahoo
+1-minute prices), the last 3 hours of market headlines (ET Markets, Livemint, Business Standard,
+Google News RSS) and what the engine sees; it is a forward experiment because a news/AI view cannot
+be backtested - `score` decides whether it ever becomes a filter. Cron runs `watch` at 09:16 and
+`review --telegram` at 15:45 Mon-Fri (`crontab -l`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
 trading filter it did not pass the year test (`research/event_filter_result.txt`).

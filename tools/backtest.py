@@ -57,7 +57,8 @@ def work(args):
             continue
         st = analyse(seg, strength=L.swing_strength, min_bars=L.min_structure_bars, limits=L)
         lead = v.setups[0] if v.setups else None
-        inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
+        inv = structural_invalidation(st, v.side, lead.invalidation if lead else None,
+                                      nearest=bool(getattr(L, "stop_nearest_swing", False)))
         if not inv:
             continue
         risk = abs(spot - inv)

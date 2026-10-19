@@ -297,8 +297,30 @@ def try_extend(pos, candles, index_px, L, strike_step=0.0):
     """At the target: push it to the next level if momentum is still there.
 
     Returns a note, or "" when the trade should simply take the target.
+
+    on_target = "trail" (owner, 16 Oct 2026): the target is a waypoint, not an
+    exit. On reaching it the stop is locked extend_giveback_r behind it, the
+    target is dropped, and the swing trail (update) takes the trade from there.
     """
-    if str(getattr(L, "on_target", "extend")) != "extend":
+    # Only an INDEX target is extended or turned into a trail. review() also
+    # reports "target" for the premium target, which exists only when there is
+    # no index target - and locking behind an index target of 0 put a put's
+    # stop at +g*R index points (exit-path review, 19 Oct 2026).
+    if pos.index_target <= 0:
+        return ""
+    mode = str(getattr(L, "on_target", "extend"))
+    if mode == "trail" and pos.index_risk > 0:
+        old = pos.index_target
+        lock = old - pos.side * float(getattr(L, "extend_giveback_r", 0.75)) * pos.index_risk
+        if pos.side == BULL:
+            pos.index_invalidation = max(pos.index_invalidation, lock)
+        else:
+            pos.index_invalidation = min(pos.index_invalidation, lock) \
+                if pos.index_invalidation > 0 else lock
+        pos.index_target = 0.0
+        pos.index_trailed = True
+        return f"target {old:.1f} reached, now trailing, stop locked {pos.index_invalidation:.1f}"
+    if mode != "extend":
         return ""
     if pos.extensions >= int(getattr(L, "max_target_extensions", 2)):
         return ""

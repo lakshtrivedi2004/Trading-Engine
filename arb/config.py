@@ -437,6 +437,10 @@ class IntradayLimits:
     # ...but never tighter than this many index ATRs: inside one bar's noise a
     # stop is hit by the spread's own wobble. 0 disables.
     min_stop_atr: float = 1.0
+    # Stop at the NEARER of the setup's level (zone edge) and the last swing,
+    # when both are on the right side of price (owner, 19 Oct 2026). Off until
+    # research/pace_stop_test.py says otherwise.
+    stop_nearest_swing: bool = False
     # The day stops here. Not a target - a hard halt.
     max_daily_loss_pct: float = 15.0
     max_open_positions: int = 1
