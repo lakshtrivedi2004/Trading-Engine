@@ -1,0 +1,12 @@
+stop 1.5 ATR (live) | all          n= 76 win= 45% year Rs +38,187 (IN +24,415 / OUT +13,772) avg  +502 worst   -765 maxDD  2,770
+stop 1.5 ATR (live) | mom5 with the day n= 46 win= 50% year Rs +26,939 (IN +14,578 / OUT +12,361) avg  +586 worst   -765 maxDD  3,221
+stop 1.5 ATR (live) | mom10 with the day n= 47 win= 40% year Rs +18,627 (IN  +7,100 / OUT +11,527) avg  +396 worst   -759 maxDD  3,220
+stop 1.5 ATR (live) | mom15 with the day n= 47 win= 40% year Rs +26,045 (IN +12,835 / OUT +13,211) avg  +554 worst   -759 maxDD  2,980
+stop 1.5 ATR (live) | mom30 with the day n= 47 win= 40% year Rs +11,678 (IN +12,748 / OUT  -1,070) avg  +248 worst   -754 maxDD  2,765
+stop 1.5 ATR (live) | within 0.5 ATR of day extreme n=  6 win= 17% year Rs    +509 (IN  +1,561 / OUT  -1,052) avg   +85 worst   -733 maxDD  2,343
+stop 1.5 ATR (live) | within 1 ATR of day extreme n= 10 win= 20% year Rs    +418 (IN  +3,314 / OUT  -2,896) avg   +42 worst   -733 maxDD  2,896
+stop 1.5 ATR (live) | within 2 ATR of day extreme n= 20 win= 25% year Rs  +1,941 (IN  +6,448 / OUT  -4,507) avg   +97 worst   -754 maxDD  4,507
+stop 1.5 ATR (live) | mom10 with day OR within 1 ATR n= 47 win= 40% year Rs +18,627 (IN  +7,100 / OUT +11,527) avg  +396 worst   -759 maxDD  3,220
+stop 1 ATR | all                   n= 28 win= 36% year Rs +11,201 (IN +11,525 / OUT    -325) avg  +400 worst   -688 maxDD  2,228
+stop 2 ATR | all                   n= 89 win= 46% year Rs +31,344 (IN +23,198 / OUT  +8,146) avg  +352 worst   -819 maxDD  3,951
+stop 2.5 ATR | all                 n= 87 win= 48% year Rs +22,084 (IN +16,822 / OUT  +5,262) avg  +254 worst   -790 maxDD  5,267
