@@ -1518,3 +1518,24 @@ better than live in BOTH halves.
 - **Bugs fixed**: per-trade risk now capped at what is left of the daily loss
   limit (at 15%/15% the day could end ~27% down); free cash reserves the 2.5%
   market-protection band; try_extend no longer acts on a premium target.
+
+## 24. More strategies, and LHM refined (21 Oct 2026)
+
+Real bars 22 Sep 2025 - 21 Oct 2026 (Angel history + the engine's live bars),
+Rs 11,000, 8%, split 25 May (`lhm_refine_test.py`, `pace_grid_test.py`,
+`lhm_filter_test.py`).
+
+- **Pace 0.5-1.5 per index:** live per-index values stay best (SENSEX 1.2,
+  BANKNIFTY 1.5); 1.0 loses on every index; ob_fvg_retest on NIFTY loses at
+  every pace. Dropping it: book +12,431 vs +10,095, better in both halves.
+  Stricter trend filters (previous close / today's open) cost profit.
+- **LHM** (live: NIFTY, 15:00, 0.5 ADR, +41,982): entry 14:45-15:05, 0.3-0.8
+  ADR, Gao et al. (2018) first-half-hour signal, expiry-day split (Baltussen
+  et al. 2021), SENSEX/BANKNIFTY fallback, late-momentum and stop filters - none
+  better in both halves. Average LHM win +1,795, loss -544.
+- **Half-hour periodicity** (Heston, Korajczyk & Sadka 2010): NIFTY alone
+  +22,419 at |t|>=1.5; in the book +75,374 at lookback 20 / |t|>=1.5 / 1.5 ATR,
+  but only 9 of 27 nearby settings beat the book in both halves (lookback 10:
+  all far worse). Not robust - not built.
+- **Best book:** ob_fvg_retest on BANKNIFTY + SENSEX, LHM on NIFTY: +55,739
+  (32,658 / 23,081), DD 3,791, 53% of days with a trade.
