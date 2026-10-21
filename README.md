@@ -399,9 +399,22 @@ signals across four volatilities and four expiries, at zero cost and zero
 threshold. Planted violations are then verified to be detected at exactly the
 planted size.
 
+## VM jobs and results (the engine runs on the VM, not the laptop)
+
+The prod engine runs on the VM (`/root/Trading-Engine`, `trading-engine.service`). Install the
+companion timers there once, as root: `bash deployment/install_vm_jobs.sh`. It enables:
+- `trading-engine-aiwatch.timer`: one AI market view every 15 min, Mon-Fri 09:00-15:45 IST;
+- `trading-engine-daily.timer`: 15:50 IST: the daily review (Telegram), the shadow research,
+  then `deployment/vm_daily_sync.sh` pushes the day's results to the orphan branch `vm-results`
+  (trades, shadow, AI watch, capital, review, index bars, a log digest - no credentials, no raw
+  logs).
+Read them anywhere with `tools/vm_results.sh` (worktree at `.vm-results/`). The VM needs `.ai.env`
+and a git remote it can push to; shadow research needs index history once
+(`GAP=12 venv/bin/python tools/fetch_history.py index 90`, after market hours).
+
 ## Shadow research (forward test, no orders)
 
-`tools/shadow_research.py` runs at 15:50 Mon-Fri (cron). It appends the engine's live 1-minute bars
+`tools/shadow_research.py` runs at 15:50 Mon-Fri on the VM (`trading-engine-daily.timer`). It appends the engine's live 1-minute bars
 to `.cache/history_live` and replays the day through the research generators for the candidates
 that did not pass the year test cleanly: BB squeeze NIFTY, Supertrend SENSEX, HKS half-hour
 periodicity and LHM at 0.3 ADR. The day's trades, priced with the backtest's option model, go to
@@ -425,6 +438,6 @@ The review's facts and conclusions are computed from the logs and journal; the m
 them, and any number it adds is flagged. `watch` shows the model index technicals (from Yahoo
 1-minute prices), the last 3 hours of market headlines (ET Markets, Livemint, Business Standard,
 Google News RSS) and what the engine sees; it is a forward experiment because a news/AI view cannot
-be backtested - `score` decides whether it ever becomes a filter. Cron runs `watch --once` every 15 minutes (09:00-15:45) and
-`review --telegram` at 15:45 Mon-Fri (`crontab -l`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
+be backtested - `score` decides whether it ever becomes a filter. On the VM, timers run `watch --once` every 15 minutes (09:00-15:45) and
+`review --telegram` at 15:50 Mon-Fri (`systemctl list-timers`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
 trading filter it did not pass the year test (`research/event_filter_result.txt`).

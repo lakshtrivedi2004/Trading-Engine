@@ -45,3 +45,6 @@ config/calibration.json
 .engine.pid
 .engine_live.pid
 .watchdog*.pid
+
+# The VM's daily results (vm-results branch worktree, tools/vm_results.sh)
+.vm-results/

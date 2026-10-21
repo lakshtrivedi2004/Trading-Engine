@@ -1,0 +1,14 @@
+# After-close job on the VM: daily AI review, shadow research, and the day's
+# results pushed to the vm-results branch (deployment/vm_daily_sync.sh).
+# Install with deployment/install_vm_jobs.sh.
+[Unit]
+Description=Trading-Engine after-close review, shadow research and results push
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/Trading-Engine
+ExecStart=/root/Trading-Engine/deployment/vm_daily_sync.sh
+Nice=10

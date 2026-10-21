@@ -35,7 +35,9 @@ def extend_history():
     os.makedirs(LIVE_HIST, exist_ok=True)
     for n in NAMES:
         path, live = os.path.join(LIVE_HIST, f"{n}.json"), os.path.join(ROOT, ".cache", "candles", f"{n}_1m.json")
-        rows = json.load(open(path)) if os.path.exists(path) else []
+        seed = os.path.join(ROOT, ".cache", "history", f"{n}.json")    # tools/fetch_history.py
+        rows = json.load(open(path)) if os.path.exists(path) else \
+            (json.load(open(seed)) if os.path.exists(seed) else [])
         if os.path.exists(live):
             seen = {r[0]: r for r in rows}
             for r in json.load(open(live)):
@@ -49,7 +51,7 @@ def run(day):
     os.environ["HISTORY_DIR"] = LIVE_HIST
     sys.argv = sys.argv[:1]          # research/exit_sweep.py reads argv[1] as capital on import
     sys.path[:0] = [os.path.join(ROOT, "research"), os.path.join(ROOT, "research", "lab"),
-                    os.path.join(ROOT, "research_out", "momentum"), ROOT, os.path.join(ROOT, "tools")]
+                    ROOT, os.path.join(ROOT, "tools")]      # research/lab/screen.py: tracked copy
     import online_strategies_test as O                   # noqa: E402  (loads the bars)
     import lhm_refine_test as R                          # noqa: E402
     import screen as S                                   # noqa: E402
