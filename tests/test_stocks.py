@@ -491,6 +491,23 @@ r6 = scan_cost_ratio(999.9, 1000.1, 15.0, 10_000.0, L6, CM)
 check("the scan's cost ratio uses the stock cap (7% < 6% ratio on a risk-bound size)",
       r8 is not None and r6 is not None and r8 < r6, f"7%: {r8:.3f}  6%: {r6:.3f}")
 
+import builtins as _bi
+import arb.stockdesk as _sd
+_desk = _sd.StockDesk.__new__(_sd.StockDesk)
+_desk.L, _desk._same_key, _desk._same = IntradayLimits(), None, ({}, {})
+_desk._vol_day, _desk._vol_prof, _desk._vol_busy = None, {}, False
+_opened, _real_open = [], _bi.open
+_started = []
+_real_start = threading.Thread.start
+threading.Thread.start = lambda self: _started.append(self.name)
+_bi.open = lambda *a, **k: (_opened.append(a[0]), _real_open(*a, **k))[1]
+try:
+    first = _desk.same_time_for({"ABC": None}, 600)
+finally:
+    _bi.open, threading.Thread.start = _real_open, _real_start
+check("relative volume history is never read on the scan's own thread (21 Oct freeze)",
+      first == ({}, {}) and not _opened and _started == ["stock-volume"], f"{_opened} {_started}")
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

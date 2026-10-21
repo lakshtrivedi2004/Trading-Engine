@@ -417,6 +417,6 @@ The review's facts and conclusions are computed from the logs and journal; the m
 them, and any number it adds is flagged. `watch` shows the model index technicals (from Yahoo
 1-minute prices), the last 3 hours of market headlines (ET Markets, Livemint, Business Standard,
 Google News RSS) and what the engine sees; it is a forward experiment because a news/AI view cannot
-be backtested - `score` decides whether it ever becomes a filter. Cron runs `watch` at 09:16 and
+be backtested - `score` decides whether it ever becomes a filter. Cron runs `watch --once` every 15 minutes (09:00-15:45) and
 `review --telegram` at 15:45 Mon-Fri (`crontab -l`). `config/events.json` holds RBI/Budget/Fed dates from the official schedules; as a
 trading filter it did not pass the year test (`research/event_filter_result.txt`).

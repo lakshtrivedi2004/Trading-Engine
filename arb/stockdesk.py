@@ -25,7 +25,7 @@ import time
 from collections import deque
 
 from arb.instruments import now_ist
-from arb.scanner import InPlay, daily_stat, rank, same_time_volume
+from arb.scanner import InPlay, daily_stat, rank
 from arb.stockspike import spike
 
 HIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -45,6 +45,7 @@ class StockDesk:
         self.stats = {}
         self._same_key = None
         self._same = ({}, {})
+        self._vol_day, self._vol_prof, self._vol_busy = None, {}, False
         # Once-a-minute snapshots of every stock's cumulative day volume, so
         # relative volume can be measured over a recent window, not only since
         # the open. Kept just long enough to reach one window back.
@@ -235,6 +236,13 @@ class StockDesk:
                     c = None
                 if c is not None:
                     costs[sym] = c
+            if live and not costs:
+                # No stock has the 10 live bars its cost needs yet (just
+                # started): picking now ranks every name as if it passed, and
+                # the five picks' history seeding hit the broker's rate limit
+                # on 21 Oct. Look again in a minute.
+                self.last_pick = time.time() - max(0.0, 60.0 * float(self.L.stocks_rescan_min) - 60.0)
+                return self.active
         same, same_recent = self.same_time_for(stats, m)
         ranked = rank(stats, live, m, self.L, banned=self.banned,
                       index_moves=index_moves, same_time=same,
@@ -414,29 +422,77 @@ class StockDesk:
     def same_time_for(self, stats, minute):
         """Average volume on recent sessions, where a stock has 1-minute history
         on disk (tools/fetch_stocks.py minute): from the open to this minute,
-        and over the recent window ending at it. Returns (since_open, window)."""
+        and over the recent window ending at it. Returns (since_open, window).
+
+        The ~450 MB of history is read ONCE a day, on a background thread, into
+        per-stock minute profiles; until that is done relative volume is simply
+        unknown. Reading it here on every rescan froze the engine loop - and
+        with it every open position's software stop - for 12-20 s a minute
+        (stock-desk review, 21 Oct 2026)."""
         if self._same_key == minute:
             return self._same
-        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
         today = now_ist().strftime("%Y-%m-%d")
+        if self._vol_day != today:
+            if not self._vol_busy:
+                self._vol_busy = True
+                threading.Thread(target=self._load_profiles, args=(list(stats), today),
+                                 name="stock-volume", daemon=True).start()
+            return ({}, {})
+        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
         cum, rec = {}, {}
-        for sym in stats:
-            p = os.path.join(HIST, f"{sym}_1m.json")
-            if not os.path.exists(p):
-                continue
-            try:
-                rows = json.load(open(p))
-            except (OSError, ValueError):
-                continue
-            v = same_time_volume(rows, today, minute)
+        for sym, prof in self._vol_prof.items():
+            v = prof(0, minute)
             if v > 0:
                 cum[sym] = v
             if window > 0:
-                w = same_time_volume(rows, today, minute, from_min=minute - window)
+                w = prof(minute - window, minute)
                 if w > 0:
                     rec[sym] = w
         self._same_key, self._same = minute, (cum, rec)
         return self._same
+
+    def _load_profiles(self, syms, today, sessions=14):
+        """Per stock: the last `sessions` sessions' minute volumes before
+        `today` as prefix sums, so any [from, upto) average is two lookups -
+        the same number same_time_volume computes from the raw rows."""
+        import numpy as np
+        out = {}
+        try:
+            for sym in syms:
+                p = os.path.join(HIST, f"{sym}_1m.json")
+                if not os.path.exists(p):
+                    continue
+                try:
+                    rows = json.load(open(p))
+                except (OSError, ValueError):
+                    continue
+                per = {}
+                for r in rows:
+                    d = r[0][:10]
+                    if d >= today:
+                        break
+                    m = int(r[0][11:13]) * 60 + int(r[0][14:16])
+                    a = per.setdefault(d, (np.zeros(1441), np.zeros(1441)))
+                    a[0][m + 1] += float(r[5])
+                    a[1][m + 1] = 1.0
+                days = [per[d] for d in sorted(per)[-sessions:]]
+                if not days:
+                    continue
+                vol = np.array([np.cumsum(v) for v, _ in days])
+                has = np.array([np.cumsum(h) for _, h in days])
+                need = max(3, sessions // 2)
+
+                def prof(lo, hi, vol=vol, has=has, need=need):
+                    lo, hi = max(0, int(lo)), min(1440, int(hi))
+                    if hi <= lo:
+                        return 0.0
+                    ok = (has[:, hi] - has[:, lo]) > 0
+                    n = int(ok.sum())
+                    return float((vol[ok, hi] - vol[ok, lo]).sum() / n) if n >= need else 0.0
+                out[sym] = prof
+            self._vol_prof, self._vol_day = out, today
+        finally:
+            self._vol_busy = False
 
     def _seed_all(self, syms, gap_sec=2.0, tries=4, backoff_sec=20.0):
         """Seed picks off the engine thread, spaced and retried: the broker's
