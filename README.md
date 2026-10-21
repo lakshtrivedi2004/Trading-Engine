@@ -399,6 +399,14 @@ signals across four volatilities and four expiries, at zero cost and zero
 threshold. Planted violations are then verified to be detected at exactly the
 planted size.
 
+## Shadow research (forward test, no orders)
+
+`tools/shadow_research.py` runs at 15:50 Mon-Fri (cron). It appends the engine's live 1-minute bars
+to `.cache/history_live` and replays the day through the research generators for the candidates
+that did not pass the year test cleanly: BB squeeze NIFTY, Supertrend SENSEX, HKS half-hour
+periodicity and LHM at 0.3 ADR. The day's trades, priced with the backtest's option model, go to
+`journal/shadow_research_<day>.jsonl`; `--report` sums them per strategy.
+
 ## AI analyst (outside the trading path)
 
 `tools/analyst.py` uses Gemini and/or OpenAI by API key (`.ai.env`, git-ignored: `GEMINI_API_KEY`,
