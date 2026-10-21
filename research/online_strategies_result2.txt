@@ -1,0 +1,9 @@
+
+### Index subsets added to the best book (picked after the first table)
+
+| Variant | Trades | Win % | Avg win | Avg loss | Year Rs | Before 25 May | After 25 May | Last month trades | Last month Rs | Per month | Max DD | Days with a trade | By strategy |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BEST BOOK | 178 | 46.6 | 1,320 | 567 | +55,739 | +32,658 | +23,081 | 19 | +3,201 | +3,981 | 3,791 | 53% | {'OB': 85, 'LHM': 93} |
+| BEST BOOK + Supertrend SENSEX | 259 | 34.7 | 1,850 | 553 | +72,938 | +34,794 | +38,144 | 23 | -811 | +5,210 | 11,927 | 73% | {'OB': 69, 'ST': 113, 'LHM': 77} |
+| BEST BOOK + BB squeeze NIFTY | 230 | 38.7 | 1,640 | 524 | +72,082 | +36,219 | +35,863 | 24 | +756 | +5,149 | 6,074 | 61% | {'OB': 79, 'BB': 66, 'LHM': 85} |
+| BEST BOOK + both | 301 | 30.6 | 2,047 | 529 | +77,700 | +36,691 | +41,009 | 27 | -2,584 | +5,550 | 11,591 | 77% | {'OB': 67, 'ST': 101, 'BB': 60, 'LHM': 73} |

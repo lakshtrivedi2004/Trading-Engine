@@ -1,0 +1,50 @@
+
+### BB squeeze NIFTY: neighbouring settings added to the best book (base year +55,739, IN +32,658, OUT +23,081)
+
+{'bb_n': 15, 'bb_k': 1.75, 'bb_look': 30}: year +46,689 IN +18,989 OUT +27,700 DD 10,257
+{'bb_n': 15, 'bb_k': 1.75, 'bb_look': 50}: year +60,653 IN +28,725 OUT +31,928 DD 7,556
+{'bb_n': 15, 'bb_k': 1.75, 'bb_look': 70}: year +61,734 IN +37,139 OUT +24,595 DD 5,263  BETTER BOTH
+{'bb_n': 15, 'bb_k': 2.0, 'bb_look': 30}: year +48,814 IN +18,774 OUT +30,040 DD 7,527
+{'bb_n': 15, 'bb_k': 2.0, 'bb_look': 50}: year +57,471 IN +24,317 OUT +33,154 DD 6,252
+{'bb_n': 15, 'bb_k': 2.0, 'bb_look': 70}: year +57,322 IN +32,107 OUT +25,214 DD 4,700
+{'bb_n': 15, 'bb_k': 2.25, 'bb_look': 30}: year +50,227 IN +23,690 OUT +26,537 DD 5,364
+{'bb_n': 15, 'bb_k': 2.25, 'bb_look': 50}: year +55,247 IN +27,348 OUT +27,899 DD 5,088
+{'bb_n': 15, 'bb_k': 2.25, 'bb_look': 70}: year +53,405 IN +33,545 OUT +19,860 DD 4,182
+{'bb_n': 20, 'bb_k': 1.75, 'bb_look': 30}: year +67,997 IN +31,311 OUT +36,686 DD 7,012
+{'bb_n': 20, 'bb_k': 1.75, 'bb_look': 50}: year +72,352 IN +37,116 OUT +35,236 DD 6,074  BETTER BOTH
+{'bb_n': 20, 'bb_k': 1.75, 'bb_look': 70}: year +77,316 IN +44,877 OUT +32,439 DD 4,635  BETTER BOTH
+{'bb_n': 20, 'bb_k': 2.0, 'bb_look': 30}: year +67,314 IN +30,388 OUT +36,926 DD 7,083
+{'bb_n': 20, 'bb_k': 2.0, 'bb_look': 50}: year +72,082 IN +36,219 OUT +35,863 DD 6,074  BETTER BOTH
+{'bb_n': 20, 'bb_k': 2.0, 'bb_look': 70}: year +75,405 IN +43,344 OUT +32,060 DD 3,384  BETTER BOTH
+{'bb_n': 20, 'bb_k': 2.25, 'bb_look': 30}: year +60,825 IN +24,546 OUT +36,279 DD 5,533
+{'bb_n': 20, 'bb_k': 2.25, 'bb_look': 50}: year +64,622 IN +30,561 OUT +34,061 DD 4,920
+{'bb_n': 20, 'bb_k': 2.25, 'bb_look': 70}: year +67,858 IN +35,798 OUT +32,060 DD 4,614  BETTER BOTH
+{'bb_n': 25, 'bb_k': 1.75, 'bb_look': 30}: year +67,314 IN +23,980 OUT +43,335 DD 9,254
+{'bb_n': 25, 'bb_k': 1.75, 'bb_look': 50}: year +73,853 IN +31,619 OUT +42,235 DD 5,871
+{'bb_n': 25, 'bb_k': 1.75, 'bb_look': 70}: year +52,003 IN +30,509 OUT +21,494 DD 5,871
+{'bb_n': 25, 'bb_k': 2.0, 'bb_look': 30}: year +72,186 IN +29,962 OUT +42,224 DD 8,537
+{'bb_n': 25, 'bb_k': 2.0, 'bb_look': 50}: year +81,345 IN +36,015 OUT +45,330 DD 5,187  BETTER BOTH
+{'bb_n': 25, 'bb_k': 2.0, 'bb_look': 70}: year +54,531 IN +33,639 OUT +20,892 DD 5,187
+{'bb_n': 25, 'bb_k': 2.25, 'bb_look': 30}: year +81,096 IN +32,616 OUT +48,480 DD 7,802
+{'bb_n': 25, 'bb_k': 2.25, 'bb_look': 50}: year +88,270 IN +37,603 OUT +50,666 DD 5,187  BETTER BOTH
+{'bb_n': 25, 'bb_k': 2.25, 'bb_look': 70}: year +58,702 IN +33,878 OUT +24,824 DD 5,187  BETTER BOTH
+9 of 27 settings better in both halves
+
+### Supertrend SENSEX: neighbouring settings added to the best book (base year +55,739, IN +32,658, OUT +23,081)
+
+{'st_n': 7, 'st_k': 2.0}: year +69,035 IN +22,331 OUT +46,704 DD 13,049
+{'st_n': 7, 'st_k': 2.5}: year +59,230 IN +19,006 OUT +40,224 DD 13,774
+{'st_n': 7, 'st_k': 3.0}: year +75,028 IN +33,126 OUT +41,902 DD 11,819  BETTER BOTH
+{'st_n': 7, 'st_k': 3.5}: year +58,146 IN +26,526 OUT +31,620 DD 9,151
+{'st_n': 7, 'st_k': 4.0}: year +69,544 IN +30,924 OUT +38,620 DD 9,024
+{'st_n': 10, 'st_k': 2.0}: year +94,400 IN +31,072 OUT +63,328 DD 12,539
+{'st_n': 10, 'st_k': 2.5}: year +52,823 IN +15,440 OUT +37,383 DD 12,093
+{'st_n': 10, 'st_k': 3.0}: year +72,938 IN +34,794 OUT +38,144 DD 11,927  BETTER BOTH
+{'st_n': 10, 'st_k': 3.5}: year +74,608 IN +30,901 OUT +43,707 DD 9,203
+{'st_n': 10, 'st_k': 4.0}: year +64,428 IN +32,974 OUT +31,454 DD 9,092  BETTER BOTH
+{'st_n': 14, 'st_k': 2.0}: year +64,297 IN +33,030 OUT +31,267 DD 13,088  BETTER BOTH
+{'st_n': 14, 'st_k': 2.5}: year +60,523 IN +20,372 OUT +40,151 DD 8,748
+{'st_n': 14, 'st_k': 3.0}: year +66,138 IN +27,123 OUT +39,015 DD 12,255
+{'st_n': 14, 'st_k': 3.5}: year +85,803 IN +35,910 OUT +49,893 DD 7,413  BETTER BOTH
+{'st_n': 14, 'st_k': 4.0}: year +58,567 IN +32,357 OUT +26,210 DD 7,834
+5 of 15 settings better in both halves
