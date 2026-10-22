@@ -785,6 +785,16 @@ def main():
     phase = market_phase(start=cfg.session_start, end=cfg.session_end)
     log(f"market phase: {phase} ({now_ist().strftime('%a %d %b %H:%M IST')})")
 
+    if not args.status:
+        # Owner, 21 Oct 2026: at start, print the btst_karo channel's last
+        # message, then each new one (arb/utils.py). Its own daemon thread;
+        # nothing it does can stop the engine.
+        try:
+            from arb.utils import read_channel_messages
+            read_channel_messages(log=log)
+        except Exception as e:
+            log(f"[telegram-user] channel reader not started: {e!r}")
+
     if args.strategy == "intraday" and not args.status:
         return run_intraday_forever(cfg, cm, creds, args, mode)
 

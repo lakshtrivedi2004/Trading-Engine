@@ -933,6 +933,23 @@ class IntradayLimits:
     lhm_adr_days: int = 10
     lhm_stop_atr: float = 1.5
     lhm_risk_pct: float = 4.0
+    # AI cross-check of the last_half_hour entry (owner, 22 Oct 2026;
+    # arb/ai_verify.py). The rule is unchanged; the model is shown the rule's
+    # numbers, the bars, structure, the option chain with OI / PCR / Greeks
+    # (Angel's), the future, the other indices - and calls CALL, PUT or
+    # NO_TRADE on its own. "off" never asks. "shadow" asks and journals but
+    # never blocks. "on" sends the order only when the model calls the rule's
+    # side at lhm_ai_min_confidence or more; no answer within
+    # lhm_ai_timeout_sec, an error or NO_TRADE is no trade. The entry waits
+    # for the answer (the chase guard still applies); each question and answer
+    # is journaled (ai_lhm_YYYY-MM-DD.jsonl). No evidence yet that it helps.
+    lhm_ai_verify: str = "off"
+    lhm_ai_model: str = "gemini-3-pro-preview"
+    lhm_ai_credentials: str = ""          # service-account JSON, relative to the repo root
+    lhm_ai_location: str = "global"
+    lhm_ai_thinking: str = "high"         # Gemini 3 thinking level: "low" answers sooner
+    lhm_ai_timeout_sec: float = 90.0
+    lhm_ai_min_confidence: float = 0.0
     # Noise-area breakout (Zarattini, Aziz & Barbon 2024), owner's approval of
     # 5 Oct 2026 for SHADOW only: on the nb_grid_min grid between nb_lo and
     # nb_hi (bar end time), a close outside max(open, prev close) x (1 + nb_vm x

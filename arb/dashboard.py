@@ -475,7 +475,16 @@ class DashboardState:
                 "squareoff_minutes": e.L.squareoff_minutes,
             },
             "recent_trades": e.records[-12:][::-1],
+            "lhm": self._lhm(e),
         }
+
+    @staticmethod
+    def _lhm(e):
+        """The day's last_half_hour decision - the rule, the AI, the outcome."""
+        try:
+            return e.lhm_status() if hasattr(e, "lhm_status") else None
+        except Exception as ex:
+            return {"error": repr(ex)[:200]}
 
     def snapshot(self):
         if getattr(self, "intraday_mode", False):

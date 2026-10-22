@@ -38,7 +38,7 @@ from arb.config import stock_risk_pct
 from arb.smc import BEAR, BULL, analyse
 from arb.costs import leg_cost, per_unit_cost_points
 from arb.fileio import write_json
-from arb import optionflow, trailing
+from arb import ai_verify, optionflow, trailing
 
 
 class _Ticket:
@@ -1324,7 +1324,7 @@ class IntradayEngine:
             return "warmup"
         return ""
 
-    def _closed_rows(self, name, rows, t0=None):
+    def _closed_rows(self, name, rows, t0=None, window=None):
         """Decide on COMPLETED bars only, and only just after one closes.
 
         Owner's 1 Oct 2026 review: live passed the still-forming bar to the
@@ -1366,7 +1366,9 @@ class IntradayEngine:
             rows = rows[:-1]                    # still forming when the rows were copied
         if not rows:
             return rows, "no_closed_bar"
-        if time.time() - closed_at > float(getattr(L, "entry_window_sec", 15.0)):
+        if window is None:
+            window = float(getattr(L, "entry_window_sec", 15.0))
+        if time.time() - closed_at > window:
             return rows, "waiting_for_bar_close"
         return rows, ""
 
@@ -1506,12 +1508,15 @@ class IntradayEngine:
         hh, mm = (int(x) for x in str(L.lhm_entry_at).split(":"))
         at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
         since = (now - at).total_seconds()
+        ai_mode = self._ai_verifier().mode()
+        if ai_mode != "off" and -self.AI_PREFETCH_SEC <= since < 0:
+            self._lhm_ai_prefetch(day)
         if since < 0:
             return False
         st = self.__dict__.get("_lhm_live")
         if st is None or st.get("day") != day:
             st = self._lhm_live = {"day": day, "idx": {}}
-        win = float(getattr(L, "entry_window_sec", 15.0))
+        win = self._lhm_window()
         for und in [str(u) for u in (getattr(L, "lhm_indices", ()) or ())]:
             rec = st["idx"].setdefault(und, {"state": "waiting", "why": "", "said": set()})
             if rec["state"] != "waiting":
@@ -1553,7 +1558,8 @@ class IntradayEngine:
         if secs != 60:
             return True, False, "needs 1-minute candles"
         t0 = time.time()
-        rows, wait = self._closed_rows(und, self.candles.get(und, limit=5000), t0)
+        rows, wait = self._closed_rows(und, self.candles.get(und, limit=5000), t0,
+                                       window=self._lhm_window())
         if wait:
             return False, False, f"waiting: {wait}"
         at_ts = at.timestamp()
@@ -1618,6 +1624,20 @@ class IntradayEngine:
         plan.update(index_entry=spot, entry_bar=rows[-1][0], index_target=0.0,
                     reward_delta=cand.delta, reward_points=0.0, reward_inr=0.0,
                     exit_rules="lhm", playbook="last_half_hour")
+        rec["strategy"] = {
+            "side": "CALL" if side > 0 else "PUT", "close": round(close, 1), "spot": round(spot, 1),
+            "move": round(move, 1), "adr": round(adr, 1), "adr_days": n,
+            "move_adr": round(move / adr, 2), "need_adr": float(L.lhm_adr_frac), "trend_4h": tr,
+            "index_stop": round(stop, 1), "contract": cand.symbol, "ask": round(cand.ask, 2),
+            "delta": round(cand.delta, 2), "lots": lots,
+            "risk_inr": round(plan.get("planned_risk_inr", plan["risk_inr"]) * lots)}
+        # Owner, 22 Oct 2026: the rule is unchanged; with lhm_ai_verify "on"
+        # the order goes only when the AI independently calls the same side.
+        block = self._lhm_ai_gate(
+            und, rec, day, side, what, b,
+            lambda: ai_verify.lhm_context(self, und, rows, sig, tr, cand, plan, spot, b))
+        if block is not None:
+            return block
         v = Verdict(side=side, day_trend=tr, bias=tr, bias_source="4h", grade="",
                     reason=frame.reason,
                     setups=[Setup(name="last_half_hour", side=side, invalidation=stop,
@@ -1626,11 +1646,137 @@ class IntradayEngine:
                                          (f"stop {L.lhm_stop_atr:g} ATR", round(stop, 1))])])
         rec["state"] = "sent"                   # one order a day, whatever comes back
         ok = self.enter(cand, plan, frame, None, v, lots=lots)
+        rec["entered"] = bool(ok)
         if ok:
             k = (und, "last_half_hour", side)
             self.playbook_count[k] = self.playbook_count.get(k, 0) + 1
         return True, ok, (f"{what} - ENTERED {cand.symbol}, index stop {stop:.1f}" if ok else
                           f"{what} - entry order for {cand.symbol} not filled (see the order log)")
+
+    # ── last_half_hour: the AI check (owner, 22 Oct 2026; arb/ai_verify.py) ─
+    AI_PREFETCH_SEC = 90.0           # Angel's Greeks / PCR / OI build-up, fetched this long before the entry
+    AI_GRACE_SEC = 5.0               # past lhm_ai_timeout_sec before the engine stops waiting
+
+    def _lhm_window(self):
+        """Seconds after lhm_entry_at the decision may still be taken:
+        entry_window_sec, plus the AI's timeout when lhm_ai_verify is "on" -
+        the entry waits for its answer (a timeout is a no-trade). The signal
+        is still the closed bar ending at lhm_entry_at, and the chase guard
+        still refuses a price that ran away while it waited."""
+        win = float(getattr(self.L, "entry_window_sec", 15.0))
+        if self._ai_verifier().mode() == "on":
+            win += self._ai_verifier().timeout() + self.AI_GRACE_SEC + 5.0
+        return win
+
+    def _ai_verifier(self):
+        v = self.__dict__.get("_ai")
+        if v is None:
+            v = self._ai = ai_verify.AIVerifier(self.L, log=self.log,
+                                                journal_dir=getattr(self.journal, "dir", None))
+        return v
+
+    def _lhm_ai_prefetch(self, day):
+        """Angel's market data and the model client's login, ahead of the
+        decision: both are network calls that need not sit in the entry window."""
+        v = self._ai_verifier()
+        api = getattr(self.candles, "api", None) if self.candles else None
+        for und in [str(u) for u in (getattr(self.L, "lhm_indices", ()) or ())]:
+            b = self._binding_for(und)
+            if b is not None:
+                v.prefetch(f"{day}:{und}", lambda a=api, u=und, e=b.expiry:
+                           ai_verify.angel_market_data(a, u, e, log=self.log))
+
+    def _lhm_ai_gate(self, und, rec, day, side, what, b, build):
+        """None: go on to the order. Else the (final, entered, why) for
+        _lhm_try to return. "on": wait for the AI and need the same side (and
+        lhm_ai_min_confidence); no answer, an error or NO_TRADE is no trade.
+        "shadow": ask, record, never wait or block."""
+        v = self._ai_verifier()
+        mode = v.mode()
+        if mode == "off":
+            return None
+        key, want = f"{day}:{und}", ("CALL" if side > 0 else "PUT")
+        if not v.asked(key):
+            try:
+                ctx = build()
+            except Exception as ex:
+                v.refuse(key, f"data snapshot failed: {ex!r}"[:200], want)
+            else:
+                api = getattr(self.candles, "api", None) if self.candles else None
+                v.ask(key, ctx, want, fetch=lambda: ai_verify.angel_market_data(
+                    api, und, b.expiry, log=self.log))
+                self.log(f"[intraday] last_half_hour {und}: asking {self.L.lhm_ai_model} to verify "
+                         f"{want} ({mode}; up to {v.timeout():.0f} s)")
+        res = v.get(key)
+        if res is None and v.waited(key) > v.timeout() + self.AI_GRACE_SEC:
+            res = v.expire(key, f"no answer in {v.timeout():.0f} s")
+        if res is None:
+            return (False, False, f"{what} - waiting for the AI to verify {want}") if mode == "on" else None
+        if not rec.get("ai_said"):
+            rec["ai_said"] = True
+            self._lhm_ai_report(und, want, res, mode)
+        if mode == "shadow":
+            return None
+        if not res.get("ok"):
+            return True, False, f"{what} - AI check failed ({res.get('error')}) - no trade"
+        if res["side"] != want:
+            return True, False, (f"{what} - AI says {res['side']} ({res['confidence']}%), "
+                                 f"the rule {want} - no trade")
+        need = float(getattr(self.L, "lhm_ai_min_confidence", 0.0) or 0.0)
+        if res["confidence"] < need:
+            return True, False, (f"{what} - AI agrees on {want} but at {res['confidence']}%, "
+                                 f"under the {need:g}% needed - no trade")
+        return None
+
+    def _lhm_ai_report(self, und, want, res, mode):
+        """The AI's answer in the log, and on Telegram when it stops the trade."""
+        need = float(getattr(self.L, "lhm_ai_min_confidence", 0.0) or 0.0)
+        if res.get("ok"):
+            agree = res["side"] == want and res["confidence"] >= need
+            self.log(f"[intraday] last_half_hour {und}: AI says {res['side']} ({res['confidence']}%) "
+                     f"{'AGREES with' if res['side'] == want else 'DISAGREES with'} the rule's {want} "
+                     f"in {res.get('latency_s')} s - {res.get('reasoning', '')[:600]}")
+        else:
+            agree = False
+            self.log(f"[intraday] last_half_hour {und}: AI check failed - {res.get('error')}")
+        if self.notifier and mode == "on" and not agree:
+            why = (f"AI says <b>{res['side']}</b> ({res['confidence']}%"
+                   + (f", needs {need:g}%" if res["side"] == want else "") + f"), rule {want}\n"
+                   f"{html.escape(res.get('reasoning', '')[:500])}" if res.get("ok")
+                   else f"AI check failed: {html.escape(str(res.get('error'))[:300])}")
+            self.notifier.send(f"🤖 <b>LAST-HALF-HOUR SKIPPED</b> {und}\n{why}")
+
+    def lhm_status(self):
+        """Today's last_half_hour decision per index, for the dashboard:
+        the rule's numbers, the AI's answer and the outcome, each with why."""
+        L = self.L
+        v = self.__dict__.get("_ai")
+        day = now_ist().strftime("%Y-%m-%d")
+        st = self.__dict__.get("_lhm_live") or {}
+        recs = st.get("idx", {}) if st.get("day") == day else {}
+        out = {"mode": self._lhm_mode(),
+               "ai_mode": v.mode() if v else str(getattr(L, "lhm_ai_verify", "off")),
+               "model": str(getattr(L, "lhm_ai_model", "")), "entry_at": str(L.lhm_entry_at),
+               "min_confidence": float(getattr(L, "lhm_ai_min_confidence", 0.0) or 0.0),
+               "indices": {}}
+        for und in [str(u) for u in (getattr(L, "lhm_indices", ()) or ())]:
+            rec = recs.get(und)
+            if rec is None:
+                out["indices"][und] = {"decision": "WAITING", "why": f"decides at {L.lhm_entry_at}"}
+                continue
+            key = f"{day}:{und}"
+            ai = ai_verify.summary(v.get(key), v.asked_info(key)) if v else None
+            if rec.get("entered"):
+                decision = "TAKEN"
+            elif rec["state"] == "sent":
+                decision = "ORDER NOT FILLED"
+            elif rec["state"] in ("done", "missed"):
+                decision = "NOT TAKEN"
+            else:
+                decision = "WAITING"
+            out["indices"][und] = {"decision": decision, "state": rec["state"], "why": rec.get("why", ""),
+                                   "strategy": rec.get("strategy"), "ai": ai}
+        return out
 
     def _lhm_open(self, und):
         L = self.L

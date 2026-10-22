@@ -84,6 +84,13 @@
   "exit_slip_frac": 0.01,
   "exact_trade_costs": true,
   "last_half_hour": "on",
+  "lhm_ai_verify": "on",
+  "lhm_ai_model": "gemini-3-pro-preview",
+  "lhm_ai_credentials": "trading-509306-7bd596db4681.json",
+  "lhm_ai_location": "global",
+  "lhm_ai_thinking": "high",
+  "lhm_ai_timeout_sec": 90,
+  "lhm_ai_min_confidence": 0,
   "noise_breakout": "shadow",
   "nb_indices": [
     "NIFTY",

@@ -48,3 +48,7 @@ config/calibration.json
 
 # The VM's daily results (vm-results branch worktree, tools/vm_results.sh)
 .vm-results/
+
+# GCP service-account key for the AI check (config/intraday.json lhm_ai_credentials).
+# It is a credential: never commit it.
+trading-509306-*.json

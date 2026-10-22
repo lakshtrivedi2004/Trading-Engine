@@ -68,6 +68,12 @@
        background:var(--surface);color:var(--ink);padding:5px 10px;font-size:13px;
        cursor:pointer;border-radius:2px;font-family:inherit;z-index:10}
   .theme-toggle:hover{background:var(--panel)}
+  .lhm{margin-top:10px}
+  .lhm .v{font-size:19px}
+  .lhm .line{font-size:13px;margin-top:6px}
+  .lhm .tag{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-right:6px}
+  .lhm .reason{font-size:13px;margin-top:4px;white-space:pre-wrap}
+  .lhm ul{margin:3px 0 0 18px;padding:0;font-size:13px}
   footer{margin-top:34px;padding-top:10px;border-top:1px solid var(--rule);
          color:var(--dim);font-size:12px}
 </style>
@@ -113,6 +119,9 @@
 
   <h2>Open positions</h2>
   <div id="open"></div>
+
+  <h2>Last-half-hour momentum · AI check</h2>
+  <div id="lhm"></div>
 
   <h2>Market structure</h2>
   <div id="struct"></div>
@@ -237,6 +246,41 @@ function openTable(rows){
       <td class="muted">${esc((p.detail&&p.detail.structure)||"")}</td></tr>`).join("") + `</table>`;
 }
 
+function lhmPanel(x){
+  const el = document.getElementById("lhm");
+  if(!x){ el.innerHTML = '<p class="empty">No trading session running.</p>'; return; }
+  if(x.error){ el.innerHTML = `<p class="down">${esc(x.error)}</p>`; return; }
+  const list = (title, xs) => xs && xs.length
+    ? `<div class="line"><span class="tag">${title}</span><ul>${xs.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : "";
+  const sideCls = v => v === "CALL" ? "up" : (v === "PUT" ? "down" : "warn");
+  const head = `<p class="sub">Rule <b>${esc(x.mode)}</b>, decides at ${esc(x.entry_at)} IST · AI check <b>${esc(x.ai_mode)}</b>`
+    + (x.ai_mode !== "off" ? ` (${esc(x.model)}${x.min_confidence ? `, needs ≥${x.min_confidence}% confidence` : ""})` : "")
+    + (x.ai_mode === "on" ? " · trade only when the AI calls the rule's side" : "") + `</p>`;
+  const cards = Object.entries(x.indices || {}).map(([n, r]) => {
+    const dcls = r.decision === "TAKEN" ? "up" : (r.decision === "WAITING" ? "muted" : "down");
+    const s = r.strategy, a = r.ai;
+    const trend = t => t > 0 ? "up" : (t < 0 ? "down" : "flat");
+    const strat = !s ? "" : `<div class="line"><span class="tag">Rule</span><b class="${sideCls(s.side)}">${esc(s.side)}</b>
+      · move ${f2(s.move)} = ${f2(s.move_adr)}× ADR(${s.adr_days}) ${f2(s.adr)} (needs ${s.need_adr}×)
+      · 4h trend ${trend(s.trend_4h)} · index stop ${f2(s.index_stop)}
+      · ${esc(s.contract)} @ ${f2(s.ask)}, Δ ${f2(s.delta)} · risk ₹${f0(s.risk_inr)}</div>`;
+    let ai = "";
+    if(a && a.state === "pending"){
+      ai = `<div class="line"><span class="tag">AI</span>asked at ${esc(a.asked_at)} IST — waiting for its answer…</div>`;
+    } else if(a && a.state === "failed"){
+      ai = `<div class="line"><span class="tag">AI</span><b class="down">no answer</b> — ${esc(a.error)}</div>`;
+    } else if(a){
+      ai = `<div class="line"><span class="tag">AI</span><b class="${sideCls(a.side)}">${esc(a.side)}</b>
+        · ${f0(a.confidence)}% confidence · answered in ${f2(a.latency_s)} s${a.cost_usd ? ` · $${a.cost_usd}` : ""}</div>
+        <div class="reason">${esc(a.reasoning || "")}</div>`
+        + list("Key factors", a.key_factors) + list("Risks", a.risks) + list("Data gaps", a.data_gaps);
+    }
+    return `<div class="box lhm"><div class="k">${esc(n)}</div>
+      <div class="v ${dcls}">${esc(r.decision)}</div><div class="n">${esc(r.why || "")}</div>${strat}${ai}</div>`;
+  }).join("");
+  el.innerHTML = head + (cards || '<p class="empty">No index configured.</p>');
+}
+
 function structTable(s){
   const k = Object.keys(s||{});
   const el = document.getElementById("struct");
@@ -318,6 +362,7 @@ async function tick(){
       + (d.target_hit ? "Target met — trading continues, a bigger day is a better day."
                       : "Target is a goal, not a stop.");
     openTable(d.open_positions||[]);
+    lhmPanel(d.lhm);
     structTable(d.structures);
     tradeTable(d.recent_trades);
     rejectTable(d.rejects);

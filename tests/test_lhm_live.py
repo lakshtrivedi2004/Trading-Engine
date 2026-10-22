@@ -269,6 +269,7 @@ def limits(mode="on"):
     L = IntradayLimits.load()                    # the live settings
     L.last_half_hour = mode
     L.noise_breakout = "off"                     # its shadow would start a history fetch
+    L.lhm_ai_verify = "off"                      # the rule alone; section 9 tests the AI check
     return L
 
 
@@ -663,9 +664,222 @@ def t_modes():
           and sum("is not a mode" in x for x in lg) == 1, str([x for x in lg if "mode" in x]))
 
 
+def t_ai():
+    section("9. The AI check (owner, 22 Oct 2026): the rule unchanged, the order only when the AI "
+            "calls the same side")
+    import json as _json
+    import tempfile
+    from arb import ai_verify as _AV
+    KEY = f"{TODAY}:NIFTY"
+
+    class Model:
+        """Stands in for Gemini: answers `side` at `conf`, or raises, or waits on `gate`."""
+        def __init__(self, side="CALL", conf=80, boom=None, gate=None):
+            self.side, self.conf, self.boom, self.gate, self.prompts = side, conf, boom, gate, []
+
+        def query_json(self, prompt, schema=None, system_instruction=None, model_name=None,
+                       thinking_level=None):
+            self.prompts.append(prompt)
+            if self.gate is not None:
+                self.gate.wait(5)
+            if self.boom:
+                raise self.boom
+            return ({"side": self.side, "confidence": self.conf, "reasoning": f"test says {self.side}",
+                     "key_factors": ["4h trend up", "PCR 1.1"], "risks": ["late in the day"],
+                     "data_gaps": []},
+                    {"model": "gemini-3-pro-preview", "input_tokens": 1000, "output_tokens": 50,
+                     "cost_usd": 0.003})
+
+    def ai_engine(mode="on", model=None, **kw):
+        e, api, lg = make(**kw)
+        e.L.lhm_ai_verify, e.L.lhm_ai_timeout_sec, e.L.lhm_ai_min_confidence = mode, 30.0, 0.0
+        tmp, m, built, sent = tempfile.mkdtemp(), model or Model(), [], []
+        e._ai = _AV.AIVerifier(e.L, log=lg.append, journal_dir=tmp,
+                               client_factory=lambda: built.append(1) or m)
+        e.notifier = SimpleNamespace(send=sent.append)
+        return e, api, lg, m, tmp, sent, built
+
+    def answered(e, wait=3.0):
+        end = _time.time() + wait               # the AI's thread runs on the real clock
+        while e._ai.get(KEY) is None and _time.time() < end:
+            _time.sleep(0.02)
+
+    def journal(tmp, wait=3.0):
+        """The journal's lines, once the AI's thread has written them."""
+        p = os.path.join(tmp, f"ai_lhm_{TODAY}.jsonl")
+        end = _time.time() + wait
+        while not os.path.exists(p) and _time.time() < end:
+            _time.sleep(0.02)
+        return [_json.loads(x) for x in open(p)] if os.path.exists(p) else []
+
+    # agrees: one order, after the answer (held back until the page is checked)
+    CLK.at(15, 0, 3)
+    gate = threading.Event()
+    e, api, lg, m, tmp, sent, built = ai_engine(model=Model(gate=gate))
+    e.hunt()
+    check("on: at 15:00:03 the rule's CALL goes to the AI and nothing is sent yet",
+          not api.params and e._ai.asked(KEY)
+          and any("asking gemini-3-pro-preview to verify CALL" in x for x in lg), str(lg[-2:]))
+    st = e.lhm_status()["indices"]["NIFTY"]
+    check("...the page shows WAITING, with the rule's side and numbers",
+          st["decision"] == "WAITING" and st["strategy"]["side"] == "CALL"
+          and st["strategy"]["move_adr"] == 1.0 and st["ai"]["state"] == "pending", str(st)[:200])
+    gate.set()
+    answered(e)
+    CLK.at(15, 0, 6)
+    e.hunt()
+    check("the AI calls CALL too: exactly one BUY, the rule's contract",
+          len(api.buys()) == 1 and e.book.count() == 1, str([p["tradingsymbol"] for p in api.params]))
+    st = e.lhm_status()["indices"]["NIFTY"]
+    check("...the page shows TAKEN with the AI's side, confidence and reasoning",
+          st["decision"] == "TAKEN" and st["ai"]["side"] == "CALL" and st["ai"]["confidence"] == 80
+          and st["ai"]["reasoning"] == "test says CALL" and st["ai"]["key_factors"], str(st.get("ai")))
+    pr = m.prompts[0] if m.prompts else ""
+    check("...the AI was shown the rule's side, the contract, the bars, the indicators and the chain",
+          "Strategy side: CALL" in pr and all(f'"{k}"' in pr for k in (
+              "contract", "bars_5m", "last_30_bars_1m", "indicators", "structure_1m", "option_chain",
+              "prior_sessions_daily", "bars_4h", "angel_market_data", "engine_today")), pr[:120])
+    rows = journal(tmp)
+    check("...the question and the answer are journaled",
+          len(rows) == 1 and rows[0]["result"]["side"] == "CALL"
+          and rows[0]["context"]["strategy"]["side"] == "CALL" and rows[0]["late"] is False)
+    check("...and the log says it agreed", any("AGREES with the rule's CALL" in x for x in lg))
+
+    # disagrees, NO_TRADE, fails, too unsure: no order, each said
+    for model, needs, label in ((Model("PUT", 75), "AI says PUT (75%)", "the AI calls PUT"),
+                                (Model("NO_TRADE", 60), "AI says NO_TRADE", "the AI says NO_TRADE"),
+                                (Model(boom=RuntimeError("403 API disabled")), "AI check failed",
+                                 "the AI call fails"),
+                                (Model("CALL", 40), "under the 60% needed", "the AI agrees at 40% < 60%")):
+        CLK.at(15, 0, 3)
+        e, api, lg, m, tmp, sent, built = ai_engine(model=model)
+        e.L.lhm_ai_min_confidence = 60.0 if "40%" in label else 0.0
+        e.hunt()
+        answered(e)
+        for ss in (6, 9):
+            CLK.at(15, 0, ss)
+            e.hunt()
+        st = e.lhm_status()["indices"]["NIFTY"]
+        check(f"{label}: no order, NOT TAKEN, and why",
+              not api.params and e.book.count() == 0 and st["decision"] == "NOT TAKEN"
+              and needs in st["why"], st["why"][-140:])
+    check("...a veto is sent to Telegram with the AI's reason",
+          any("LAST-HALF-HOUR SKIPPED" in x for x in sent), str(sent[-1:])[:160])
+
+    # no answer in time: no order; a late answer is journaled, not used
+    CLK.at(15, 0, 3)
+    gate = threading.Event()
+    e, api, lg, m, tmp, sent, built = ai_engine(model=Model(gate=gate))
+    e.L.lhm_ai_timeout_sec, e.AI_GRACE_SEC = 0.2, 0.0
+    e.hunt()
+    _time.sleep(0.3)
+    CLK.at(15, 0, 5)
+    e.hunt()
+    st = e.lhm_status()["indices"]["NIFTY"]
+    gate.set()
+    journal(tmp)
+    check("no answer inside lhm_ai_timeout_sec: no order, NOT TAKEN",
+          not api.params and st["decision"] == "NOT TAKEN" and "no answer in" in st["why"], st["why"][-100:])
+    check("...the answer that came later is journaled as late and not used",
+          journal(tmp) and journal(tmp)[0]["late"] is True and not api.params)
+
+    # the window stretches to the answer
+    CLK.at(15, 0, 3)
+    gate = threading.Event()
+    e, api, lg, m, tmp, sent, built = ai_engine(model=Model(gate=gate))
+    e.hunt()
+    gate.set()
+    answered(e)
+    CLK.at(15, 0, 40)
+    e.hunt()
+    check("on: an agreeing answer at 15:00:40 still enters (the window covers the AI's timeout)",
+          len(api.buys()) == 1, f"{len(api.params)} orders")
+
+    # shadow: never waits, never blocks
+    CLK.at(15, 0, 3)
+    e, api, lg, m, tmp, sent, built = ai_engine(mode="shadow", model=Model("PUT", 90))
+    e.hunt()
+    check("shadow: the rule's order goes at once, whatever the AI will say",
+          len(api.buys()) == 1 and e._ai.asked(KEY))
+    answered(e)
+    st = e.lhm_status()["indices"]["NIFTY"]
+    check("...the AI's answer still shows on the page and in the journal, no Telegram veto",
+          st["ai"]["side"] == "PUT" and journal(tmp) and not any("SKIPPED" in x for x in sent))
+
+    # off: never asks
+    CLK.at(15, 0, 3)
+    e, api, lg, m, tmp, sent, built = ai_engine(mode="off")
+    e.hunt()
+    check("off: the AI is never asked and the rule trades as before",
+          len(api.buys()) == 1 and not built and not e._ai.asked(KEY))
+
+    # a snapshot that cannot be built: fail closed
+    CLK.at(15, 0, 3)
+    e, api, lg, m, tmp, sent, built = ai_engine()
+    saved, _AV.lhm_context = _AV.lhm_context, lambda *a, **k: 1 / 0
+    try:
+        e.hunt()
+        CLK.at(15, 0, 6)
+        e.hunt()
+    finally:
+        _AV.lhm_context = saved
+    st = e.lhm_status()["indices"]["NIFTY"]
+    check("a data snapshot that fails: no order, the reason shown",
+          not api.params and "data snapshot failed" in st["why"], st["why"][-100:])
+
+    # prefetch: Angel's data is asked for before 15:00
+    CLK.at(14, 59, 0)
+    e, api, lg, m, tmp, sent, built = ai_engine()
+    e.hunt()
+    end = _time.time() + 3
+    while e._ai.prefetched(KEY) is None and _time.time() < end:
+        _time.sleep(0.02)
+    pre = e._ai.prefetched(KEY)
+    check("at 14:59:00 Angel's market data is prefetched (no session here: the gap is recorded)",
+          pre is not None and "errors" in pre and not api.params, str(pre)[:120])
+
+    # the chain the model sees, and Angel's Greeks taking the estimates' place
+    CLK.at(15, 0, 3)
+    e, api, lg, m, tmp, sent, built = ai_engine()
+    st_ = e.feed.store
+    n = len(st_.ltp)
+    st_.oi = [1000.0 * (1 + i % 7) for i in range(n)]
+    st_.volume = [500.0] * n
+    st_.day_high, st_.day_low = [x * 1.1 for x in st_.ltp], [x * 0.9 for x in st_.ltp]
+    st_.recv_ns = [_time.perf_counter_ns()] * n
+    b = e.bindings[0]
+    cv = b.view()
+    b.ce_slots = [st_.slot_of_token[t] for t in cv.ce_token]
+    b.pe_slots = [st_.slot_of_token[t] for t in cv.pe_token]
+    b.lot_size = cv.lot_size
+    ch = _AV.option_chain(st_, b, 24100.0)
+    check("the option chain: every strike, both sides, OI, PCR, max pain and the OI walls",
+          len(ch["rows"]) == len(KS) and ch["pcr_oi"] is not None and ch["max_pain"] in KS
+          and ch["highest_call_oi_strike"] in KS and "oi" in ch["rows"][0]["CE"], str(ch)[:160])
+    ctx = {"option_chain": ch}
+    _AV.merge_angel(ctx, {"greeks": {(24100.0, "CE"): {"delta": 0.51, "iv_pct": 13.2}},
+                          "exchange_pcr": [{"symbol": "NIFTY06OCT26FUT", "pcr": 1.12}]})
+    ce = [r for r in ch["rows"] if r["strike"] == 24100.0][0]["CE"]
+    check("...Angel's Greeks replace the Black-Scholes estimate, and its PCR is added",
+          ce["greeks"]["source"] == "angel" and ce["greeks"]["delta"] == 0.51
+          and ctx["angel_market_data"]["exchange_pcr"][0]["pcr"] == 1.12)
+    check("normalise: a bad side is refused, confidence clamped",
+          _AV.normalise({"side": "call", "confidence": 140, "reasoning": "x"})["confidence"] == 100
+          and _raises(lambda: _AV.normalise({"side": "BUY"})))
+
+
+def _raises(fn):
+    try:
+        fn()
+    except Exception:
+        return True
+    return False
+
+
 try:
     for name, fn in (("signal", t_signal), ("once", t_once), ("gates", t_gates), ("contract", t_contract),
-                     ("position", t_position), ("exits", t_exits), ("adopt", t_adopt), ("modes", t_modes)):
+                     ("position", t_position), ("exits", t_exits), ("adopt", t_adopt), ("modes", t_modes),
+                     ("ai", t_ai)):
         guarded(name, fn)
 finally:
     (_IE.time, _X.time, _P.time, _IE.now_ist, _P.now_ist, _RG.now_ist, _X.now_ist) = _saved
