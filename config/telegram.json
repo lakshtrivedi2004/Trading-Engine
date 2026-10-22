@@ -1,0 +1,5 @@
+{
+  "read_channel": "https://t.me/btst_karo",
+  "read_last_messages": 50,
+  "read_poll_sec": 10
+}
