@@ -1,0 +1,46 @@
+Retest read on candle sizes, real engine replay (tools/replay_engine.py), 155 sessions 2026-02-20 .. 2026-10-08, NIFTY / BANKNIFTY / SENSEX,
+live gates, last_half_hour off, split 2026-05-25. Net after costs, 1 lot, Rs.
+
+retest_timeframes [1]              n=  51  win  37.3%  net Rs    -4,321  avg    -85  PF  0.74  maxDD    8,897  halves   -6,834 /   +2,513  months+  22%
+retest_timeframes [3]              n=  22  win  18.2%  net Rs    -8,669  avg   -394  PF  0.15  maxDD    8,669  halves   -6,470 /   -2,199  months+  14%
+retest_timeframes [5]              n=  21  win  33.3%  net Rs    -3,825  avg   -182  PF  0.58  maxDD    4,944  halves     -422 /   -3,403  months+  14%
+retest_timeframes [10]             n=  11  win   0.0%  net Rs    -6,134  avg   -558  PF  0.00  maxDD    6,134  halves   -2,358 /   -3,775  months+   0%
+retest_timeframes [1, 3, 5, 10]    n=  28  win  21.4%  net Rs    -9,107  avg   -325  PF  0.25  maxDD    9,107  halves   -7,966 /   -1,141  months+   0%
+
+[3] vs [1]: trades -29, net -4,347 (halves +364 / -4,712) -> not better in both halves
+
+[5] vs [1]: trades -30, net +496 (halves +6,412 / -5,916) -> not better in both halves
+
+[10] vs [1]: trades -40, net -1,812 (halves +4,476 / -6,288) -> not better in both halves
+
+[1, 3, 5, 10] vs [1]: trades -23, net -4,786 (halves -1,132 / -3,654) -> not better in both halves
+
+== [1] by index
+   NIFTY                           n=   2  win   0.0%  net Rs    -1,971  avg   -985  PF  0.00  maxDD    1,971  halves   -1,971 /       +0  months+   0%
+   BANKNIFTY                       n=   1  win 100.0%  net Rs      +401  avg   +401  PF   inf  maxDD        0  halves       +0 /     +401  months+ 100%
+   SENSEX                          n=  48  win  37.5%  net Rs    -2,752  avg    -57  PF  0.81  maxDD    8,635  halves   -4,863 /   +2,112  months+  33%
+
+== [3] by index
+   NIFTY                           n=   1  win   0.0%  net Rs      -680  avg   -680  PF  0.00  maxDD      680  halves     -680 /       +0  months+   0%
+   BANKNIFTY                       n=   0  win   0.0%  net Rs        +0  avg     +0  PF  0.00  maxDD        0  halves       +0 /       +0  months+   0%
+   SENSEX                          n=  21  win  19.0%  net Rs    -7,989  avg   -380  PF  0.16  maxDD    7,989  halves   -5,790 /   -2,199  months+  14%
+
+== [5] by index
+   NIFTY                           n=   3  win  33.3%  net Rs    -1,096  avg   -365  PF  0.45  maxDD    1,995  halves   -1,995 /     +899  months+  50%
+   BANKNIFTY                       n=   1  win 100.0%  net Rs      +220  avg   +220  PF   inf  maxDD        0  halves       +0 /     +220  months+ 100%
+   SENSEX                          n=  17  win  29.4%  net Rs    -2,949  avg   -173  PF  0.58  maxDD    4,931  halves   +1,573 /   -4,522  months+  14%
+
+== [10] by index
+   NIFTY                           n=   0  win   0.0%  net Rs        +0  avg     +0  PF  0.00  maxDD        0  halves       +0 /       +0  months+   0%
+   BANKNIFTY                       n=   0  win   0.0%  net Rs        +0  avg     +0  PF  0.00  maxDD        0  halves       +0 /       +0  months+   0%
+   SENSEX                          n=  11  win   0.0%  net Rs    -6,134  avg   -558  PF  0.00  maxDD    6,134  halves   -2,358 /   -3,775  months+   0%
+
+== [1, 3, 5, 10] by index
+   NIFTY                           n=   1  win   0.0%  net Rs      -895  avg   -895  PF  0.00  maxDD      895  halves     -895 /       +0  months+   0%
+   BANKNIFTY                       n=   0  win   0.0%  net Rs        +0  avg     +0  PF  0.00  maxDD        0  halves       +0 /       +0  months+   0%
+   SENSEX                          n=  27  win  22.2%  net Rs    -8,212  avg   -304  PF  0.27  maxDD    8,212  halves   -7,071 /   -1,141  months+   0%
+   by the candle size that fired
+     1-minute                      n=  14  win  28.6%  net Rs    -2,677  avg   -191  PF  0.47  maxDD    4,451  halves   -2,279 /     -398  months+  25%
+     3-minute                      n=  12  win  16.7%  net Rs    -5,176  avg   -431  PF  0.12  maxDD    5,176  halves   -4,791 /     -385  months+  20%
+     5-minute                      n=   2  win   0.0%  net Rs    -1,254  avg   -627  PF  0.00  maxDD    1,254  halves     -895 /     -359  months+   0%
+     10-minute                     n=   0  win   0.0%  net Rs        +0  avg     +0  PF  0.00  maxDD        0  halves       +0 /       +0  months+   0%

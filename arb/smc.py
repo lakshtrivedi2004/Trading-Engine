@@ -448,6 +448,54 @@ def resample(candles, factor, seconds=60, min_fill=1.0):
     return out
 
 
+def resample_session(candles, minutes, session_start="09:15", min_fill=1.0):
+    """1-minute bars folded into `minutes`-minute bars counted from the session
+    open, as NSE charts draw them: 10-minute bars at 09:15, 09:25, ... (the
+    epoch buckets of resample() put them at 09:10, 09:20). Complete buckets
+    only - older ones need `min_fill` of their minutes, the newest all of
+    them, and its last minute present: it may still be forming.
+
+    Rows are [iso time, o, h, l, c, (volume)] with IST times; the bucket of a
+    row is (its date, (minute of day - session open) // minutes)."""
+    minutes = int(minutes)
+    if minutes <= 1:
+        return list(candles)
+    h0, m0 = (int(x) for x in str(session_start).split(":"))
+    open_m = h0 * 60 + m0
+
+    def where(c):
+        ts = str(c[0])
+        m = int(ts[11:13]) * 60 + int(ts[14:16])
+        return ts[:10], (m - open_m) // minutes, m
+
+    groups, order = {}, []
+    for c in candles:
+        try:
+            day, k, _ = where(c)
+        except (ValueError, TypeError, IndexError):
+            continue
+        key = (day, k)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(c)
+    need = max(1, min(minutes, int(-(-minutes * float(min_fill) // 1))))
+    out = []
+    for n, key in enumerate(order):
+        grp = groups[key]
+        if n == len(order) - 1:
+            last_m = where(grp[-1])[2]
+            if len(grp) < minutes or last_m != open_m + (key[1] + 1) * minutes - 1:
+                continue
+        elif len(grp) < need:
+            continue
+        out.append([grp[0][0], grp[0][1],
+                    max(c[2] for c in grp), min(c[3] for c in grp),
+                    grp[-1][4],
+                    sum((c[5] if len(c) > 5 else 0.0) for c in grp)])
+    return out
+
+
 def _resample_by_position(candles, factor):
     """Positional fallback for series without parseable timestamps."""
     out = []

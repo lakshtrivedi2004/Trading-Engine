@@ -812,6 +812,90 @@ check("after a Rs 1,600 loss the next trade may risk only the Rs 50 left of the 
 rc.realised_pnl = +900.0
 check("a profit does not enlarge the per-trade cap", abs(IntradayEngine._risk_cap(rc, 8.0) - 880.0) < 1e-6)
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("Retest on 1, 3, 5, 10-minute candles (owner, 23 Oct 2026): retest_timeframes")
+
+from types import SimpleNamespace as _NS                         # noqa: E402
+import arb.intraday_engine as _IEm                               # noqa: E402
+from arb.smc import resample_session                             # noqa: E402
+
+
+def _mins(n, start=555, day="2026-10-08"):
+    return [[f"{day}T{(start + i) // 60:02d}:{(start + i) % 60:02d}:00+05:30",
+             100.0 + i, 101.0 + i, 99.0 + i, 100.5 + i, 0.0] for i in range(n)]
+
+
+r27 = _mins(27)                                                  # 09:15 .. 09:41
+b10 = resample_session(r27, 10)
+check("10-minute bars start at the 09:15 open (09:15, 09:25), as NSE charts draw them",
+      [x[0][11:16] for x in b10] == ["09:15", "09:25"], str([x[0][11:16] for x in b10]))
+check("...a bar is its minutes' open / high / low / close",
+      b10[0][1:5] == [100.0, 110.0, 99.0, 109.5], str(b10[0][1:5]))
+check("...the still-forming 09:35 bar is left out", all(x[0][11:16] != "09:35" for x in b10))
+check("3-minute bars: 9 complete from 09:15 to 09:39",
+      len(resample_session(r27, 3)) == 9 and resample_session(r27, 3)[-1][0][11:16] == "09:39")
+check("size 1 is the 1-minute series unchanged", resample_session(r27, 1) == r27)
+
+seen = []
+
+
+def _fake_eval(rows, spot, L, strike_step=0.0):
+    """Tradable only on the size the test names, judged by the bar spacing."""
+    gap = 1
+    if len(rows) > 1:
+        a, b_ = rows[-2][0], rows[-1][0]
+        gap = (int(b_[11:13]) * 60 + int(b_[14:16])) - (int(a[11:13]) * 60 + int(a[14:16]))
+    seen.append(gap)
+    return _NS(tradable=gap in WANT, reason=f"read on {gap}", setups=[], veto=None)
+
+
+def _decider(tfs, rows):
+    lim = IntradayLimits()
+    lim.retest_timeframes = tfs
+    eng = _NS(L=lim, cfg=_NS(session_start="09:15"), candles=_NS(get=lambda und, limit=0: rows),
+              _strike_step=lambda b: 50.0)
+    eng._retest_tfs = lambda: IntradayEngine._retest_tfs(eng)
+    return lambda r: IntradayEngine._decide(eng, "NIFTY", r, "ST1", 24000.0, None)
+
+
+_saved_eval, _saved_an = _IEm.evaluate, _IEm.analyse
+_IEm.evaluate, _IEm.analyse = _fake_eval, (lambda r, **k: f"ST{len(r)}")
+try:
+    rows60 = _mins(60)                                           # 09:15 .. 10:14
+    at_0944 = [x for x in rows60 if x[0][11:16] <= "09:44"]      # closes 3-, 5- and 10-minute bars
+    at_0942 = [x for x in rows60 if x[0][11:16] <= "09:42"]      # closes none of them
+    WANT = {1}
+    seen.clear()
+    v, s, tf = _decider((1,), rows60)(at_0944)
+    check("default [1]: the 1-minute read alone, as before", tf == 1 and s == "ST1" and seen == [1])
+    WANT = {5}
+    seen.clear()
+    v, s, tf = _decider((1, 3, 5, 10), rows60)(at_0944)
+    check("[1, 3, 5, 10] at 09:44 (closes 3, 5 and 10): read in order, the 5-minute setup taken",
+          tf == 5 and v.tradable and seen == [1, 3, 5] and v.reason.startswith("5-minute candles"),
+          f"tf {tf}, read {seen}")
+    check("...with the 5-minute structure (its zone and stop)", s.startswith("ST") and s != "ST1", s)
+    seen.clear()
+    v, s, tf = _decider((1, 3, 5, 10), rows60)(at_0942)
+    check("at 09:42 no larger bar has closed: only the 1-minute read, nothing taken",
+          seen == [1] and not v.tradable and tf == 1, str(seen))
+    WANT = set()
+    seen.clear()
+    v, s, tf = _decider((1, 3, 5, 10), rows60)(at_0944)
+    check("nothing tradable on any size: the 1-minute verdict comes back for its reasons",
+          not v.tradable and tf == 1 and s == "ST1" and seen == [1, 3, 5, 10])
+    WANT = {10}
+    seen.clear()
+    v, s, tf = _decider((10,), rows60)(at_0942)
+    check("[10] alone between its bars: no read, a non-tradable verdict saying why",
+          not v.tradable and "closed a bar" in v.reason and seen == [])
+    lim = IntradayLimits()
+    lim.retest_timeframes = ("x",)
+    check("an unreadable retest_timeframes is [1]",
+          IntradayEngine._retest_tfs(_NS(L=lim)) == [1])
+finally:
+    _IEm.evaluate, _IEm.analyse = _saved_eval, _saved_an
+
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")
 print("=" * 64)

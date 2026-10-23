@@ -673,6 +673,15 @@ class IntradayLimits:
     # (research/PAPERS.md section 22): see arb/smc.py:analyse, arb/regime.py:
     # atr_ratio and arb/playbooks.py:_own_zone.
     retest_own_zone: bool = False
+    # The candle sizes (minutes) the playbooks are read on (owner, 23 Oct 2026).
+    # [1] is the 1-minute chart alone. [1, 3, 5, 10]: the setup is also looked
+    # for on 3-, 5- and 10-minute bars folded from the 1-minute series (session
+    # aligned, arb/smc.py:resample_session), each read only on the minute its
+    # bar closes; the first size with a tradable setup is taken, its zone the
+    # stop. Every other gate stays on the 1-minute bars (pace, 4h trend, chase,
+    # costs, risk cap). Bar counts (sequence_window_bars, min_structure_bars...)
+    # are in that size's bars.
+    retest_timeframes: tuple = (1,)
     smc_consume_swings: bool = False
     smc_today_only: bool = False
     pace_no_gap: bool = False

@@ -35,7 +35,7 @@ from arb.regime import (atr, atr_ratio, premium_gate, regime_gate, run_in_direct
                         session_phase, swept_against, trend_4h)
 from arb.scanner import scan_cost_ratio
 from arb.config import stock_risk_pct
-from arb.smc import BEAR, BULL, analyse
+from arb.smc import BEAR, BULL, analyse, resample_session
 from arb.costs import leg_cost, per_unit_cost_points
 from arb.fileio import write_json
 from arb import ai_verify, optionflow, trailing
@@ -1324,6 +1324,58 @@ class IntradayEngine:
             return "warmup"
         return ""
 
+    def _retest_tfs(self):
+        """retest_timeframes as positive whole minutes; [1] if unreadable."""
+        try:
+            tfs = [int(x) for x in (getattr(self.L, "retest_timeframes", (1,)) or (1,))]
+        except (TypeError, ValueError):
+            tfs = [1]
+        return [t for t in tfs if t >= 1] or [1]
+
+    def _decide(self, und, rows, st, spot, b):
+        """evaluate() on each candle size of retest_timeframes, in order:
+        (verdict, its structure, its minutes) of the first tradable one (owner,
+        23 Oct 2026). A size above 1 is read only on the minute its bar closes,
+        so its decision follows that bar's close as the 1-minute one follows
+        its own. With none tradable, the first verdict read (the 1-minute's
+        when 1 is listed) is returned for its reasons."""
+        L, step = self.L, self._strike_step(b)
+        tfs = self._retest_tfs()
+        if tfs == [1]:
+            return evaluate(rows, spot, L, strike_step=step), st, 1
+        start = str(getattr(self.cfg, "session_start", "09:15") or "09:15")
+        h0, m0 = (int(x) for x in start.split(":"))
+        last = str(rows[-1][0]) if rows else ""
+        first, longer = None, None
+        for tf in tfs:
+            if tf == 1:
+                r, s = rows, st
+            else:
+                try:
+                    m = int(last[11:13]) * 60 + int(last[14:16])
+                except ValueError:
+                    continue
+                if (m - (h0 * 60 + m0) + 1) % tf:
+                    continue                    # this size's bar has not just closed
+                if longer is None:
+                    full = self.candles.get(und, limit=400 * max(tfs)) if self.candles else []
+                    longer = [x for x in full if str(x[0]) <= last]
+                r = resample_session(longer, tf, session_start=start,
+                                     min_fill=float(getattr(L, "htf_min_fill", 1.0)))[-400:]
+                s = analyse(r, strength=L.swing_strength, min_bars=L.min_structure_bars, limits=L)
+            v = evaluate(r, spot, L, strike_step=step)
+            if tf != 1:
+                v.reason = f"{tf}-minute candles: {v.reason}"
+            if first is None:
+                first = (v, s, tf)
+            if v.tradable:
+                return v, s, tf
+        if first is None:
+            v = Verdict()
+            v.reason = "no listed candle size closed a bar this minute"
+            return v, st, 1
+        return first
+
     def _closed_rows(self, name, rows, t0=None, window=None):
         """Decide on COMPLETED bars only, and only just after one closes.
 
@@ -2395,7 +2447,10 @@ class IntradayEngine:
 
             # The decision itself: one completed playbook, judged against the
             # day's bias, graded by whatever else agrees. See arb/confluence.py.
-            v = evaluate(rows, spot, self.L, strike_step=self._strike_step(b))
+            # Read on each of retest_timeframes; from here on `st` is the
+            # structure of the candle size that decided (its zone, its stop) -
+            # the 1-minute one stays the dashboard's.
+            v, st, tf = self._decide(und, rows, st, spot, b)
             self.verdicts[und] = v
             self.verdict_at[und] = time.time()
             if not v.tradable:
@@ -2524,6 +2579,7 @@ class IntradayEngine:
                 continue
             plan["index_entry"] = spot
             plan["entry_bar"] = rows[-1][0] if rows else ""
+            plan["retest_tf_min"] = tf
             plan["reward_delta"] = eff_delta
             plan["premium_per_point"] = eff_note
             plan["cross_side"] = cross.as_dict() if cross is not None else None
@@ -3214,6 +3270,7 @@ class IntradayEngine:
                     "cost_round_trip_pt": round(plan["cost_points_round_trip"], 3),
                     "premium_per_point": plan.get("premium_per_point"),
                     "cross_side": plan.get("cross_side"),
+                    "retest_tf_min": plan.get("retest_tf_min", 1),
                     "index_at_entry": round(structure.closes[-1], 2)
                                       if structure.closes else 0.0})
         # Index-side management. With an index target the premium target is
