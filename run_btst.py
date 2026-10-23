@@ -34,6 +34,7 @@ from arb.utils import read_channel_messages                        # noqa: E402
 from btst import web                                               # noqa: E402
 from btst.broker import AngelBtstBroker, PaperBtstBroker           # noqa: E402
 from btst.logbook import Logbook, fmt                              # noqa: E402
+from btst.ticks import PriceWatch                                  # noqa: E402
 from btst.strategy import BtstStrategy                             # noqa: E402
 from services.mongo import MongoStore                              # noqa: E402
 
@@ -59,7 +60,7 @@ class Session:
     """One Angel login a day (the session token does not outlive it)."""
 
     def __init__(self, creds):
-        self.creds, self.api, self.day = creds, None, None
+        self.creds, self.api, self.day, self.angel = creds, None, None, None
         self.lock = threading.Lock()
 
     def ensure(self):
@@ -68,7 +69,8 @@ class Session:
             if self.api is None or self.day != today:
                 log(f"Angel login for {today} ({'first' if self.api is None else 'the new day'})", area="angel")
                 try:
-                    self.api = AngelSession(self.creds).login(retry_for_sec=120.0, log=BOOK.sink("angel")).api
+                    self.angel = AngelSession(self.creds).login(retry_for_sec=120.0, log=BOOK.sink("angel"))
+                    self.api = self.angel.api
                 except Exception as e:
                     log(f"Angel login failed: {e!r}", "ERROR", "angel")
                     raise
@@ -153,11 +155,19 @@ def main():
                 area="contract")
         return masters["rows"]
 
+    rest = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log)
+
+    def angel_session():
+        sess.ensure()
+        return sess.angel
+    prices = PriceWatch(session_fn=angel_session, rest_quote=rest.quote, log=BOOK.log,
+                        ltp_poll_sec=float(cfg.get("ltp_poll_sec", 1)), ws_fresh_sec=float(cfg.get("ws_fresh_sec", 5)),
+                        use_ws=bool(cfg.get("use_websocket", True)))
+
     def make_broker(mode):
-        live = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log)
         log(f"broker: {mode.upper()}" + (" - real orders, CARRYFORWARD" if mode == "live"
-                                        else " - simulated fills at the live LTP"), area="mode")
-        return live if mode == "live" else PaperBtstBroker(live.ltp, log=BOOK.log)
+                                        else " - simulated fills at the live price (websocket ticks)"), area="mode")
+        return rest if mode == "live" else PaperBtstBroker(prices.price, log=BOOK.log, watch=prices)
 
     notifier = None
     if cfg.get("notify_telegram", True) and not args.no_telegram_alerts \
@@ -170,7 +180,7 @@ def main():
 
     mode = read_mode()
     strategy = BtstStrategy(cfg, store, make_broker(mode), master, llm, channel, log=BOOK.log,
-                            notifier=notifier, cost_model=CostModel.load())
+                            notifier=notifier, cost_model=CostModel.load(), prices=prices)
     strategy.resume()
     lock = threading.Lock()
 
@@ -228,8 +238,9 @@ def main():
             log(f"alive | {strategy.broker.mode.upper()} | reader {'up' if reader.is_alive() else 'DOWN'} | "
                 f"{strategy.status_note} | open job {j['job_id'] + ' ' + j['status'] if j else 'none'} | "
                 f"{strategy.inbox.qsize()} message(s) queued", area="heartbeat")
-        stop.wait(float(cfg.get("poll_sec", 3)))
+        stop.wait(strategy.wait_sec())
     log("BTST desk stopping (signal received)", area="start")
+    prices.stop()
     if notifier:
         notifier.stop()
 

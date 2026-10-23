@@ -96,7 +96,7 @@ async function tick(){
         <div class="box"><div class="k">Contract</div><div class="v" style="font-size:16px">${esc(c.symbol)}</div><div class="dim">${esc(c.exchange)} · expiry ${esc(c.expiry)}</div></div>
         <div class="box"><div class="k">Qty @ average</div><div class="v">${n0(p.qty)} @ ${n2(p.avg_price)}</div><div class="dim">invested ${rs(p.invested)}</div></div>
         <div class="box"><div class="k">Target</div><div class="v">${n2(j.target_price)}</div><div class="dim">${j.soft_target ? "watched (order refused)" : "limit order at Angel"}</div></div>
-        <div class="box"><div class="k">LTP / open P&L</div><div class="v ${cls(pnl)}">${n2(j.last_ltp)} · ${rs(pnl)}</div><div class="dim">at ${esc(j.last_ltp_at || "")}</div></div>
+        <div class="box"><div class="k">LTP / open P&L</div><div class="v ${cls(pnl)}">${n2(j.last_ltp)} · ${rs(pnl)}</div><div class="dim">at ${esc(j.last_ltp_at || "")}${d.price && d.price.source ? " · via " + esc(d.price.source) + (d.price.websocket ? " (" + n0(d.price.ticks) + " ticks)" : "") : ""}${d.price && d.price.peak_since_target ? " · highest since target " + n2(d.price.peak_since_target) : ""}</div></div>
         <div class="box"><div class="k">Next-day decision</div><div class="v" style="font-size:16px">${esc(dec.scenario || "at the open")}</div><div class="dim">${dec.pnl_pct != null ? "opened " + n2(dec.pnl_pct) + "%" : ""}</div></div>
       </div><p class="sub">${esc(j.job_id)} · signal: ${esc((j.signal||{}).indices)} ${esc((j.signal||{}).strike_price)} ${esc((j.signal||{}).side)} @ ${esc((j.signal||{}).price)}</p>`; })();
     document.getElementById("stats").innerHTML = (d.stats || []).map(statBlock).join("")

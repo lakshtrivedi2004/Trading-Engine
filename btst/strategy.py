@@ -50,13 +50,18 @@ def _first_line(text, n=90):
 
 class BtstStrategy:
     def __init__(self, cfg, store, broker, master_fn, llm, channel, log=print, now=now_ist,
-                 notifier=None, cost_model=None):
+                 notifier=None, cost_model=None, prices=None):
         self.cfg, self.store, self.broker = cfg, store, broker
         self.master_fn, self.llm, self.channel = master_fn, llm, channel
         self.log, self.now, self.notifier = log, now, notifier
         self.cm = cost_model
+        self.prices = prices            # btst/ticks.py PriceWatch: websocket ticks + the day high
         self.inbox = queue.Queue()
         self.last_ltp_at = 0.0
+        self.last_store_at = 0.0
+        self.last_order_check = 0.0
+        self.touch_said = None
+        self.managing = False
         self.last_status_log = 0.0
         self.window_said = {}           # day -> "open" / "closed" already logged
         self.status_note = "starting"
@@ -280,9 +285,22 @@ class BtstStrategy:
             return
         jid = job["job_id"]
         ltp = self._watch(job)                  # first, so the day's high and low include this pass
+        tp = job.get("target_price")
+        peak = self.prices.peak() if self.prices is not None else None
+        touched = bool(tp and ((peak and peak >= tp) or (ltp and ltp >= tp)))
+        if touched and self.touch_said != (jid, tp):
+            self.touch_said = (jid, tp)
+            self._log("manage", f"the price reached the target {tp:.2f}: LTP {ltp}, highest traded since the "
+                                f"target went in {peak} - checking the order now", "TRADE")
         to = job.get("target_order")
         st = None
-        if to and to.get("ok"):
+        # Paper decides its fill here, every pass. Live, the exchange fills the
+        # order whatever we do: its state is read every order_poll_sec, and at
+        # once when the price has reached the target.
+        due = (self.broker.mode == "paper" or touched
+               or time.time() - self.last_order_check >= float(self.c("order_poll_sec", 3)))
+        if to and to.get("ok") and due:
+            self.last_order_check = time.time()
             st = self.broker.order_state(to)
             status = (st or {}).get("status", "unreadable")
             if status != job.get("target_last_status"):
@@ -295,8 +313,9 @@ class BtstStrategy:
                 self._close(job, "target", st["avg"] or job["target_price"], None)
                 return
         self._status_line(job, ltp, st)
-        if job.get("soft_target") and ltp and ltp >= job["target_price"]:
-            self._log("exit", f"LTP {ltp} reached the watched target {job['target_price']:.2f} - selling", "TRADE")
+        if job.get("soft_target") and touched:
+            self._log("exit", f"the price reached the watched target {tp:.2f} (LTP {ltp}, highest {peak}) - "
+                              f"selling", "TRADE")
             self._exit_market(job, "target (watched)")
             return
         if now.date().isoformat() <= job["trade_date"]:
@@ -318,23 +337,34 @@ class BtstStrategy:
         pct = 100.0 * (ltp - p["avg_price"]) / p["avg_price"] if ltp else None
         self._log("manage", f"{job['contract']['symbol']} x{p['qty']} avg {p['avg_price']:.2f} | LTP {ltp} "
                             + (f"({pct:+.1f}%, Rs {pnl:+,.0f}) " if pnl is not None else "")
-                            + f"| target {job['target_price']:.2f} ({(st or {}).get('status', 'watched' if job.get('soft_target') else '?')})"
+                            + f"| target {job['target_price']:.2f} ({(st or {}).get('status') or ('watched' if job.get('soft_target') else job.get('target_last_status', '?'))})"
+                            + (f" | price via {self.prices.state()['source']}" if self.prices is not None else "")
                             + (f" | decision {job['decision']['scenario']}" if job.get("decision") else " | decision at the next open"))
 
     def _watch(self, job):
-        """The LTP every ltp_poll_sec, with the day's high and low kept for the metrics."""
-        if time.time() - self.last_ltp_at < float(self.c("ltp_poll_sec", 10)):
-            return job.get("last_ltp")
-        self.last_ltp_at = time.time()
-        ltp = self.broker.ltp(job["contract"])
-        if ltp:
-            upd = {"last_ltp": ltp, "last_ltp_at": self._ts(),
-                   "ltp_high": max(float(job.get("ltp_high") or ltp), ltp),
-                   "ltp_low": min(float(job.get("ltp_low") or ltp), ltp)}
-            self.store.update_job(job["job_id"], set_=upd)
-            job.update(upd)
+        """The price this pass - from the websocket, or the LTP call while it is
+        quiet (btst/ticks.py) - with the high and low kept for the metrics."""
+        if self.prices is not None:
+            ltp = self.prices.price(job["contract"])
+            peak = self.prices.peak()
         else:
-            self._log("manage", f"no LTP for {job['contract']['symbol']} this pass", "WARN")
+            if time.time() - self.last_ltp_at < float(self.c("ltp_poll_sec", 1)):
+                return job.get("last_ltp")
+            self.last_ltp_at = time.time()
+            ltp, peak = self.broker.ltp(job["contract"]), None
+        if not ltp:
+            if time.time() - self.last_store_at >= 30:
+                self.last_store_at = time.time()
+                self._log("manage", f"no price for {job['contract']['symbol']} this pass", "WARN")
+            return job.get("last_ltp")
+        hi = max(float(job.get("ltp_high") or ltp), ltp, peak or 0.0)
+        lo = min(float(job.get("ltp_low") or ltp), ltp)
+        upd = {"last_ltp": ltp, "last_ltp_at": self._ts(), "ltp_high": hi, "ltp_low": lo}
+        moved = hi != job.get("ltp_high") or lo != job.get("ltp_low")
+        job.update(upd)
+        if moved or time.time() - self.last_store_at >= float(self.c("ltp_store_sec", 5)):
+            self.last_store_at = time.time()        # MongoDB: on a new high or low, else every few seconds
+            self.store.update_job(job["job_id"], set_=upd)
         return ltp
 
     def _decide(self, job, ltp):
@@ -497,6 +527,8 @@ class BtstStrategy:
         elif j:
             self._say(f"resuming {j['job_id']} ({j['contract']['symbol']} x{j['position']['qty']} "
                       f"@ {j['position']['avg_price']}, target {j.get('target_price')})", area="resume")
+            if hasattr(self.broker, "adopt"):
+                self.broker.adopt(j)            # paper: the position and target lived in the old process
         else:
             self._log("resume", "no open trade to resume")
 
@@ -526,13 +558,22 @@ class BtstStrategy:
                 self._log(name, f"error: {e!r}\n{traceback.format_exc()}", "ERROR")
         try:
             job = self.store.open_job()
+            self.managing = bool(job and job["status"] == "open"
+                                 and market_phase(self.now(), start="09:15", end="15:30") == "open")
             if job and job["status"] == "open":
                 self._manage(job)
                 self.status_note = f"managing {job['job_id']}"
             else:
                 self.status_note = "waiting for a signal (15:15 - 15:30)"
+            if not self.managing and self.prices is not None:
+                self.prices.stop()              # no trade, or the market is shut: no socket
         except Exception as e:
             self._log("manage", f"error: {e!r}\n{traceback.format_exc()}", "ERROR")
+
+    def wait_sec(self):
+        """Seconds to the next pass: manage_poll_sec (1) while a trade is open in
+        market hours, poll_sec (3) otherwise."""
+        return float(self.c("manage_poll_sec", 1) if self.managing else self.c("poll_sec", 3))
 
     def status(self):
         j = self.store.open_job()
@@ -540,4 +581,5 @@ class BtstStrategy:
                 "channel": self.channel, "note": self.status_note,
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
                 "open_job": j, "jobs": self.store.recent_jobs(20),
-                "messages": self.store.recent_messages(20)}
+                "messages": self.store.recent_messages(20),
+                "price": self.prices.state() if self.prices is not None else None}

@@ -13,6 +13,10 @@ scripted price, a fixed clock. No network, no orders.
   6. The live order path on a fake SmartAPI
   7. The log: every line "LEVEL area | text", the reasons a trade was not
      taken, the /logs page and its filters
+  8. Catching the target: websocket ticks, the LTP call while they are quiet,
+     the exchange's day high for a touch between two looks, 1 s passes, live
+     order checks at once on a touch, DAY targets dying at the close, and a
+     restart in paper picking the trade up again
 """
 import copy
 import os
@@ -160,7 +164,7 @@ def at(y, mo, d, h, mi, s=0):
 
 def desk(model=None, cfg=None):
     store = MongoStore(client=_Client(), db_name="t")
-    broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None)
+    broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None, today=lambda: CLOCK["t"].date())
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0}
@@ -523,6 +527,165 @@ check("/logs is the log page, /api/logs its filtered lines with counts",
       and api_l["counts"].get("ERROR") == 1, str(api_l)[:200])
 check("the desk's state counts today's warnings and errors for the button",
       isinstance(st_json.get("log_problems_today"), int), str(st_json.get("log_problems_today")))
+
+section("8. Catching the target")
+from btst.ticks import PriceWatch, _Feed                         # noqa: E402
+
+QUOTE = {"ltp": 150.0, "high": 160.0}
+calls = {"rest": 0}
+
+
+def rest_quote(c):
+    calls["rest"] += 1
+    return dict(QUOTE) if QUOTE.get("ltp") else None
+
+
+def watch(**k):
+    return PriceWatch(rest_quote=rest_quote, log=lambda *_: None, ltp_poll_sec=0, use_ws=False,
+                      today=lambda: CLOCK["t"].date(), **k)
+
+
+at(2026, 10, 23, 10, 0)
+w = watch()
+pb = PaperBtstBroker(w.price, log=lambda *_: None, watch=w, today=lambda: CLOCK["t"].date())
+QUOTE.update(ltp=150.0, high=160.0)
+t8 = pb.place_limit_sell(C, 65, 210.0)
+QUOTE.update(ltp=180.0, high=160.0)
+check("a target 210 rests while trades are below it", pb.order_state(t8)["status"] == "open" and w.peak() == 180.0)
+QUOTE.update(ltp=185.0, high=212.0)          # touched 212 between two looks, back to 185 now
+s8 = pb.order_state(t8)
+check("a touch BETWEEN two looks is caught by the exchange's day high: filled at the target 210",
+      s8["status"] == "complete" and s8["avg"] == 210.0 and w.peak() == 212.0, str(s8))
+
+w2 = watch()
+pb2 = PaperBtstBroker(w2.price, log=lambda *_: None, watch=w2, today=lambda: CLOCK["t"].date())
+QUOTE.update(ltp=230.0, high=240.0)
+t9 = pb2.place_limit_sell(C, 65, 210.0)
+check("a target placed below the market fills at once, at the market (230), like a real limit sell",
+      t9["status"] == "complete" and pb2.order_state(t9)["avg"] == 230.0)
+QUOTE.update(ltp=150.0, high=245.0)          # a day high from before the mark is not a touch
+w3 = watch()
+w3.price(C)
+w3.mark()
+QUOTE.update(ltp=151.0, high=245.0)
+w3.price(C)
+check("a day high older than the target is not counted as a touch", w3.peak() == 151.0, str(w3.peak()))
+at(2026, 10, 24, 9, 20)
+check("...and a mark is for its own day (the day high resets overnight)", w3.peak() is None)
+
+at(2026, 10, 23, 10, 0)
+w4 = PriceWatch(rest_quote=rest_quote, log=lambda *_: None, ltp_poll_sec=0, use_ws=False,
+                today=lambda: CLOCK["t"].date())
+w4.follow(C)
+feed = _Feed(w4, SimpleNamespace(), 4, log=lambda *_: None)
+feed.register(C["token"])
+calls["rest"] = 0
+feed._on_data(None, {"token": str(C["token"]), "last_traded_price": 19875, "high_price_of_the_day": 20500,
+                     "best_5_buy_data": [], "best_5_sell_data": []})
+p4 = w4.price(C)
+check("a websocket tick (paise) is the price, and no LTP call is made while ticks are fresh",
+      p4 == 198.75 and w4.state()["source"] == "websocket" and calls["rest"] == 0, str(w4.state()))
+w4.last["at"] -= 10                          # the socket went quiet
+QUOTE.update(ltp=199.0, high=205.0)
+check("...quiet for over ws_fresh_sec: the LTP call stands in", w4.price(C) == 199.0 and calls["rest"] == 1)
+
+
+def desk8():
+    store = MongoStore(client=_Client(), db_name="t8")
+    pw = watch()
+    br = PaperBtstBroker(pw.price, log=lambda *_: None, watch=pw, today=lambda: CLOCK["t"].date())
+    conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
+            "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "manage_poll_sec": 1, "poll_sec": 3}
+    lg = []
+    s_ = BtstStrategy(conf, store, br, lambda: MASTER, Model(GOOD), "btst_karo", log=lg.append,
+                      now=lambda: CLOCK["t"], notifier=SimpleNamespace(send=lambda *_: None),
+                      cost_model=CostModel.load(), prices=pw)
+    return s_, store, br, pw, lg
+
+
+at(2026, 10, 22, 15, 16)
+QUOTE.update(ltp=106.0, high=110.0)
+s8_, st8, br8, pw8, lg8 = desk8()
+s8_.on_message(msg(3, SAMPLE, 15, 16))
+s8_.step()
+j8 = st8.open_job()
+check("after the BUY the desk passes every 1 s (manage_poll_sec), not 3", j8 and s8_.wait_sec() == 1.0,
+      str(s8_.wait_sec()))
+at(2026, 10, 22, 15, 20)
+QUOTE.update(ltp=190.0, high=212.0)          # the same afternoon: 212 traded between passes
+s8_.step()
+j8 = st8.get_job(j8["job_id"])
+check("the same day, a touch of the target between passes: CLOSED as a target hit at 210",
+      j8["status"] == "closed" and j8["result"]["exit_reason"] == "target" and j8["result"]["exit_price"] == 210.0
+      and j8["result"]["max_ltp"] >= 212.0, str(j8.get("result", {}).get("exit_reason")))
+check("...said in the log", any("reached the target" in x for x in lg8))
+s8_.step()
+check("no trade open: back to 3 s passes, websocket stopped", s8_.wait_sec() == 3.0)
+
+at(2026, 10, 22, 15, 16)
+QUOTE.update(ltp=106.0, high=110.0)
+s9, st9, br9, pw9, lg9 = desk8()
+s9.on_message(msg(3, SAMPLE, 15, 16))
+s9.step()
+j9 = st9.open_job()
+at(2026, 10, 23, 9, 15, 10)                  # next morning, before decide_at
+QUOTE.update(ltp=120.0, high=125.0)
+s9.step()
+check("yesterday's DAY target died at the close (as at the exchange); nothing filled",
+      st9.get_job(j9["job_id"])["target_last_status"] == "cancelled" and st9.open_job())
+at(2026, 10, 23, 9, 16)
+s9.step()                                    # the decision: hold, the target 210 placed again for today
+# a restart: a new paper broker and price watch, the same MongoDB
+pw9c = watch()
+s9b = BtstStrategy(s9.cfg, st9, PaperBtstBroker(pw9c.price, log=lambda *_: None, watch=pw9c,
+                                                today=lambda: CLOCK["t"].date()),
+                   lambda: MASTER, None, "btst_karo", log=lg9.append, now=lambda: CLOCK["t"], prices=pw9c)
+s9b.resume()
+check("after a restart in paper the open trade is adopted: position and today's target back",
+      s9b.broker.net_qty(C) == 65 and st9.get_job(j9["job_id"])["target_order"]["order_id"] in s9b.broker.orders)
+at(2026, 10, 23, 10, 0)
+QUOTE.update(ltp=150.0, high=160.0)
+s9b.step()                                   # its first look: the day high so far is the baseline
+at(2026, 10, 23, 11, 0)
+QUOTE.update(ltp=200.0, high=211.0)
+s9b.step()
+j9 = st9.get_job(j9["job_id"])
+check("...and its target is still caught after the restart (CLOSED target @ 210, not 'nothing left')",
+      j9["status"] == "closed" and j9["result"]["exit_reason"] == "target" and j9["result"]["exit_price"] == 210.0,
+      str(j9.get("result", {}).get("exit_reason")))
+
+
+class CountingLive(PaperBtstBroker):
+    mode = "live"
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.checks = 0
+
+    def order_state(self, order):
+        self.checks += 1
+        return super().order_state(order)
+
+
+at(2026, 10, 22, 15, 16)
+QUOTE.update(ltp=106.0, high=110.0)
+sL, stL, _, pwL, lgL = desk8()
+sL.broker = CountingLive(pwL.price, log=lambda *_: None, watch=pwL, today=lambda: CLOCK["t"].date())
+sL.cfg["order_poll_sec"] = 60
+sL.on_message(msg(3, SAMPLE, 15, 16))
+sL.step()
+for k in range(4):
+    at(2026, 10, 22, 15, 17, k)
+    QUOTE.update(ltp=120.0 + k, high=125.0)
+    sL.step()
+n_quiet = sL.broker.checks
+at(2026, 10, 22, 15, 18)
+QUOTE.update(ltp=150.0, high=211.0)
+sL.step()
+check("live: the order's state is not read every pass (order_poll_sec) - but at once when the price touches",
+      n_quiet == 1 and sL.broker.checks == 2 and stL.recent_jobs()[0]["status"] == "closed",
+      f"{n_quiet} quiet, {sL.broker.checks} total")
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

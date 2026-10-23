@@ -41,14 +41,24 @@ class AngelBtstBroker:
         self.api, self.protection_pct, self.product = api, float(protection_pct), product
         self.confirm_sec, self.log, self.sleep, self.clock = float(confirm_sec), log, sleep, clock
 
-    def ltp(self, c):
+    def quote(self, c):
+        """{ltp, high}: the last price and the exchange's day high, or None."""
         try:
             r = self.api.ltpData(c["exchange"], c["symbol"], c["token"]) or {}
-            v = _num((r.get("data") or {}).get("ltp"))
-            return v if v > 0 else None
+            d = (r.get("data") or {}) if isinstance(r, dict) else {}
+            v = _num(d.get("ltp"))
+            if v <= 0:
+                self.log(fmt("WARN", "broker", f"LTP {c['symbol']}: no price in the answer "
+                                               f"({(r or {}).get('message') if isinstance(r, dict) else r})"))
+                return None
+            return {"ltp": v, "high": _num(d.get("high"))}
         except Exception as e:
             self.log(fmt("WARN", "broker", f"LTP {c['symbol']} failed: {e!r}"))
             return None
+
+    def ltp(self, c):
+        q = self.quote(c)
+        return q["ltp"] if q else None
 
     def funds(self):
         from run_bot import live_funds
@@ -190,12 +200,21 @@ class AngelBtstBroker:
 
 
 class PaperBtstBroker:
-    """Fills at the live LTP; a resting target fills when the LTP reaches it."""
+    """Fills at the live price. A resting target fills at its price when the
+    highest price traded since it was placed reaches it (btst/ticks.py: every
+    websocket tick and the exchange's day high, so a touch between two looks
+    still counts) - or at once, at the market, if placed below the market.
+    Like the exchange, a DAY target dies at the day's close. Orders and the
+    position live in this process: after a restart adopt() rebuilds the open
+    job's from MongoDB."""
     mode = "paper"
 
-    def __init__(self, ltp_fn, funds=1e9, log=print):
-        self.ltp_fn, self._funds, self.log = ltp_fn, funds, log
+    def __init__(self, ltp_fn, funds=1e9, log=print, watch=None, today=None):
+        from arb.instruments import now_ist
+        self.ltp_fn, self._funds, self.log, self.watch = ltp_fn, funds, log, watch
+        self.today = today or (lambda: now_ist().date())
         self.orders, self.pos, self.n = {}, {}, 0
+        self.run = format(int(time.time()) % 1_000_000, "x")    # ids unique across restarts
 
     def ltp(self, c):
         v = self.ltp_fn(c)
@@ -207,11 +226,13 @@ class PaperBtstBroker:
     def net_qty(self, c):
         return self.pos.get(c["symbol"], 0)
 
-    def _new(self, c, side, qty, price, duration):
-        self.n += 1
-        oid = f"PAPER-{self.n}"
+    def _new(self, c, side, qty, price, duration, oid=None, day=None):
+        if oid is None:
+            self.n += 1
+            oid = f"PAPER-{self.run}-{self.n}"
         self.orders[oid] = {"symbol": c["symbol"], "contract": c, "side": side, "qty": int(qty),
-                            "price": price, "status": "open", "filled": 0, "avg": 0.0}
+                            "price": price, "status": "open", "filled": 0, "avg": 0.0, "duration": duration,
+                            "day": day or self.today()}
         return oid
 
     def _fill(self, oid, px):
@@ -239,21 +260,59 @@ class PaperBtstBroker:
 
     def place_limit_sell(self, c, qty, price):
         oid = self._new(c, "SELL", qty, price, "DAY")
+        out = {"side": "SELL", "order_id": oid, "uid": oid, "qty": int(qty), "price_sent": price,
+               "duration": "DAY", "ok": True, "status": "open", "error": None}
+        ltp = self.ltp(c)
+        if ltp and ltp >= price:                    # below the market: a limit sell fills at once, at the market
+            self._fill(oid, ltp)
+            self.log(fmt("TRADE", "broker", f"paper {oid} SELL {c['symbol']} x{qty} LIMIT {price:.2f}: the price "
+                                            f"is already {ltp} - filled at once @ {ltp}"))
+            return dict(out, status="complete")
+        if self.watch is not None:
+            self.watch.mark()
         self.log(fmt("TRADE", "broker", f"paper {oid} SELL {c['symbol']} x{qty} LIMIT {price:.2f} resting "
-                                        f"(fills when the LTP reaches it)"))
-        return {"side": "SELL", "order_id": oid, "uid": oid, "qty": int(qty), "price_sent": price,
-                "duration": "DAY", "ok": True, "status": "open", "error": None}
+                                        f"(LTP {ltp}; fills when a trade reaches {price:.2f})"))
+        return out
+
+    def adopt(self, job):
+        """After a restart: the open job's position and its resting target, from MongoDB."""
+        c, p = job["contract"], job["position"]
+        self.pos[c["symbol"]] = int(p["qty"])
+        to = job.get("target_order") or {}
+        note = "no resting target"
+        if to.get("ok") and to.get("order_id") and to.get("status") not in FINAL:
+            day = str(to.get("at") or job.get("trade_date") or "")[:10]
+            from datetime import date
+            try:
+                d = date.fromisoformat(day)
+            except ValueError:
+                d = self.today()
+            self._new(c, "SELL", to["qty"], float(job.get("target_price") or to["price_sent"]), "DAY",
+                      oid=to["order_id"], day=d)
+            if self.watch is not None and d == self.today():
+                self.watch.track(c)             # the contract first: a new one would forget the mark
+                self.watch.mark()
+            note = f"target {to['order_id']} @ {job.get('target_price')} placed {d}"
+        self.log(fmt("INFO", "broker", f"paper: adopted {job['job_id']} after the restart - {c['symbol']} "
+                                       f"x{p['qty']}, {note} (a touch while the desk was down is not seen)"))
 
     def order_state(self, order):
-        o = self.orders.get(order.get("order_id"))
+        oid = order.get("order_id")
+        o = self.orders.get(oid)
         if o is None:
             return None
         if o["status"] == "open" and o["side"] == "SELL":
-            ltp = self.ltp(o["contract"])
-            if ltp and ltp >= o["price"]:
-                self._fill(order["order_id"], o["price"])
-                self.log(fmt("TRADE", "broker", f"paper {order['order_id']} target filled @ {o['price']:.2f} "
-                                                f"(LTP {ltp})"))
+            if o["duration"] == "DAY" and o["day"] < self.today():
+                o["status"] = "cancelled"
+                self.log(fmt("INFO", "broker", f"paper {oid} expired at the close of {o['day']} (a DAY order)"))
+            else:
+                ltp = self.ltp(o["contract"])
+                peak = self.watch.peak() if self.watch is not None else None
+                best = max([x for x in (ltp, peak) if x] or [0.0])
+                if best >= o["price"]:
+                    self._fill(oid, o["price"])
+                    self.log(fmt("TRADE", "broker", f"paper {oid} target filled @ {o['price']:.2f} "
+                                                    f"(LTP {ltp}, highest traded since placed {peak})"))
         return {"status": o["status"], "final": o["status"] in FINAL, "filled": o["filled"],
                 "avg": o["avg"], "text": ""}
 
