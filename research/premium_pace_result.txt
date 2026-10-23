@@ -1,0 +1,46 @@
+recorded option books, minutes with a usable ATM call+put per index-day:
+  2026-09-17 BANKNIFTY   183 min  12:28-15:30
+  2026-09-17 NIFTY       183 min  12:28-15:30
+  2026-09-17 SENSEX      183 min  12:28-15:30
+  2026-09-25 BANKNIFTY     6 min  15:12-15:30
+  2026-09-25 NIFTY         6 min  15:12-15:30
+  2026-09-25 SENSEX        6 min  15:12-15:30
+  2026-09-28 BANKNIFTY   261 min  10:45-15:13
+  2026-09-28 NIFTY       261 min  10:45-15:13
+  2026-09-28 SENSEX      261 min  10:45-15:13
+  2026-09-29 BANKNIFTY   234 min  10:05-15:13
+  2026-09-29 NIFTY       234 min  10:05-15:13
+  2026-09-29 SENSEX      234 min  10:05-15:13
+  2026-10-05 BANKNIFTY   276 min  09:20-14:16
+  2026-10-05 FINNIFTY    115 min  09:20-11:14
+  2026-10-05 MIDCPNIFTY  115 min  09:20-11:14
+  2026-10-05 NIFTY       276 min  09:20-14:16
+  2026-10-05 SENSEX      276 min  09:20-14:16
+
+minutes with a 20-minute history and a baseline: 2809
+
+next-minutes index move after each reading (x = the day's median 1-minute |move|):
+  all minutes                                  n=2622  next 5 min |move|  2.77x  next 10 min  3.79x  (median 2.96x)
+  index pace (20 min) 0-1.0                    n= 357  next 5 min |move|  3.16x  next 10 min  4.12x  (median 3.00x)
+  index pace (20 min) 1.0-1.3                  n=1088  next 5 min |move|  2.67x  next 10 min  3.55x  (median 2.85x)
+  index pace (20 min) 1.3-9                    n= 694  next 5 min |move|  2.44x  next 10 min  3.32x  (median 2.54x)
+  fast index pace (3 min) 0-1.0                n=1062  next 5 min |move|  2.68x  next 10 min  3.89x  (median 3.05x)
+  fast index pace (3 min) 1.0-2.0              n=1179  next 5 min |move|  2.69x  next 10 min  3.63x  (median 2.81x)
+  fast index pace (3 min) 2.0-3.0              n= 249  next 5 min |move|  3.28x  next 10 min  4.04x  (median 2.48x)
+  fast index pace (3 min) 3.0-99               n=  51  next 5 min |move|  3.76x  next 10 min  4.35x  (median 3.46x)
+  premium pace (3 min CE+PE) 0-1.0             n=1054  next 5 min |move|  2.68x  next 10 min  3.90x  (median 3.07x)
+  premium pace (3 min CE+PE) 1.0-2.0           n=1194  next 5 min |move|  2.70x  next 10 min  3.61x  (median 2.70x)
+  premium pace (3 min CE+PE) 2.0-3.0           n= 249  next 5 min |move|  3.29x  next 10 min  4.10x  (median 2.64x)
+  premium pace (3 min CE+PE) 3.0-99            n=  44  next 5 min |move|  3.78x  next 10 min  4.25x  (median 3.46x)
+  premium >= 2 while index pace < 1.3          n=  90  next 5 min |move|  3.73x  next 10 min  3.29x  (median 2.25x)
+  premium >= 2 while fast index < 2            n=  11  next 5 min |move|  2.35x  next 10 min  3.41x  (median 2.94x)
+  fast index >= 2 while premium < 2            n=  18  next 5 min |move|  2.58x  next 10 min  3.28x  (median 2.59x)
+  both legs up (vol3 > 0, IV spike)            n= 169  next 5 min |move|  3.28x  next 10 min  4.39x  (median 3.12x)
+  both legs down (vol3 < 0)                    n= 124  next 5 min |move|  3.49x  next 10 min  3.76x  (median 2.50x)
+
+correlations (n=2045): fast-index~premium +0.99  | with next-10-min move: fast index -0.03  premium -0.03  index pace(20) -0.07
+  next-10-min |move| ~ fast index + premium: R2 0.001 vs fast index alone 0.001  (premium coef -0.743)
+
+lead/lag, per minute: corr(premium |dCE|+|dPE| at t, index |dS| at t+k)
+  k=-3: +0.26  k=-2: +0.27  k=-1: +0.33  k=+0: +1.00  k=+1: +0.32  k=+2: +0.26  k=+3: +0.26
+  (k>0 = premium leads the index; k=0 same minute; k<0 = index leads the premium)

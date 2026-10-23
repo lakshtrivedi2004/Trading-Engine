@@ -1,0 +1,344 @@
+module: M05
+title: Options Theory for Professional Trading
+summary: Call/put basics, jargon, buyer/seller payoffs, moneyness, Greeks (delta, gamma, theta, vega), volatility (historical/forecast/implied/realised, India VIX), normal distribution and range estimation, SD-based option writing, volatility-based stops, volatility smile & cone, Greek interactions, Black-Scholes calculator, put-call parity, strike selection by time, and case studies (event IV crush).
+nodes:
+  - id: options
+    type: Instrument
+    name: Options (overview)
+    aliases: [Option contract]
+    chapter: [1, 2]
+    summary: Right but not obligation for the buyer (who pays premium) to buy (call) or sell (put) the underlying at a strike on/before expiry; seller/writer has the obligation. ~80% of Indian derivatives volume (source era).
+    facts:
+      - Indian history - index futures Jun 2000, index options Jun 2001, stock options Jul 2001, stock futures Nov 2001; real liquidity from ~2006.
+      - Options are cash settled in India (stock options later moved to physical settlement - verify).
+      - Option seller has natural statistical edge - 2 of 3 scenarios (flat, adverse) favour seller.
+      - Most traders trade premium changes rather than hold to expiry; premiums can swing 100-350% intraday.
+      - Option sellers tend to hold to expiry to earn full premium.
+    links: [{to: call_option, rel: PART_OF}, {to: put_option, rel: PART_OF}, {to: option_greeks, rel: RELATED_TO}, {to: derivatives, rel: IS_A}]
+
+  - id: option_jargon
+    type: Concept
+    name: Option Jargon (strike, underlying, premium, expiry, exercise, settlement, option chain)
+    aliases: [Strike price, Premium, Option chain, CE, PE]
+    chapter: 2
+    summary: Strike = anchor price; underlying = spot; premium = price paid by buyer to writer (never fixed, driven by Greeks); expiry = last valid date (3 monthly series per source); exercise = claiming the right (European - only on expiry); option chain lists all strikes with LTP, bid/ask, OI, volume, IV.
+    facts: [CE = European call, PE = European put. All Indian options are European (American stock options were discontinued).]
+    links: [{to: options, rel: PART_OF}, {to: european_vs_american, rel: RELATED_TO}]
+
+  - id: european_vs_american
+    type: Concept
+    name: European vs American Options
+    chapter: 4
+    summary: European options exercise only at expiry based on expiry-day spot; American anytime before expiry (hence more expensive). All Indian options are European.
+    links: [{to: options, rel: PART_OF}]
+
+  - id: call_option
+    type: Instrument
+    name: Call Option (long and short)
+    aliases: [Long call, Short call, CE]
+    chapter: [1, 3, 4]
+    summary: Buyer bullish with limited risk (premium) and unlimited upside; seller expects price not to rise above strike, earns limited premium with unlimited risk and must post futures-like margin.
+    formula:
+      intrinsic_value_expiry: "max(0, spot - strike)"
+      long_call_pnl: "max(0, spot - strike) - premium_paid"
+      short_call_pnl: "premium_received - max(0, spot - strike)"
+      breakeven: "strike + premium"
+    example: "Bajaj Auto 2050 CE at 6.35 - breakeven 2056.35; at 2072 buyer +15.65, seller -15.65."
+    links: [{to: put_option, rel: OPPOSITE_OF}, {to: options_payoff_summary, rel: PART_OF}, {to: margin, rel: USES}]
+
+  - id: put_option
+    type: Instrument
+    name: Put Option (long and short)
+    aliases: [Long put, Short put, PE]
+    chapter: [5, 6]
+    summary: Buyer bearish - right to sell at strike; seller bullish/neutral, earns limited premium with large risk.
+    formula:
+      intrinsic_value_expiry: "max(0, strike - spot)"
+      long_put_pnl: "max(0, strike - spot) - premium_paid"
+      short_put_pnl: "premium_received - max(0, strike - spot)"
+      breakeven: "strike - premium"
+    example: "Bank Nifty 18400 PE at 315 - breakeven 18085; at 16510 buyer +1575."
+    facts: [Whether to buy a call or sell a put when bullish depends on premium attractiveness (pricing/IV).]
+    links: [{to: call_option, rel: OPPOSITE_OF}, {to: options_payoff_summary, rel: PART_OF}]
+
+  - id: options_payoff_summary
+    type: Rule
+    name: Four Option Positions Summary
+    chapter: 7
+    summary: Bullish - buy call or sell put; bearish - buy put or sell call. Buyers - limited risk, unlimited reward; sellers - limited reward, unlimited risk ('eat like a chicken, shit like an elephant' - Taleb/Das).
+    facts:
+      - Buying to close a short (or selling to close a long) is a square-off, not a new long/short.
+      - P&L formulas apply when held to expiry; premiums move continuously before expiry.
+    links: [{to: call_option, rel: USES}, {to: put_option, rel: USES}]
+
+  - id: moneyness
+    type: Concept
+    name: Moneyness (ITM / ATM / OTM)
+    aliases: [ITM, ATM, OTM, In the money, Out of the money, At the money, Deep ITM, Deep OTM]
+    chapter: 8
+    summary: ITM has positive intrinsic value; ATM strike is nearest to spot; OTM has zero intrinsic value. Calls - strikes below ATM are ITM; puts - strikes above ATM are ITM. ITM premiums > OTM premiums.
+    conditions:
+      call_itm: "strike < spot"
+      call_otm: "strike > spot"
+      put_itm: "strike > spot"
+      put_otm: "strike < spot"
+      atm: "argmin |strike - spot|"
+    facts: [Intrinsic value can never be negative (preserves limited-loss property).]
+    links: [{to: delta, rel: RELATED_TO}, {to: option_premium_decomposition, rel: RELATED_TO}]
+
+  - id: option_greeks
+    type: Concept
+    name: Option Greeks
+    chapter: [9, 19]
+    summary: Sensitivities of premium - delta (spot), gamma (change in delta), theta (time), vega (volatility); computed by Black-Scholes; interact with each other.
+    links: [{to: delta, rel: PART_OF}, {to: gamma, rel: PART_OF}, {to: theta, rel: PART_OF}, {to: vega, rel: PART_OF}, {to: black_scholes, rel: COMPUTED_FROM}]
+
+  - id: delta
+    type: Greek
+    name: Delta
+    chapter: [9, 10, 11]
+    summary: Change in premium per 1-point change in underlying; calls 0..1, puts -1..0; ATM ~0.5, ITM -> 1, OTM -> 0. First derivative of premium.
+    formula:
+      premium_change: "delta * underlying_change"
+      position_delta: "sum(qty_lots * delta * sign)"
+    facts:
+      - Delta changes with spot (moneyness changes).
+      - "Delta stages - predevelopment (deep OTM ~0, big % but needs huge move), take-off & acceleration (OTM->ATM, max bang for buck), stabilisation (ITM->deep ITM, delta -> 1)."
+      - Deep ITM option (delta 1) behaves like futures - can substitute with lower capital but watch liquidity.
+      - Deltas are additive across options of same underlying; futures delta = 1; two ATM options ~ one future (but not a true surrogate - other Greeks act).
+      - Short call = negative delta; short put = positive delta.
+      - Delta ~ probability of expiring ITM (0.1 delta -> ~10%).
+      - Delta-neutral positions (net delta 0, e.g. long ATM CE + long ATM PE) are insulated from direction but exposed to vol and time.
+    example: "Nifty 8288, 8250 CE at 133, delta 0.55; Nifty to 8310 -> premium ~145.1."
+    bot_use: Size option positions by net delta exposure; use delta as ITM probability for strike selection; hedge to delta-neutral.
+    links: [{to: gamma, rel: RELATED_TO}, {to: moneyness, rel: USES}, {to: delta_neutral, rel: RELATED_TO}]
+
+  - id: delta_neutral
+    type: Concept
+    name: Delta Neutral Position
+    chapter: 11
+    summary: Combined options position with net delta ~0; unaffected by small directional moves, sensitive to volatility and time.
+    links: [{to: delta, rel: USES}, {to: vega, rel: RELATED_TO}, {to: straddle, rel: RELATED_TO}]
+
+  - id: gamma
+    type: Greek
+    name: Gamma
+    chapter: [12, 13, 20]
+    summary: Rate of change of delta per point of underlying (2nd derivative of premium); always positive for long options. Long options = long gamma; short options = short gamma.
+    formula: {new_delta: "delta + gamma * underlying_change"}
+    facts:
+      - Gamma peaks at ATM; low for deep ITM/OTM.
+      - Near expiry ATM gamma shoots up; ITM/OTM gamma -> 0.
+      - Short gamma makes positions grow against you - a 10-lot short ATM (delta 5) can become delta 8.5 after a 70-pt adverse move.
+      - Avoid shorting ATM/high-gamma options, especially near expiry; never short ATM/ITM hoping they expire worthless; OTM options are better short candidates if held to expiry.
+    example: "8400 CE delta 0.3 gamma 0.0025; +70 pts -> delta 0.475, premium 26 -> 47."
+    bot_use: Risk limits should use gamma-adjusted (scenario) delta, not lot counts.
+    links: [{to: delta, rel: RELATED_TO}, {to: theta, rel: RELATED_TO}]
+
+  - id: theta
+    type: Greek
+    name: Theta (Time Decay)
+    chapter: 14
+    summary: Premium lost per day from passage of time, all else equal; options are depreciating assets. Long options = negative theta; short options = positive theta (friend of sellers).
+    formula: {premium_tomorrow: "premium_today - theta"}
+    facts:
+      - Time decay is slow early in the series and accelerates sharply near expiry.
+      - Selling early collects more time value but decays slowly; selling near expiry collects less but decays fast.
+    example: "Short at 54 with theta 0.75 -> ~51.75 after 3 days."
+    links: [{to: option_premium_decomposition, rel: RELATED_TO}, {to: gamma, rel: RELATED_TO}]
+
+  - id: option_premium_decomposition
+    type: Formula
+    name: Premium = Intrinsic Value + Time Value
+    chapter: 14
+    summary: Premium splits into intrinsic value (exercise value now) and time value (compensation to writer for time risk).
+    formula: {time_value: "premium - intrinsic_value"}
+    example: "Nifty 8531, 8600 CE at 99.4 -> all time value; 8514.5, 8450 CE at 160 -> IV 64.5, TV 95.5."
+    links: [{to: theta, rel: RELATED_TO}, {to: moneyness, rel: USES}]
+
+  - id: volatility
+    type: Concept
+    name: Volatility (standard deviation of returns)
+    chapter: [15, 16, 17]
+    summary: Volatility = risk = standard deviation of (log) returns, expressed as %; higher SD = wider expected range.
+    formula:
+      log_return: "ln(P_t / P_{t-1})"
+      daily_vol: "stdev(log_returns)"
+      annual_vol: "daily_vol * sqrt(252 or 365)"
+      period_vol: "daily_vol * sqrt(days)"
+      daily_from_annual: "annual_vol / sqrt(365)"
+    example: "Wipro daily vol 1.47% -> annual ~28% (NSE 1.34%/25.5%)."
+    links: [{to: standard_deviation, rel: USES}, {to: normal_distribution, rel: RELATED_TO}, {to: implied_volatility, rel: RELATED_TO}, {to: atr, rel: RELATED_TO}]
+
+  - id: standard_deviation
+    type: Formula
+    name: Standard Deviation and Variance
+    chapter: 15
+    summary: Variance = mean of squared deviations from mean; SD = sqrt(variance); measures dispersion/consistency.
+    formula: {variance: "sum((x - mean)^2)/n", sd: "sqrt(variance)"}
+    example: "Billy SD 1.79 vs Mike SD 11.18 - Billy more consistent despite lower mean."
+    links: [{to: volatility, rel: RELATED_TO}]
+
+  - id: normal_distribution
+    type: Concept
+    name: Normal Distribution and Price Ranges
+    aliases: [Bell curve, Random walk, Black swan]
+    chapter: 17
+    summary: Daily returns are a random walk but approximately normally distributed; ~68% within 1 SD, 95% within 2 SD, 99.7% within 3 SD; outside 3 SD = black swan.
+    formula:
+      period_mean: "daily_mean * days"
+      period_sd: "daily_sd * sqrt(days)"
+      upper: "spot * exp(period_mean + k*period_sd)"
+      lower: "spot * exp(period_mean - k*period_sd)"
+    example: "Nifty 8337, daily mean 0.04%, SD 1.046% -> 1-yr 1SD range 7777-10841; 30-day 1SD 7963-8930, 2SD 7520-9457."
+    caveats: [Real returns have fat tails - black swans happen more often than normal implies.]
+    bot_use: Expected-move bands for strike selection, stop placement and position risk.
+    links: [{to: volatility, rel: USES}, {to: sd_option_writing, rel: RELATED_TO}]
+
+  - id: sd_option_writing
+    type: Strategy
+    name: SD-Based OTM Option Writing (author's method)
+    chapter: 18
+    summary: Compute 1-SD (or 2-SD) expected range to expiry and sell options outside it; author sells only calls, ~1 SD away, on the Friday before expiry week.
+    conditions:
+      range: "spot*(1 +/- (daily_mean*days +/- daily_sd*sqrt(days)))"
+      sell_calls: "strikes above upper 1SD bound"
+      sell_puts: "strikes below lower bound (author avoids puts - panic spreads faster than greed)"
+      timing: "last Friday before expiry week (~4-7 days to expiry); never > 15 days to expiry; use 2SD if writing earlier"
+      avoid: "events - monetary policy, results, policy decisions"
+      exit: "when written option turns ATM, or sentiment turns"
+      instruments: "Nifty, Bank Nifty, SBI, Infosys, Reliance, Tata Steel, Tata Motors, TCS (liquid only)"
+    example: "Nifty 8462, 16 days, daily SD 0.89% -> range 8214-8818; sell 8850/8900 CE for 7.45/4.85 -> ~1.55% on ~12k margin."
+    params: {max_capital_per_strategy_pct_of_trading_bucket: 35}
+    caveats: [Small steady gains, rare catastrophic losses; keep costs minimal; paper-trade several expiries first.]
+    bot_use: Weekly premium-selling bot with SD strike selection, event calendar filter and ATM-touch exit.
+    links: [{to: normal_distribution, rel: USES}, {to: theta, rel: USES}, {to: gamma, rel: RELATED_TO}, {to: capital_allocation_author, rel: RELATED_TO}]
+
+  - id: capital_allocation_author
+    type: Rule
+    name: Author's Capital Allocation
+    chapter: 18
+    summary: 100% equity-oriented - 35% equity mutual funds via SIP (4 funds), 40% direct portfolio (~12 stocks, 5+ yrs), 25% short-term trading; max 35% of trading bucket per strategy (~9% of total capital).
+    links: [{to: asset_allocation, rel: RELATED_TO}, {to: position_sizing, rel: RELATED_TO}]
+
+  - id: volatility_stop_loss
+    type: Rule
+    name: Volatility-Based Stop Loss
+    chapter: 18
+    summary: Place stop outside expected noise - entry minus (daily vol x sqrt(holding days)) - instead of a fixed %; re-check RRR with the new stop.
+    formula: {stop_long: "entry * (1 - daily_vol * sqrt(holding_days))"}
+    example: "Airtel long 395, daily vol 1.8%, 5 days -> 4.01% -> stop below 379 (use 375); RRR 32/20 = 1.6 still OK."
+    bot_use: Default stop model for swing strategies.
+    links: [{to: volatility, rel: USES}, {to: stop_loss, rel: VARIANT_OF}, {to: reward_risk_ratio, rel: USES}, {to: atr, rel: RELATED_TO}]
+
+  - id: implied_volatility
+    type: Concept
+    name: Volatility Types - Historical, Forecast, Implied, Realised; India VIX
+    aliases: [IV, India VIX, VIX, Historical volatility, Realized volatility, GARCH]
+    chapter: 19
+    summary: Historical (from past prices), forecast (models such as GARCH(1,1)), implied (market consensus embedded in premium - most valued), realised (actual over the period). India VIX = NSE's 30-day implied vol of Nifty options ('fear index').
+    facts:
+      - Many professionals trade volatility rather than direction.
+      - VIX rises in steep/panic markets.
+      - Aug 24 2015 - Nifty -4.9%, VIX +64%, far OTM calls rose 50-80% (low delta + vega).
+    bot_use: Regime filter (VIX level/percentile) for buying vs selling options; IV rank for strategy choice.
+    links: [{to: vega, rel: RELATED_TO}, {to: volatility_smile, rel: RELATED_TO}, {to: volatility_cone, rel: RELATED_TO}]
+
+  - id: vega
+    type: Greek
+    name: Vega
+    chapter: 19
+    summary: Change in premium per 1% change in volatility; positive for long calls and puts; impact largest with more time to expiry and for OTM options.
+    facts:
+      - 30 days to expiry, vol 15->30% moved premium ~95%; 15 days ~50%; 5 days ~47%.
+      - Buy options when vol is expected to rise; sell when expected to fall.
+      - High IV raises cost and lowers profit potential of debit spreads (bull call spread 72 cost at 20% IV vs 82 at 35%).
+    links: [{to: implied_volatility, rel: RELATED_TO}, {to: iv_crush, rel: RELATED_TO}]
+
+  - id: volatility_smile
+    type: Concept
+    name: Volatility Smile
+    chapter: 20
+    summary: IV is lowest at ATM and rises for strikes further OTM/ITM, plotting a smile.
+    links: [{to: implied_volatility, rel: RELATED_TO}]
+
+  - id: volatility_cone
+    type: Model
+    name: Volatility Cone
+    chapter: 20
+    summary: Plot min/-2SD/-1SD/mean/+1SD/+2SD/max of historical realised vol for different windows to expiry (10..90 days); overlay current IVs to spot rich (near +2SD -> short) or cheap (near -2SD -> buy) options.
+    conditions:
+      short_vol: "current IV >= +2SD of realised vol for same days-to-expiry"
+      long_vol: "current IV <= -2SD"
+    caveats: [Use only for liquid options.]
+    bot_use: Relative-value IV signal across strikes and underlyings.
+    links: [{to: implied_volatility, rel: USES}]
+
+  - id: greek_interactions
+    type: Concept
+    name: Greek Interactions
+    chapter: 20
+    summary: Gamma vs time - ATM gamma explodes near expiry, ITM/OTM gamma -> 0; delta vs IV - high IV keeps far OTM deltas non-zero (explains rich far-OTM premiums), low IV flattens deltas at extremes.
+    links: [{to: gamma, rel: RELATED_TO}, {to: delta, rel: RELATED_TO}, {to: vega, rel: RELATED_TO}]
+
+  - id: black_scholes
+    type: Model
+    name: Black-Scholes Option Pricing
+    aliases: [BS model, Options calculator]
+    chapter: 21
+    summary: Inputs - spot (or futures for futures-based options), strike, risk-free rate (RBI 91-day T-bill), implied volatility, dividend (if ex-date before expiry), calendar days to expiry; outputs theoretical call/put prices and Greeks.
+    formula:
+      d1: "(ln(S/K) + (r - q + sigma^2/2) T) / (sigma sqrt(T))"
+      d2: "d1 - sigma sqrt(T)"
+      call: "S e^{-qT} N(d1) - K e^{-rT} N(d2)"
+      put: "K e^{-rT} N(-d2) - S e^{-qT} N(-d1)"
+    facts: [Black & Scholes (1973), Merton; Nobel 1997. Small model errors expected.]
+    links: [{to: option_greeks, rel: RELATED_TO}, {to: put_call_parity, rel: RELATED_TO}]
+
+  - id: put_call_parity
+    type: Formula
+    name: Put-Call Parity
+    chapter: 21
+    summary: For European options of same strike/expiry - put + spot = PV(strike) + call; at expiry put + spot = strike + call.
+    formula: {pcp: "P + S = C + K*exp(-r*T)"}
+    example: "Infy 1200 - at 1100 or 1350 both portfolios (PE + share vs CE + cash) worth the same."
+    bot_use: Detect mispricing / synthetic positions (synthetic long = long call + short put).
+    links: [{to: black_scholes, rel: RELATED_TO}, {to: arbitrage, rel: RELATED_TO}]
+
+  - id: strike_selection
+    type: Rule
+    name: Strike Selection by Series Half and Target Time
+    chapter: 22
+    summary: Which strike to buy depends on when in the series you trade and how fast the target is expected.
+    conditions:
+      first_half_target_5d: "far OTM (2 strikes from ATM)"
+      first_half_target_15d: "ATM or slightly OTM (1 strike)"
+      first_half_target_25d: "slightly ITM"
+      first_half_target_expiry: "ITM"
+      second_half_same_day: "far OTM (2-3 strikes)"
+      second_half_target_5d: "slightly OTM (1 strike)"
+      second_half_target_10d_or_expiry: "ATM or slightly ITM"
+      general: "buy options when vol expected to rise; sell when expected to fall; don't buy far OTM just because cheap - needs a fast move"
+    bot_use: Map signal horizon & days-to-expiry to strike offset automatically.
+    links: [{to: theta, rel: USES}, {to: delta, rel: USES}, {to: vega, rel: USES}]
+
+  - id: iv_crush
+    type: Strategy
+    name: Event Volatility Play (short straddle before event, exit before announcement)
+    aliases: [IV crush, Event trade]
+    chapter: [2, 23]
+    summary: IV rises into scheduled events (RBI policy, results); short ATM call + put a few days before and buy back as IV drops - ideally minutes before/at the announcement. Long straddles into events often lose because the losing leg's premium collapses faster than the winning leg gains.
+    conditions:
+      entry: "2-4 days before known event, IV elevated, short ATM CE + ATM PE (liquid)"
+      exit: "time-based stop - just before announcement (or right after, as IV collapses)"
+      stop: "volatility-based, not premium-based"
+    example: "Infosys Q2 - sold 1140 CE 48 + PE 47 (IV 40%/48%) 4 days before; after results CE 55 (IV 28%) + PE 20 (IV 40%) -> +20/lot. RBI trade +10/lot."
+    bot_use: Event-calendar driven vol-selling strategy with time exits.
+    links: [{to: vega, rel: USES}, {to: earnings_announcement, rel: RELATED_TO}, {to: monetary_policy, rel: RELATED_TO}, {to: straddle, rel: RELATED_TO}]
+
+  - id: option_case_lessons
+    type: Rule
+    name: Options Trading Lessons from Case Studies
+    chapter: 23
+    summary: Prefer near-ATM strikes in stock options for liquidity; on 'exhaustion' views prefer selling calls (sideways likely) in 2nd half of series with SD-based strikes; author buys naked calls mainly on flag patterns (prior rally 5-10%, low-volume ~3% pullback); define entry, exit and stop for every trade.
+    links: [{to: flag_pattern, rel: RELATED_TO}, {to: sd_option_writing, rel: RELATED_TO}]

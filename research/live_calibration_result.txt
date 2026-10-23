@@ -1,0 +1,26 @@
+
+| Index | Days | Real spread (median) | Real spread (p90) | Model spread | Verdict |
+|---|---|---|---|---|---|
+| BANKNIFTY | 11 | 2.00 | 3.90 | 0.90 | model too optimistic |
+| FINNIFTY | 1 | 4.35 | 10.37 | nan | model too optimistic |
+| MIDCPNIFTY | 1 | 1.40 | 2.33 | nan | model too optimistic |
+| NIFTY | 11 | 0.30 | 0.60 | 0.25 | model OK |
+| SENSEX | 11 | 0.95 | 1.60 | 1.00 | model OK |
+
+| Index | Horizon | Samples | Mean real dP | Mean model dP | Mean error | Corr | Real/model slope |
+|---|---|---|---|---|---|---|---|
+| BANKNIFTY | 5 min | 20,517 | -0.11 | -0.09 | -0.02 | 0.976 | 0.972 |
+| BANKNIFTY | 15 min | 17,301 | -0.06 | -0.35 | +0.29 | 0.978 | 0.969 |
+| BANKNIFTY | 30 min | 13,690 | -0.19 | -1.44 | +1.25 | 0.973 | 0.968 |
+| FINNIFTY | 5 min | 621 | -0.34 | -1.63 | +1.28 | 0.971 | 0.951 |
+| FINNIFTY | 15 min | 589 | +0.24 | -2.83 | +3.07 | 0.987 | 0.959 |
+| FINNIFTY | 30 min | 492 | -0.50 | -6.77 | +6.27 | 0.994 | 0.958 |
+| MIDCPNIFTY | 5 min | 663 | +0.27 | +0.03 | +0.24 | 0.982 | 0.964 |
+| MIDCPNIFTY | 15 min | 595 | +0.39 | -0.48 | +0.87 | 0.979 | 0.953 |
+| MIDCPNIFTY | 30 min | 492 | +0.93 | -0.74 | +1.67 | 0.975 | 0.946 |
+| NIFTY | 5 min | 25,835 | -0.07 | +0.03 | -0.10 | 0.983 | 0.984 |
+| NIFTY | 15 min | 22,489 | -0.21 | +0.08 | -0.29 | 0.985 | 0.987 |
+| NIFTY | 30 min | 18,749 | -0.50 | -0.01 | -0.49 | 0.982 | 0.988 |
+| SENSEX | 5 min | 18,279 | -0.30 | +0.01 | -0.30 | 0.987 | 0.993 |
+| SENSEX | 15 min | 15,054 | -0.73 | -0.19 | -0.54 | 0.991 | 0.992 |
+| SENSEX | 30 min | 11,457 | -1.57 | -1.17 | -0.40 | 0.989 | 0.995 |

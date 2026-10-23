@@ -1,0 +1,18 @@
+warmup 15 min:
+capital Rs 13,467, risk 6%, indices NIFTY, BANKNIFTY, SENSEX, overrides {'warmup_minutes': 15}
+ob_fvg_retest            n= 82 win= 51% year Rs  +9,373 (IN  +1,861 / OUT  +7,511) avg  +114 avg loss  -625 maxDD  5,272 months+ 54% | raw 2327 priced 885
+    NIFTY                n=  9 win= 44% year Rs  -2,385 (IN  -1,907 / OUT    -477) avg  -265 avg loss  -729 maxDD  2,968 months+ 20%
+    BANKNIFTY            n=  5 win= 80% year Rs  +3,875 (IN     -62 / OUT  +3,937) avg  +775 avg loss   -62 maxDD     62 months+ 67%
+    SENSEX               n= 68 win= 50% year Rs  +7,882 (IN  +3,831 / OUT  +4,051) avg  +116 avg loss  -626 maxDD  5,361 months+ 46%
+warmup 5 min:
+capital Rs 13,467, risk 6%, indices NIFTY, BANKNIFTY, SENSEX, overrides {'warmup_minutes': 5}
+ob_fvg_retest            n= 90 win= 49% year Rs  +6,022 (IN  -2,185 / OUT  +8,207) avg   +67 avg loss  -637 maxDD  7,618 months+ 46% | raw 2347 priced 899
+    NIFTY                n=  9 win= 44% year Rs  -2,385 (IN  -1,907 / OUT    -477) avg  -265 avg loss  -729 maxDD  2,968 months+ 20%
+    BANKNIFTY            n= 10 win= 60% year Rs  +2,443 (IN  -1,494 / OUT  +3,937) avg  +244 avg loss  -615 maxDD  2,399 months+ 60%
+    SENSEX               n= 71 win= 48% year Rs  +5,964 (IN  +1,217 / OUT  +4,747) avg   +84 avg loss  -627 maxDD  6,241 months+ 46%
+warmup 0 min:
+capital Rs 13,467, risk 6%, indices NIFTY, BANKNIFTY, SENSEX, overrides {'warmup_minutes': 0}
+ob_fvg_retest            n= 94 win= 48% year Rs  +4,518 (IN  -3,689 / OUT  +8,207) avg   +48 avg loss  -646 maxDD  9,122 months+ 46% | raw 2368 priced 912
+    NIFTY                n= 10 win= 40% year Rs  -3,151 (IN  -2,674 / OUT    -477) avg  -315 avg loss  -735 maxDD  3,734 months+ 20%
+    BANKNIFTY            n= 11 win= 55% year Rs  +1,766 (IN  -2,172 / OUT  +3,937) avg  +161 avg loss  -627 maxDD  3,073 months+ 60%
+    SENSEX               n= 73 win= 48% year Rs  +5,904 (IN  +1,157 / OUT  +4,747) avg   +81 avg loss  -634 maxDD  7,112 months+ 46%

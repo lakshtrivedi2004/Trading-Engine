@@ -121,7 +121,7 @@ def reversal_warning(candles, side, since_iso, L):
     if rejection(done) == -side:
         return "opposing_rejection"
     st = analyse(done, strength=int(getattr(L, "swing_strength", 2)),
-                 min_bars=min(len(done), int(getattr(L, "min_structure_bars", 25))))
+                 min_bars=min(len(done), int(getattr(L, "min_structure_bars", 25))), limits=L)
     want = "CHOCH_DOWN" if side == BULL else "CHOCH_UP"
     ev = st.last(want)
     if ev is not None and ev[0] >= _after(done, since_iso):
@@ -257,6 +257,11 @@ def initial_target(candles, side, entry, risk, L, strike_step=0.0):
         hi = float(getattr(L, "max_target_r", 4.0)) * risk
         if abs(t - entry) > hi:
             t = entry + side * hi
+        # target_floor_r (owner: "minimum 1:2"): never aim for less than this
+        # multiple of the stop; the momentum read can only push it further.
+        floor = float(getattr(L, "target_floor_r", 0.0) or 0.0) * risk
+        if floor and abs(t - entry) < floor:
+            t = entry + side * floor
         return t
     if mode != "structure":
         return fixed
@@ -292,8 +297,30 @@ def try_extend(pos, candles, index_px, L, strike_step=0.0):
     """At the target: push it to the next level if momentum is still there.
 
     Returns a note, or "" when the trade should simply take the target.
+
+    on_target = "trail" (owner, 16 Oct 2026): the target is a waypoint, not an
+    exit. On reaching it the stop is locked extend_giveback_r behind it, the
+    target is dropped, and the swing trail (update) takes the trade from there.
     """
-    if str(getattr(L, "on_target", "extend")) != "extend":
+    # Only an INDEX target is extended or turned into a trail. review() also
+    # reports "target" for the premium target, which exists only when there is
+    # no index target - and locking behind an index target of 0 put a put's
+    # stop at +g*R index points (exit-path review, 19 Oct 2026).
+    if pos.index_target <= 0:
+        return ""
+    mode = str(getattr(L, "on_target", "extend"))
+    if mode == "trail" and pos.index_risk > 0:
+        old = pos.index_target
+        lock = old - pos.side * float(getattr(L, "extend_giveback_r", 0.75)) * pos.index_risk
+        if pos.side == BULL:
+            pos.index_invalidation = max(pos.index_invalidation, lock)
+        else:
+            pos.index_invalidation = min(pos.index_invalidation, lock) \
+                if pos.index_invalidation > 0 else lock
+        pos.index_target = 0.0
+        pos.index_trailed = True
+        return f"target {old:.1f} reached, now trailing, stop locked {pos.index_invalidation:.1f}"
+    if mode != "extend":
         return ""
     if pos.extensions >= int(getattr(L, "max_target_extensions", 2)):
         return ""
@@ -334,8 +361,13 @@ def update(pos, candles, L, index_px=0.0):
     px = index_px or done[-1][4]
     side = pos.side
     r_index = (px - pos.index_entry) * side / pos.index_risk
-    armed = pos.index_trailed or pos.trailed or \
-        r_index >= float(getattr(L, "trail_trigger_r", 1.0))
+    past_trigger = r_index >= float(getattr(L, "trail_trigger_r", 1.0))
+    # trail_from_first_swing (owner's rule, 1 Oct 2026): follow the FIRST
+    # higher low after entry, then the second, the third..., from the moment
+    # one confirms - not only after +1R. The breakeven floor still waits for
+    # trail_trigger_r: before that the stop is wherever the last swing says.
+    early = bool(getattr(L, "trail_from_first_swing", False))
+    armed = early or pos.index_trailed or pos.trailed or past_trigger
     if not armed:
         return ""
 
@@ -343,7 +375,7 @@ def update(pos, candles, L, index_px=0.0):
     cost_idx = (pos.cost_points / pos.delta) if pos.delta > 0 else 0.0
     breakeven = pos.index_entry + side * (
         cost_idx if getattr(L, "breakeven_covers_costs", True) else 0.0)
-    cands = [breakeven]
+    cands = [breakeven] if (not early or past_trigger or pos.trailed) else []
     warn = ""
     if getattr(L, "tighten_on_reversal", True):
         warn = reversal_warning(candles, side, since, L)

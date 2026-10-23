@@ -10,8 +10,12 @@ Paper mode is the default and is the only mode that runs without an explicit
 the broker and nothing else, so what paper trades is exactly what live trades.
 """
 import argparse
+import html
+import json
+import os
 import signal
 import sys
+import threading
 import time
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
@@ -23,7 +27,7 @@ from arb.candles import CandleStore
 from arb.dashboard import Dashboard, DashboardState
 from arb.engine import ArbEngine, ChainBinding
 from arb.execution import ExecutionEngine, LiveBroker, PaperBroker
-from arb.feed import NSE_CM, NSE_FO, AngelSession, MarketFeed
+from arb.feed import NSE_CM, NSE_FO, AngelSession, MarketFeed, redact
 from arb.instruments import (build_universe, live_futures, load_scrip_master, market_phase,
                              now_ist, years_to_expiry)
 from arb.intraday_engine import IntradayEngine
@@ -31,7 +35,7 @@ from arb.journal import Journal
 from arb.recorder import TickRecorder
 from arb.margin import MarginService
 from arb.risk import RiskManager
-from arb.settlement import SettlementBook
+from arb.settlement import LegMarker, SettlementBook
 from arb.telegram import TelegramNotifier, _inr
 
 
@@ -65,19 +69,27 @@ def cached_spot(name, max_age_days=5.0):
 
 
 def live_funds(api):
-    """(available rupees, where the figure came from) from Angel's RMS limits."""
+    """(available rupees, where the figure came from) from Angel's RMS limits:
+    the smaller of availablecash and net when both are there. net is the
+    margin left after whatever is in use, so it can be the lower one once the
+    day has started; the smaller of the two never overstates what the account
+    can spend (re-read through the live day, owner 11 Oct 2026)."""
     try:
         r = api.rmsLimit() or {}
         d = r.get("data") or {}
     except Exception as e:
         return 0.0, f"rmsLimit failed: {e}"
+    vals = {}
     for key in ("availablecash", "net"):
         try:
             v = float(d.get(key) or 0)
         except (TypeError, ValueError):
             v = 0.0
         if v > 0:
-            return v, key
+            vals[key] = v
+    if vals:
+        key = min(vals, key=vals.get)
+        return vals[key], key
     return 0.0, f"rmsLimit returned {str(r)[:120]}"
 
 
@@ -99,6 +111,44 @@ def open_broker_positions(api):
         if q:
             out.append(f"{p.get('tradingsymbol')} qty {q} ({p.get('producttype')})")
     return out
+
+
+READ_TRIES = 3
+READ_RETRY_SEC = 5.0
+
+
+def refuse_working_orders(broker, log=print, wait=5.0):
+    """Live start guard for orders, as open_broker_positions is for positions.
+    A working order the engine did not place - or cannot see the end of - is
+    refused: it could fill into a position nobody manages. One the engine left
+    behind (tag TE...) on a symbol now flat is cancelled, and must read final
+    within `wait` seconds."""
+    rows = None
+    for k in range(READ_TRIES):
+        rows = broker.open_orders()
+        if rows is not None:
+            break
+        if k + 1 < READ_TRIES:
+            log(f"order book not readable yet; retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
+    if rows is None:
+        raise SystemExit("LIVE START REFUSED: the Angel order book could not be read")
+    for r in rows:
+        if r["tag"].startswith("TE") and broker.net_position(r["symbol"]) == 0:
+            broker.cancel_order(r["oid"], r["variety"] or "NORMAL")
+            end, st = time.time() + wait, None
+            while time.time() < end:
+                st = broker.order_state(r["uid"], r["oid"])
+                if st and st["final"]:
+                    break
+                time.sleep(0.5)
+            if not (st and st["final"]):
+                raise SystemExit(f"LIVE START REFUSED: stale engine order {r['oid']} {r['symbol']} "
+                                 f"would not cancel - cancel it in the Angel app")
+            log(f"stale engine order cancelled: {r['oid']} {r['symbol']} {r['side']} ({r['status']})")
+            continue
+        raise SystemExit(f"LIVE START REFUSED: working order {r['oid']} {r['symbol']} "
+                         f"{r['status']} at Angel - cancel it in the app")
 
 
 def stock_candidates(sm, L):
@@ -238,19 +288,241 @@ def build(cfg, creds, args):
     return session, feed, bindings, spots
 
 
-def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, phase):
-    """Directional intraday option buying, managed with market structure.
+def _wait_until_session(cfg, stopping, log):
+    """Block until the market is open, making no broker/NSE calls while
+    waiting. Returns False if ``stopping`` fired before that happened."""
+    phase = market_phase(start=cfg.session_start, end=cfg.session_end)
+    if phase == "open":
+        return not stopping.is_set()
+    log(f"market {phase}; idle until {cfg.session_start} IST "
+        f"(no API calls while waiting)")
+    while not stopping.is_set():
+        if market_phase(start=cfg.session_start, end=cfg.session_end) == "open":
+            log("market open; resuming")
+            return True
+        stopping.wait(30)
+    return False
+
+
+def run_intraday_forever(cfg, cm, creds, args, mode):
+    """Run the intraday strategy day after day in one long-lived process.
+
+    Each trading day is a fresh Angel One login and a fresh universe
+    (build()), run until close; then the process goes idle - no broker or
+    NSE calls at all - until the next session_start, and builds again. The
+    dashboard HTTP server is created once and stays up the whole time,
+    rendering whichever day's state is current - including the frozen final
+    snapshot of the last completed day while idle.
+
+    ``--duration`` (a bounded test run) opts out of the loop entirely and
+    keeps the old one-day-then-exit behaviour, since that flag exists for
+    manual smoke tests, not production.
+    """
+    stopping = threading.Event()
+    dash_holder = {"dash": None, "dstate": None}
+    current = {"engine": None}
+
+    notifier = None
+    if not args.no_telegram:
+        notifier = TelegramNotifier(creds.telegram_bot_token,
+                                    creds.telegram_chat_id).start()
+
+    # Built once, before the first session even logs in, so the dashboard is
+    # reachable the instant the process starts - including a restart that
+    # lands outside market hours, when it would otherwise sit idle with
+    # nothing listening on the port at all.
+    if not args.no_dashboard:
+        dstate = DashboardState(None, None, None, None, cfg, mode, None)
+        dstate.intraday_mode = True
+        # Last known values, read from disk only (no broker/NSE calls): the
+        # page should still show yesterday's spots and capital while idle,
+        # not a blank screen, even before this process has run a single day.
+        dstate.spots = {u.name: cached_spot(u.name) for u in cfg.active_underlyings()}
+        cap_path = "journal/live/capital_live.json" if mode == "live" else "journal/capital.json"
+        try:
+            L = IntradayLimits.load()
+            # Paper falls back to the configured starting capital until the
+            # first session writes capital.json; live has no figure until it
+            # reads funds from the broker, so it stays 0 until then.
+            start = 0.0 if mode == "live" else (args.capital or L.starting_capital)
+            dstate.boot_capital = CapitalBook(start, path=cap_path,
+                                              ceiling=L.capital_ceiling).capital
+        except Exception:
+            dstate.boot_capital = 0.0
+        if mode == "live" and not os.path.exists(cap_path) \
+                and market_phase(start=cfg.session_start, end=cfg.session_end) != "open":
+            # Live with no ledger yet (a fresh checkout, never run a live day):
+            # there is no figure on disk, so ask the broker once, in the
+            # background, for what the account holds - what the day would open
+            # on. One login + one RMS read, never repeated while idle.
+            def _boot_funds():
+                try:
+                    s = AngelSession(creds).login(retry_for_sec=60.0, log=log)
+                    funds, detail = live_funds(s.api)
+                    if funds > 0:
+                        if args.capital:
+                            funds = min(funds, float(args.capital))
+                        ceiling = IntradayLimits.load().capital_ceiling
+                        dstate.boot_capital = min(funds, ceiling) if ceiling > 0 else funds
+                        log(f"dashboard   live funds Rs {funds:,.2f} ({detail}) shown while idle")
+                    else:
+                        log(f"dashboard   live funds unavailable while idle: {detail}")
+                except Exception as e:
+                    log(f"dashboard   live funds unavailable while idle: {e}")
+            threading.Thread(target=_boot_funds, name="boot-funds", daemon=True).start()
+        dash = Dashboard(dstate, port=args.port).start()
+        dash_holder["dash"], dash_holder["dstate"] = dash, dstate
+        log(f"dashboard   {dash.url}")
+
+    def on_signal(*_):
+        stopping.set()
+        e = current["engine"]
+        if e is not None:
+            e.stop()
+
+    def on_restart(*_):
+        # ./run.sh restart / systemd KillSignal=SIGUSR1: open positions go to
+        # the next process (open_positions.json) instead of being squared off.
+        e = current["engine"]
+        if e is not None:
+            e.handover = True
+        on_signal()
+    signal.signal(signal.SIGINT, on_signal)
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGUSR1, on_restart)
+
+    try:
+        if args.duration:
+            _run_intraday_day(cfg, cm, creds, args, mode, notifier,
+                              dash_holder, current, stopping)
+            return
+        while not stopping.is_set():
+            if not _wait_until_session(cfg, stopping, log):
+                break
+            current["stage"], current["started"] = "starting", []
+            if dash_holder["dstate"] is not None:
+                dash_holder["dstate"].start_refused = ""
+            try:
+                _run_intraday_day(cfg, cm, creds, args, mode, notifier,
+                                  dash_holder, current, stopping)
+            except SystemExit as e:
+                # 7 Oct: a LIVE START REFUSED (open positions, no funds, a
+                # working order) ended the process. Under systemd
+                # (Restart=on-failure) that restarted straight into the same
+                # refusal until StartLimitBurst left the unit dead - dashboard
+                # down with it, so "Switch to LIVE" seemed to do nothing and
+                # nothing said why. Still not retried this session, but the
+                # process and dashboard stay up with the reason on the page and
+                # in Telegram, to be fixed and retried or switched back to paper.
+                why = str(e.code or "")
+                if current.get("stage") != "starting" or not why.startswith("LIVE START REFUSED"):
+                    raise
+                _stop_partial_start(current, log)
+                why = redact(why)
+                log(f"{why}\nnot trading this session; fix it and retry LIVE "
+                    f"from the dashboard, or switch to paper")
+                if dash_holder["dstate"] is not None:
+                    dash_holder["dstate"].start_refused = why
+                if notifier:
+                    try:
+                        notifier.send(f"🛑 <b>LIVE START REFUSED</b>\n"
+                                      f"<code>{html.escape(why.split(':', 1)[-1].strip()[:600])}</code>\n"
+                                      f"Not trading this session. Fix it and retry LIVE "
+                                      f"from the dashboard, or switch to paper.")
+                    except Exception:
+                        pass
+                _hold_until_close(cfg, stopping)
+            except Exception as e:
+                # 6 Oct 09:17: one read timeout while downloading the scrip
+                # master ended the live process before the open, with nothing
+                # to restart it. A failure BEFORE the engine starts trading is
+                # retried; once it has started, the old behaviour stands (a
+                # rebuild must never run over a day that may hold positions).
+                if current.get("stage") != "starting":
+                    raise
+                _stop_partial_start(current, log)
+                why = redact(f"{type(e).__name__}: {e}")[:300]
+                log(f"day start failed: {why} - retrying in {START_RETRY_SEC:g} s")
+                if notifier:
+                    try:
+                        notifier.send(f"⚠️ <b>ENGINE START FAILED</b> · <code>{mode.upper()}</code>\n"
+                                      f"<code>{why[:200]}</code>\nRetrying in {START_RETRY_SEC:g} s.")
+                    except Exception:
+                        pass
+                stopping.wait(START_RETRY_SEC)
+    finally:
+        if dash_holder["dash"]:
+            dash_holder["dash"].stop()
+        if notifier:
+            notifier.stop()
+
+
+START_RETRY_SEC = 60.0
+
+
+def _hold_until_close(cfg, stopping):
+    """After a refused live start: no trading and no new attempt until this
+    session closes (the next session_start checks again) or the process is
+    stopped - by a mode switch, a retry, or a restart."""
+    while not stopping.is_set() and \
+            market_phase(start=cfg.session_start, end=cfg.session_end) == "open":
+        stopping.wait(30)
+
+
+def _pace_need(L, name):
+    """This index's own pace threshold right now (atr_by_index halves) for the
+    pulse line - it printed min_atr_ratio for every index, so BANKNIFTY at
+    1.33x read 'open' while its gate needed 1.5 (5 Oct audit)."""
+    try:
+        from arb.constraints import _need
+        need, _rule, blocked = _need(L, name)
+        return "blocked" if blocked else f"{need:g}"
+    except Exception:
+        return "?"
+
+
+def _stop_partial_start(current, log):
+    """Stop whatever a failed day start had already started (candle store,
+    recorder, feed), so a retry never runs two of them."""
+    for obj in reversed(current.get("started") or []):
+        try:
+            obj.stop()
+        except Exception as e:
+            log(f"day start cleanup: {type(obj).__name__}.stop() failed: {e!r}")
+    current["started"] = []
+    current["engine"] = None
+
+
+def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
+                       current, stopping):
+    """Directional intraday option buying, managed with market structure, for
+    one trading day: login, build the universe, run until close, clean up.
 
     Not arbitrage. Every trade here is a bet on where the index goes next, held
     for minutes, protected by a stop and closed before the bell. The arbitrage
     engine's return band does not apply and is not consulted.
     """
+    session, feed, bindings, spots = build(cfg, creds, args)
+    phase = market_phase(start=cfg.session_start, end=cfg.session_end)
     L = IntradayLimits.load()
     if mode == "live":
         # Real money: its own ledger and journal, sized from the funds the
         # broker says the account holds - never from the paper ledger's P&L.
-        funds, detail = live_funds(session.api)
-        open_pos = open_broker_positions(session.api)
+        # 7 Oct 09:15: one network error on a read refused the whole start.
+        # A failed READ is retried; a real finding (an open position, no funds
+        # in a readable answer, a working order) still refuses at once.
+        for k in range(READ_TRIES):
+            funds, detail = live_funds(session.api)
+            if funds > 0 or not str(detail).startswith("rmsLimit failed"):
+                break
+            log(f"funds not readable yet ({detail[:80]}); retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
+        for k in range(READ_TRIES):
+            open_pos = open_broker_positions(session.api)
+            if not (len(open_pos) == 1 and open_pos[0].startswith("could not read positions")):
+                break
+            log(f"positions not readable yet; retrying in {READ_RETRY_SEC:g} s")
+            time.sleep(READ_RETRY_SEC)
         if open_pos:
             raise SystemExit(
                 "LIVE START REFUSED: the account already has open positions the engine "
@@ -260,32 +532,65 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
             raise SystemExit(f"LIVE START REFUSED: could not read available funds from Angel ({detail})")
         if args.capital:
             funds = min(funds, float(args.capital))
-        capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log)
+        capital = CapitalBook(funds, path="journal/live/capital_live.json", log=log,
+                              ceiling=L.capital_ceiling)
         capital.open_day()
-        cap_now = capital.sync_to_funds(funds)
-        log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f}")
+        capital.sync_to_funds(funds)
+        # Traded: min(configured, the account), re-read through the day by the
+        # engine (funds_reader below) - never fixed at this figure.
+        cap_now = capital.set_account_funds(funds)
+        log(f"LIVE funds          Rs {funds:,.2f} available ({detail}); trading capital Rs {cap_now:,.2f} "
+            f"= min(configured Rs {L.capital_ceiling:,.2f}, the account), re-read every "
+            f"{IntradayEngine.FUNDS_REFRESH_SEC:g} s while flat")
     else:
-        capital = CapitalBook(args.capital or L.starting_capital, log=log)
+        # Paper sizes like live: capped at the funds live last read from the
+        # broker, so it picks the same strikes and refuses the same trades a
+        # smaller real account would (owner, 15 Oct 2026: paper made money on a
+        # bigger purse while live could not afford those trades).
+        ceiling = L.capital_ceiling
+        try:
+            with open("journal/live/capital_live.json") as fh:
+                live_funds_seen = float((json.load(fh).get("synced") or {}).get("funds") or 0.0)
+        except (OSError, ValueError):
+            live_funds_seen = 0.0
+        if live_funds_seen > 0 and not args.capital:
+            ceiling = min(ceiling or live_funds_seen, live_funds_seen)
+            log(f"paper capital capped at live's last broker funds Rs {live_funds_seen:,.2f}")
+        capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=ceiling)
     interval = args.candle_interval or L.candle_interval
 
-    notifier = None
-    if not args.no_telegram:
-        notifier = TelegramNotifier(creds.telegram_bot_token,
-                                    creds.telegram_chat_id).start()
     journal = Journal(directory="journal/live") if mode == "live" else Journal()
-    broker = (LiveBroker(session.api, cm, product="INTRADAY", confirm_fills=True, log=log)
+    duration = str(L.order_duration or "IOC").strip().upper()
+    if mode == "live" and duration not in ("IOC", "DAY"):
+        raise SystemExit(f"LIVE START REFUSED: order_duration {L.order_duration!r} is not IOC or DAY")
+    broker = (LiveBroker(session.api, cm, product="INTRADAY", duration=duration,
+                         confirm_fills=True, log=log)
               if mode == "live" else PaperBroker(cm))
+    broker.protection_pct = L.market_protection_pct
+    broker.order_rate_per_sec = L.order_rate_per_sec
+    broker.exit_safety_fixes = L.exit_safety_fixes
+    broker.order_tags = L.order_tags
+    if mode == "live" and L.exit_safety_fixes:
+        refuse_working_orders(broker, log)
 
     # Structure is read off index candles, so this is on the critical path now -
     # not a dashboard ornament. It starts whether or not the dashboard runs.
+    # Seven calendar days: trend_4h needs three sessions before today.
     candles = CandleStore(session.api, cfg.active_underlyings(),
-                          interval=interval, log=log)
+                          interval=interval, lookback_days=7, log=log)
     candles.attach_feed(feed.store, getattr(feed, "spot_slots", {}),
                         getattr(feed, "future_slots", {}),
                         extra_slots=getattr(feed, "stock_slots", {})).start()
+    current.setdefault("started", []).append(candles)
 
     engine = IntradayEngine(feed, bindings, cfg, cm, L, broker, journal,
                             capital, candles, notifier=notifier, log=log)
+    if mode == "live":
+        def _read_funds(api=session.api, cap=args.capital):
+            f, why = live_funds(api)
+            return (min(f, float(cap)) if f > 0 and cap else f), why
+        engine.funds_reader = _read_funds
+    current["engine"] = engine
     if L.stocks_enabled and getattr(feed, "stock_slots", None):
         from arb.nse import NseClient
         from arb.stockdesk import StockDesk
@@ -294,17 +599,31 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
     # One book snapshot a minute (~4 MB a day): Angel serves no history for
     # expired options, so this is the only premium data any rule can be tested on.
     recorder = TickRecorder(feed.store, bindings, hz=1 / 60.0).start() if cfg.record_ticks else None
+    if recorder:
+        current.setdefault("started", []).append(recorder)
 
-    dash = None
-    if not args.no_dashboard:
-        dstate = DashboardState(engine, feed, None, None, cfg, mode, journal,
-                                candles=candles)
+    dash = dash_holder["dash"]
+    if dash is not None:
+        # Rebind the running dashboard to today's fresh objects in place: the
+        # HTTP handler closed over this DashboardState instance when the
+        # server started, so reassigning dash.state would not be seen - only
+        # mutating the same object's attributes reaches the live page. This
+        # is also how the very first day fills in the placeholder dashboard
+        # that run_intraday_forever created before ever logging in.
+        dstate = dash_holder["dstate"]
+        dstate.engine = engine
         dstate.intraday = engine
-        dash = Dashboard(dstate, port=args.port).start()
-        dash.state.spots = dict(spots)
-        log(f"dashboard   {dash.url}")
+        dstate.feed = feed
+        dstate.journal = journal
+        dstate.candles = candles
+        dstate.mode = mode
+        dstate.spots = dict(spots)
+        dstate.started = time.time()
+        dstate.marker = LegMarker(feed.store, dstate.settlements, candles)
+        log(f"dashboard   {dash.url} (bound to today's session)")
 
     feed.start()
+    current.setdefault("started", []).append(feed)
     log("websocket connecting...")
     if not feed.connected.wait(timeout=30):
         log("websocket did not connect in 30s; continuing to wait in background")
@@ -346,41 +665,34 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
         return market_phase(start=cfg.session_start,
                             end=cfg.session_end) == "closed" and phase == "open"
 
-    running = {"v": True}
-
-    def on_signal(*_):
-        running["v"] = False
-        engine.stop()
-
-    def on_restart(*_):
-        # ./run.sh restarting a paper engine: open positions go to the next
-        # process (open_positions.json) instead of being squared off.
-        engine.handover = True
-        on_signal()
-    signal.signal(signal.SIGINT, on_signal)
-    signal.signal(signal.SIGTERM, on_signal)
-    signal.signal(signal.SIGUSR1, on_restart)
-
+    current["stage"] = "running"            # from here a failure is never retried
     engine.start(stop_predicate=should_stop)
     log(f"scanning ({mode}); Ctrl+C to stop")
 
     last = 0.0
     try:
-        while running["v"] and engine._running.is_set():
+        while not stopping.is_set() and engine._running.is_set():
             time.sleep(1.0)
             if time.time() - last >= 60:
                 last = time.time()
+                if dash_holder.get("dstate") is not None:
+                    # Refreshes the constraints table kept on disk for the page
+                    # to show after the close, whether or not anyone is viewing.
+                    try:
+                        dash_holder["dstate"].constraints()
+                    except Exception:
+                        pass
                 s = engine.summary()
                 # The pace gate refuses most of the day by design; printing the
                 # reading against its bar says so, instead of looking like a fault.
-                pace = " ".join(f"{k} {v['atr_ratio']:.2f}x"
+                pace = " ".join(f"{k} {v['atr_ratio']:.2f}x/{_pace_need(engine.L, k)}"
                                 for k, v in sorted(s["structures"].items()))
                 log(f"ticks={feed.ticks:,} passes={engine.passes:,} "
                     f"trades={s['trades']} (W{s['wins']}/L{s['losses']}) "
                     f"open={s['open']} "
                     f"pnl={_inr(s['day_pnl'])} ({s['day_pct']:+.2f}%) "
                     f"target={_inr(s['target_inr'])} "
-                    + (f"| pace {pace} (need {engine.L.min_atr_ratio:g}x) " if pace else "")
+                    + (f"| pace {pace} (reading/need) " if pace else "")
                     + f"| {s['rejects'] or 'scanning'}")
     except KeyboardInterrupt:
         pass
@@ -399,8 +711,8 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
             # After the close it is folded into capital now; stopped earlier,
             # it stays in the ledger and is folded when the next day opens, so
             # a mid-day restart resumes the day instead of splitting it.
-            before = capital.capital
-            after = before + capital.day_pnl
+            before = capital.opening_capital
+            after = capital.traded(capital.equity + capital.day_pnl)
             folded_now = market_phase() in ("closed", "weekend")
             if folded_now:
                 before, after = capital.close_day(note=mode)
@@ -430,8 +742,7 @@ def run_intraday(cfg, cm, creds, args, session, feed, bindings, spots, mode, pha
         else:
             log("no trades today; capital unchanged")
         feed.stop()
-        if dash:
-            dash.stop()
+        current["engine"] = None
 
 
 def main():
@@ -474,14 +785,23 @@ def main():
     phase = market_phase(start=cfg.session_start, end=cfg.session_end)
     log(f"market phase: {phase} ({now_ist().strftime('%a %d %b %H:%M IST')})")
 
+    if not args.status:
+        # Owner, 21 Oct 2026: at start, print the btst_karo channel's last
+        # message, then each new one (arb/utils.py). Its own daemon thread;
+        # nothing it does can stop the engine.
+        try:
+            from arb.utils import read_channel_messages
+            read_channel_messages(log=log)
+        except Exception as e:
+            log(f"[telegram-user] channel reader not started: {e!r}")
+
+    if args.strategy == "intraday" and not args.status:
+        return run_intraday_forever(cfg, cm, creds, args, mode)
+
     session, feed, bindings, spots = build(cfg, creds, args)
     if args.status:
         log("status check complete")
         return
-
-    if args.strategy == "intraday":
-        return run_intraday(cfg, cm, creds, args, session, feed, bindings,
-                            spots, mode, phase)
 
     notifier = None
     if not args.no_telegram:

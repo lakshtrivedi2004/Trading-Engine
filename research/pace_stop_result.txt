@@ -1,0 +1,121 @@
+capital Rs 11,000, risk 8%, 254 days
+zone (live) | live | next                            n= 86 win=54.7% RR 1.29 year Rs +11,081 (IN  +3,572 / OUT  +7,508) /day  +44 maxDD  3,800 trade-days 28.7%
+zone (live) | none | next                            n=387 win=38.0% RR 1.27 year Rs -26,182 (IN -17,719 / OUT  -8,463) /day -103 maxDD 30,939 trade-days 75.6%
+zone (live) | accel 0.8 | next                       n=108 win=32.4% RR 1.22 year Rs -16,071 (IN  -8,840 / OUT  -7,231) /day  -63 maxDD 18,524 trade-days 35.8%
+zone (live) | accel 1.0 | next                       n= 88 win=33.0% RR 1.24 year Rs -12,263 (IN  -7,176 / OUT  -5,087) /day  -48 maxDD 14,716 trade-days 29.9%
+zone (live) | live|accel 0.8 | next                  n=167 win=42.5% RR 1.21 year Rs  -5,370 (IN  -5,970 / OUT    +600) /day  -21 maxDD 14,353 trade-days 49.2%
+zone (live) | live|break | next                      n=165 win=44.2% RR 1.19 year Rs  -2,481 (IN  -6,645 / OUT  +4,164) /day  -10 maxDD 13,741 trade-days 46.5%
+zone (live) | live|steady 0.4 | next                 n= 97 win=50.5% RR 1.27 year Rs  +7,447 (IN  +2,464 / OUT  +4,983) /day  +29 maxDD  5,464 trade-days 31.5%
+zone (live) | live|steady 0.6 | next                 n= 86 win=54.7% RR 1.29 year Rs +11,081 (IN  +3,572 / OUT  +7,508) /day  +44 maxDD  3,800 trade-days 28.7%
+zone (live) | live|accel 0.8|break | next            n=214 win=40.7% RR 1.17 year Rs -13,036 (IN -13,607 / OUT    +571) /day  -51 maxDD 22,555 trade-days 56.7%
+zone (live) | break only | next                      n=107 win=38.3% RR 1.19 year Rs  -8,788 (IN  -8,554 / OUT    -235) /day  -35 maxDD 13,677 trade-days 30.7%
+zone (live) | live | 0DTE                            n= 94 win=54.3% RR 1.25 year Rs +11,924 (IN  +3,205 / OUT  +8,720) /day  +47 maxDD  3,622 trade-days 30.3%
+zone (live) | none | 0DTE                            n=419 win=37.0% RR 1.31 year Rs -32,941 (IN -25,039 / OUT  -7,902) /day -130 maxDD 38,737 trade-days 79.9%
+zone (live) | accel 0.8 | 0DTE                       n=123 win=32.5% RR 1.24 year Rs -19,267 (IN -11,987 / OUT  -7,280) /day  -76 maxDD 22,758 trade-days 39.8%
+zone (live) | accel 1.0 | 0DTE                       n=101 win=34.7% RR 1.27 year Rs -12,514 (IN  -7,378 / OUT  -5,136) /day  -49 maxDD 16,203 trade-days 33.9%
+zone (live) | live|accel 0.8 | 0DTE                  n=185 win=42.2% RR 1.19 year Rs  -7,958 (IN  -9,290 / OUT  +1,333) /day  -31 maxDD 16,670 trade-days 52.4%
+zone (live) | live|break | 0DTE                      n=179 win=43.6% RR 1.20 year Rs  -3,963 (IN  -8,926 / OUT  +4,962) /day  -16 maxDD 14,094 trade-days 48.8%
+zone (live) | live|steady 0.4 | 0DTE                 n=107 win=50.5% RR 1.23 year Rs  +7,855 (IN  +2,562 / OUT  +5,293) /day  +31 maxDD  5,406 trade-days 33.9%
+zone (live) | live|steady 0.6 | 0DTE                 n= 94 win=54.3% RR 1.25 year Rs +11,924 (IN  +3,205 / OUT  +8,720) /day  +47 maxDD  3,622 trade-days 30.3%
+zone (live) | live|accel 0.8|break | 0DTE            n=235 win=40.0% RR 1.17 year Rs -17,071 (IN -18,562 / OUT  +1,491) /day  -67 maxDD 25,927 trade-days 59.4%
+zone (live) | break only | 0DTE                      n=113 win=38.1% RR 1.26 year Rs  -8,362 (IN  -9,011 / OUT    +649) /day  -33 maxDD 14,596 trade-days 32.7%
+nearest swing | live | next                          n= 81 win=53.1% RR 1.25 year Rs  +8,314 (IN  +1,978 / OUT  +6,336) /day  +33 maxDD  4,448 trade-days 26.8%
+nearest swing | none | next                          n=352 win=37.8% RR 1.22 year Rs -28,430 (IN -20,853 / OUT  -7,577) /day -112 maxDD 32,211 trade-days 72.0%
+nearest swing | accel 0.8 | next                     n=101 win=29.7% RR 1.29 year Rs -16,499 (IN  -9,284 / OUT  -7,215) /day  -65 maxDD 18,288 trade-days 33.9%
+nearest swing | accel 1.0 | next                     n= 81 win=28.4% RR 1.35 year Rs -13,850 (IN  -8,779 / OUT  -5,071) /day  -55 maxDD 15,639 trade-days 28.3%
+nearest swing | live|accel 0.8 | next                n=155 win=41.3% RR 1.23 year Rs  -6,355 (IN  -6,489 / OUT    +133) /day  -25 maxDD 14,032 trade-days 46.5%
+nearest swing | live|break | next                    n=148 win=43.2% RR 1.20 year Rs  -3,773 (IN  -6,924 / OUT  +3,151) /day  -15 maxDD 13,324 trade-days 42.9%
+nearest swing | live|steady 0.4 | next               n= 91 win=49.5% RR 1.22 year Rs  +4,879 (IN    +623 / OUT  +4,256) /day  +19 maxDD  6,551 trade-days 29.1%
+nearest swing | live|steady 0.6 | next               n= 81 win=53.1% RR 1.25 year Rs  +8,314 (IN  +1,978 / OUT  +6,336) /day  +33 maxDD  4,448 trade-days 26.8%
+nearest swing | live|accel 0.8|break | next          n=194 win=39.7% RR 1.18 year Rs -13,473 (IN -12,740 / OUT    -733) /day  -53 maxDD 21,215 trade-days 53.5%
+nearest swing | break only | next                    n= 97 win=36.1% RR 1.25 year Rs  -8,928 (IN  -7,578 / OUT  -1,349) /day  -35 maxDD 12,968 trade-days 28.3%
+nearest swing | live | 0DTE                          n= 88 win=52.3% RR 1.21 year Rs  +7,951 (IN    +295 / OUT  +7,656) /day  +31 maxDD  5,184 trade-days 28.0%
+nearest swing | none | 0DTE                          n=381 win=36.5% RR 1.23 year Rs -38,829 (IN -31,694 / OUT  -7,134) /day -153 maxDD 43,647 trade-days 76.4%
+nearest swing | accel 0.8 | 0DTE                     n=114 win=29.8% RR 1.28 year Rs -20,693 (IN -13,580 / OUT  -7,113) /day  -81 maxDD 23,520 trade-days 37.8%
+nearest swing | accel 1.0 | 0DTE                     n= 92 win=30.4% RR 1.33 year Rs -15,207 (IN -10,238 / OUT  -4,969) /day  -60 maxDD 18,034 trade-days 31.9%
+nearest swing | live|accel 0.8 | 0DTE                n=170 win=40.6% RR 1.19 year Rs -10,683 (IN -11,809 / OUT  +1,126) /day  -42 maxDD 18,337 trade-days 50.0%
+nearest swing | live|break | 0DTE                    n=159 win=42.8% RR 1.19 year Rs  -5,557 (IN  -9,629 / OUT  +4,072) /day  -22 maxDD 15,544 trade-days 44.9%
+nearest swing | live|steady 0.4 | 0DTE               n=100 win=49.0% RR 1.20 year Rs  +4,599 (IN    -309 / OUT  +4,908) /day  +18 maxDD  7,065 trade-days 31.1%
+nearest swing | live|steady 0.6 | 0DTE               n= 88 win=52.3% RR 1.21 year Rs  +7,951 (IN    +295 / OUT  +7,656) /day  +31 maxDD  5,184 trade-days 28.0%
+nearest swing | live|accel 0.8|break | 0DTE          n=211 win=38.9% RR 1.15 year Rs -19,077 (IN -19,266 / OUT    +189) /day  -75 maxDD 27,255 trade-days 56.7%
+nearest swing | break only | 0DTE                    n=100 win=36.0% RR 1.29 year Rs  -8,907 (IN  -8,118 / OUT    -789) /day  -35 maxDD 13,978 trade-days 29.1%
+zone pad 0 | live | next                             n= 85 win=49.4% RR 1.30 year Rs  +6,442 (IN  +2,269 / OUT  +4,173) /day  +25 maxDD  3,685 trade-days 28.3%
+zone pad 0 | none | next                             n=384 win=37.5% RR 1.26 year Rs -29,666 (IN -12,947 / OUT -16,719) /day -117 maxDD 33,929 trade-days 75.2%
+zone pad 0 | accel 0.8 | next                        n=112 win=27.7% RR 1.34 year Rs -21,228 (IN  -8,484 / OUT -12,744) /day  -84 maxDD 23,708 trade-days 35.0%
+zone pad 0 | accel 1.0 | next                        n= 91 win=27.5% RR 1.40 year Rs -16,918 (IN  -8,036 / OUT  -8,882) /day  -67 maxDD 18,943 trade-days 29.9%
+zone pad 0 | live|accel 0.8 | next                   n=168 win=37.5% RR 1.24 year Rs -14,728 (IN  -8,701 / OUT  -6,027) /day  -58 maxDD 19,037 trade-days 48.8%
+zone pad 0 | live|break | next                       n=159 win=40.9% RR 1.24 year Rs  -6,941 (IN  -8,258 / OUT  +1,317) /day  -27 maxDD 14,661 trade-days 45.7%
+zone pad 0 | live|steady 0.4 | next                  n= 96 win=45.8% RR 1.32 year Rs  +3,301 (IN  +1,115 / OUT  +2,186) /day  +13 maxDD  4,833 trade-days 31.1%
+zone pad 0 | live|steady 0.6 | next                  n= 85 win=49.4% RR 1.30 year Rs  +6,442 (IN  +2,269 / OUT  +4,173) /day  +25 maxDD  3,685 trade-days 28.3%
+zone pad 0 | live|accel 0.8|break | next             n=211 win=37.4% RR 1.20 year Rs -19,859 (IN -13,998 / OUT  -5,861) /day  -78 maxDD 25,981 trade-days 55.9%
+zone pad 0 | break only | next                       n=104 win=36.5% RR 1.19 year Rs -10,655 (IN  -9,772 / OUT    -883) /day  -42 maxDD 14,841 trade-days 30.3%
+zone pad 0 | live | 0DTE                             n= 94 win=48.9% RR 1.24 year Rs  +5,471 (IN    +256 / OUT  +5,214) /day  +22 maxDD  4,303 trade-days 30.3%
+zone pad 0 | none | 0DTE                             n=414 win=37.2% RR 1.24 year Rs -37,550 (IN -21,205 / OUT -16,345) /day -148 maxDD 42,851 trade-days 79.1%
+zone pad 0 | accel 0.8 | 0DTE                        n=124 win=29.0% RR 1.30 year Rs -24,428 (IN -11,448 / OUT -12,979) /day  -96 maxDD 27,490 trade-days 38.2%
+zone pad 0 | accel 1.0 | 0DTE                        n=102 win=30.4% RR 1.33 year Rs -18,003 (IN  -8,886 / OUT  -9,118) /day  -71 maxDD 21,066 trade-days 33.1%
+zone pad 0 | live|accel 0.8 | 0DTE                   n=184 win=38.0% RR 1.17 year Rs -19,046 (IN -13,779 / OUT  -5,267) /day  -75 maxDD 23,539 trade-days 51.6%
+zone pad 0 | live|break | 0DTE                       n=173 win=40.5% RR 1.24 year Rs  -9,235 (IN -11,356 / OUT  +2,121) /day  -36 maxDD 16,140 trade-days 47.6%
+zone pad 0 | live|steady 0.4 | 0DTE                  n=106 win=46.2% RR 1.26 year Rs  +2,945 (IN    -244 / OUT  +3,189) /day  +12 maxDD  4,536 trade-days 33.1%
+zone pad 0 | live|steady 0.6 | 0DTE                  n= 94 win=48.9% RR 1.24 year Rs  +5,471 (IN    +256 / OUT  +5,214) /day  +22 maxDD  4,303 trade-days 30.3%
+zone pad 0 | live|accel 0.8|break | 0DTE             n=230 win=37.4% RR 1.15 year Rs -25,551 (IN -20,541 / OUT  -5,010) /day -101 maxDD 31,078 trade-days 58.3%
+zone pad 0 | break only | 0DTE                       n=109 win=35.8% RR 1.24 year Rs -11,399 (IN -11,172 / OUT    -228) /day  -45 maxDD 16,585 trade-days 31.5%
+zone pad 0.25 | live | next                          n= 83 win=53.0% RR 1.28 year Rs  +9,212 (IN  +3,415 / OUT  +5,796) /day  +36 maxDD  5,212 trade-days 27.2%
+zone pad 0.25 | none | next                          n=381 win=37.8% RR 1.28 year Rs -26,949 (IN -24,399 / OUT  -2,550) /day -106 maxDD 31,472 trade-days 73.6%
+zone pad 0.25 | accel 0.8 | next                     n=105 win=32.4% RR 1.24 year Rs -14,819 (IN  -9,256 / OUT  -5,563) /day  -58 maxDD 18,483 trade-days 33.9%
+zone pad 0.25 | accel 1.0 | next                     n= 80 win=32.5% RR 1.21 year Rs -12,323 (IN  -7,990 / OUT  -4,334) /day  -49 maxDD 15,553 trade-days 27.6%
+zone pad 0.25 | live|accel 0.8 | next                n=166 win=42.2% RR 1.22 year Rs  -5,769 (IN  -6,733 / OUT    +964) /day  -23 maxDD 15,160 trade-days 46.1%
+zone pad 0.25 | live|break | next                    n=167 win=43.7% RR 1.16 year Rs  -5,066 (IN  -9,024 / OUT  +3,958) /day  -20 maxDD 14,132 trade-days 46.1%
+zone pad 0.25 | live|steady 0.4 | next               n=102 win=50.0% RR 1.26 year Rs  +6,939 (IN  +2,026 / OUT  +4,913) /day  +27 maxDD  7,065 trade-days 32.3%
+zone pad 0.25 | live|steady 0.6 | next               n= 85 win=52.9% RR 1.27 year Rs  +9,066 (IN  +3,014 / OUT  +6,052) /day  +36 maxDD  5,212 trade-days 27.6%
+zone pad 0.25 | live|accel 0.8|break | next          n=216 win=39.8% RR 1.14 year Rs -17,271 (IN -18,391 / OUT  +1,121) /day  -68 maxDD 24,974 trade-days 55.9%
+zone pad 0.25 | break only | next                    n=110 win=36.4% RR 1.12 year Rs -13,592 (IN -13,500 / OUT     -92) /day  -54 maxDD 18,016 trade-days 31.5%
+zone pad 0.25 | live | 0DTE                          n= 87 win=54.0% RR 1.18 year Rs  +9,343 (IN  +3,130 / OUT  +6,214) /day  +37 maxDD  5,306 trade-days 28.0%
+zone pad 0.25 | none | 0DTE                          n=410 win=37.3% RR 1.31 year Rs -30,598 (IN -26,626 / OUT  -3,972) /day -120 maxDD 35,662 trade-days 79.1%
+zone pad 0.25 | accel 0.8 | 0DTE                     n=120 win=32.5% RR 1.25 year Rs -18,076 (IN -11,549 / OUT  -6,527) /day  -71 maxDD 22,593 trade-days 37.4%
+zone pad 0.25 | accel 1.0 | 0DTE                     n= 93 win=34.4% RR 1.24 year Rs -12,612 (IN  -7,315 / OUT  -5,297) /day  -50 maxDD 16,381 trade-days 31.1%
+zone pad 0.25 | live|accel 0.8 | 0DTE                n=181 win=42.0% RR 1.18 year Rs  -8,985 (IN  -9,536 / OUT    +552) /day  -35 maxDD 18,175 trade-days 49.2%
+zone pad 0.25 | live|break | 0DTE                    n=178 win=43.8% RR 1.14 year Rs  -6,718 (IN -10,462 / OUT  +3,744) /day  -26 maxDD 16,418 trade-days 48.0%
+zone pad 0.25 | live|steady 0.4 | 0DTE               n=108 win=50.9% RR 1.16 year Rs  +6,379 (IN  +2,019 / OUT  +4,360) /day  +25 maxDD  7,366 trade-days 33.9%
+zone pad 0.25 | live|steady 0.6 | 0DTE               n= 89 win=53.9% RR 1.17 year Rs  +9,197 (IN  +2,728 / OUT  +6,469) /day  +36 maxDD  5,306 trade-days 28.3%
+zone pad 0.25 | live|accel 0.8|break | 0DTE          n=233 win=39.5% RR 1.13 year Rs -21,581 (IN -22,488 / OUT    +906) /day  -85 maxDD 29,918 trade-days 59.1%
+zone pad 0.25 | break only | 0DTE                    n=117 win=35.9% RR 1.15 year Rs -14,985 (IN -14,899 / OUT     -86) /day  -59 maxDD 20,268 trade-days 33.1%
+min_stop_atr 0.5 | live | next                       n=114 win=49.1% RR 1.47 year Rs +11,599 (IN  +2,359 / OUT  +9,240) /day  +46 maxDD  4,600 trade-days 35.8%
+min_stop_atr 0.5 | none | next                       n=413 win=36.3% RR 1.36 year Rs -28,336 (IN -21,195 / OUT  -7,141) /day -112 maxDD 33,094 trade-days 77.6%
+min_stop_atr 0.5 | accel 0.8 | next                  n=125 win=28.8% RR 1.29 year Rs -21,079 (IN -13,060 / OUT  -8,018) /day  -83 maxDD 23,631 trade-days 39.8%
+min_stop_atr 0.5 | accel 1.0 | next                  n=102 win=29.4% RR 1.31 year Rs -16,287 (IN -10,413 / OUT  -5,874) /day  -64 maxDD 18,840 trade-days 33.5%
+min_stop_atr 0.5 | live|accel 0.8 | next             n=206 win=38.8% RR 1.36 year Rs  -8,649 (IN  -9,771 / OUT  +1,122) /day  -34 maxDD 17,071 trade-days 55.5%
+min_stop_atr 0.5 | live|break | next                 n=195 win=42.1% RR 1.29 year Rs  -3,363 (IN  -9,209 / OUT  +5,846) /day  -13 maxDD 14,415 trade-days 53.1%
+min_stop_atr 0.5 | live|steady 0.4 | next            n=127 win=45.7% RR 1.46 year Rs  +7,389 (IN    +675 / OUT  +6,714) /day  +29 maxDD  6,264 trade-days 37.4%
+min_stop_atr 0.5 | live|steady 0.6 | next            n=114 win=49.1% RR 1.47 year Rs +11,599 (IN  +2,359 / OUT  +9,240) /day  +46 maxDD  4,600 trade-days 35.8%
+min_stop_atr 0.5 | live|accel 0.8|break | next       n=250 win=37.6% RR 1.28 year Rs -17,253 (IN -18,737 / OUT  +1,484) /day  -68 maxDD 25,106 trade-days 62.2%
+min_stop_atr 0.5 | break only | next                 n=114 win=37.7% RR 1.20 year Rs  -9,549 (IN  -9,710 / OUT    +161) /day  -38 maxDD 14,399 trade-days 32.7%
+min_stop_atr 0.5 | live | 0DTE                       n=125 win=47.2% RR 1.37 year Rs  +7,967 (IN    -768 / OUT  +8,735) /day  +31 maxDD  8,185 trade-days 37.4%
+min_stop_atr 0.5 | none | 0DTE                       n=445 win=35.3% RR 1.40 year Rs -34,561 (IN -26,912 / OUT  -7,649) /day -136 maxDD 40,357 trade-days 81.5%
+min_stop_atr 0.5 | accel 0.8 | 0DTE                  n=143 win=29.4% RR 1.31 year Rs -24,973 (IN -16,713 / OUT  -8,261) /day  -98 maxDD 28,563 trade-days 43.7%
+min_stop_atr 0.5 | accel 1.0 | 0DTE                  n=118 win=31.4% RR 1.35 year Rs -17,018 (IN -10,901 / OUT  -6,117) /day  -67 maxDD 20,608 trade-days 37.4%
+min_stop_atr 0.5 | live|accel 0.8 | 0DTE             n=229 win=38.0% RR 1.30 year Rs -15,625 (IN -15,540 / OUT     -85) /day  -62 maxDD 23,333 trade-days 58.3%
+min_stop_atr 0.5 | live|break | 0DTE                 n=213 win=41.3% RR 1.28 year Rs  -6,566 (IN -11,496 / OUT  +4,929) /day  -26 maxDD 16,963 trade-days 55.5%
+min_stop_atr 0.5 | live|steady 0.4 | 0DTE            n=141 win=44.0% RR 1.38 year Rs  +3,556 (IN  -1,753 / OUT  +5,309) /day  +14 maxDD 10,037 trade-days 39.4%
+min_stop_atr 0.5 | live|steady 0.6 | 0DTE            n=125 win=47.2% RR 1.37 year Rs  +7,967 (IN    -768 / OUT  +8,735) /day  +31 maxDD  8,185 trade-days 37.4%
+min_stop_atr 0.5 | live|accel 0.8|break | 0DTE       n=274 win=37.2% RR 1.28 year Rs -21,980 (IN -22,668 / OUT    +688) /day  -87 maxDD 29,545 trade-days 65.0%
+min_stop_atr 0.5 | break only | 0DTE                 n=122 win=38.5% RR 1.29 year Rs  -7,201 (IN  -8,245 / OUT  +1,045) /day  -28 maxDD 13,861 trade-days 34.6%
+swing_strength 1 | live | next                       n= 87 win=47.1% RR 1.31 year Rs  +4,318 (IN  +2,452 / OUT  +1,866) /day  +17 maxDD  4,767 trade-days 27.6%
+swing_strength 1 | none | next                       n=343 win=35.9% RR 1.24 year Rs -34,735 (IN -28,438 / OUT  -6,296) /day -137 maxDD 38,910 trade-days 72.4%
+swing_strength 1 | accel 0.8 | next                  n=100 win=32.0% RR 1.21 year Rs -16,221 (IN -10,362 / OUT  -5,858) /day  -64 maxDD 18,405 trade-days 32.7%
+swing_strength 1 | accel 1.0 | next                  n= 80 win=32.5% RR 1.30 year Rs -11,080 (IN  -6,126 / OUT  -4,954) /day  -44 maxDD 13,264 trade-days 28.0%
+swing_strength 1 | live|accel 0.8 | next             n=160 win=38.1% RR 1.19 year Rs -14,548 (IN -11,154 / OUT  -3,394) /day  -57 maxDD 17,825 trade-days 45.7%
+swing_strength 1 | live|break | next                 n=157 win=42.7% RR 1.24 year Rs  -3,507 (IN  -3,848 / OUT    +341) /day  -14 maxDD  8,385 trade-days 42.9%
+swing_strength 1 | live|steady 0.4 | next            n=103 win=42.7% RR 1.27 year Rs  -1,760 (IN  -1,988 / OUT    +228) /day   -7 maxDD  8,405 trade-days 31.9%
+swing_strength 1 | live|steady 0.6 | next            n= 89 win=47.2% RR 1.29 year Rs  +4,024 (IN  +1,902 / OUT  +2,122) /day  +16 maxDD  5,061 trade-days 28.3%
+swing_strength 1 | live|accel 0.8|break | next       n=202 win=40.1% RR 1.17 year Rs -13,781 (IN -12,943 / OUT    -838) /day  -54 maxDD 17,685 trade-days 51.2%
+swing_strength 1 | break only | next                 n= 98 win=39.8% RR 1.21 year Rs  -5,939 (IN  -6,616 / OUT    +678) /day  -23 maxDD  9,426 trade-days 28.0%
+swing_strength 1 | live | 0DTE                       n= 95 win=48.4% RR 1.22 year Rs  +4,538 (IN  +2,242 / OUT  +2,296) /day  +18 maxDD  4,878 trade-days 29.1%
+swing_strength 1 | none | 0DTE                       n=368 win=35.3% RR 1.24 year Rs -43,055 (IN -37,401 / OUT  -5,654) /day -170 maxDD 48,268 trade-days 75.6%
+swing_strength 1 | accel 0.8 | 0DTE                  n=110 win=33.6% RR 1.24 year Rs -16,231 (IN  -9,797 / OUT  -6,434) /day  -64 maxDD 19,453 trade-days 35.4%
+swing_strength 1 | accel 1.0 | 0DTE                  n= 90 win=35.6% RR 1.31 year Rs  -9,717 (IN  -4,187 / OUT  -5,530) /day  -38 maxDD 12,939 trade-days 30.7%
+swing_strength 1 | live|accel 0.8 | 0DTE             n=176 win=39.8% RR 1.16 year Rs -14,732 (IN -11,084 / OUT  -3,648) /day  -58 maxDD 19,046 trade-days 48.4%
+swing_strength 1 | live|break | 0DTE                 n=170 win=41.8% RR 1.22 year Rs  -6,904 (IN  -7,506 / OUT    +602) /day  -27 maxDD 11,492 trade-days 45.3%
+swing_strength 1 | live|steady 0.4 | 0DTE            n=111 win=44.1% RR 1.20 year Rs  -1,841 (IN  -2,499 / OUT    +658) /day   -7 maxDD  8,745 trade-days 33.5%
+swing_strength 1 | live|steady 0.6 | 0DTE            n= 97 win=48.5% RR 1.21 year Rs  +4,244 (IN  +1,692 / OUT  +2,552) /day  +17 maxDD  5,172 trade-days 29.9%
+swing_strength 1 | live|accel 0.8|break | 0DTE       n=220 win=40.5% RR 1.17 year Rs -15,568 (IN -14,908 / OUT    -661) /day  -61 maxDD 19,601 trade-days 54.3%
+swing_strength 1 | break only | 0DTE                 n=104 win=37.5% RR 1.29 year Rs  -7,863 (IN  -9,295 / OUT  +1,432) /day  -31 maxDD 12,004 trade-days 29.5%

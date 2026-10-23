@@ -107,6 +107,56 @@ check("with same-time history, relative volume is the paper's definition",
       abs(hot.rvol - 4.0) < 1e-9 and "DOWN" not in [x.symbol for x in r2],
       f"HOT rvol {hot.rvol:.2f}; DOWN at 0.4 of its normal is dropped")
 
+# Recent-window relative volume: a morning spike that has gone quiet.
+check("same-time volume over a window counts only the minutes inside it",
+      abs(same_time_volume(mrows, "2026-09-25", 9 * 60 + 25, sessions=3,
+                           from_min=9 * 60 + 20) - 500.0) < 1e-6)
+wst = {"SPIKE": S("SPIKE", 0.03), "FRESH": S("FRESH", 0.03)}
+wlive = {"SPIKE": dict(open=500, high=530, low=498, ltp=525, volume=2e6, recent_volume=1e4),
+         "FRESH": dict(open=500, high=520, low=498, ltp=510, volume=6e5, recent_volume=2e5)}
+day_base = {"SPIKE": 5e5, "FRESH": 5e5}
+win_base = {"SPIKE": 5e4, "FRESH": 5e4}
+by_day = rank(wst, {k: {kk: vv for kk, vv in v.items() if kk != "recent_volume"}
+                    for k, v in wlive.items()}, 11 * 60, L, same_time=day_base)
+by_win = rank(wst, wlive, 11 * 60, L, same_time=day_base, same_time_recent=win_base)
+check("since the open, the 09:20 spike still looks like the stock most in play",
+      by_day[0].symbol == "SPIKE", str([(x.symbol, round(x.rvol, 2)) for x in by_day]))
+check("over the last window it has gone quiet and drops out; the active one stays",
+      [x.symbol for x in by_win] == ["FRESH"] and abs(by_win[0].rvol - 4.0) < 1e-9
+      and abs(by_win[0].rvol_day - 1.2) < 1e-9,
+      str([(x.symbol, round(x.rvol, 2), round(x.rvol_day, 2)) for x in by_win]))
+nowin = rank(wst, {k: dict(v, recent_volume=None) for k, v in wlive.items()},
+             11 * 60, L, same_time=day_base)
+check("with no window yet (just restarted) it falls back to since-open, unchanged",
+      all(abs(x.rvol - x.rvol_day) < 1e-12 for x in nowin) and nowin[0].symbol == "SPIKE")
+
+# Tradability: the scan prices the entry gate's cost test before picking.
+from arb.scanner import scan_cost_ratio
+tight = scan_cost_ratio(999.9, 1000.1, 2.0, 10_000.0, L, CM)
+wide = scan_cost_ratio(999.9, 1000.1, 10.0, 10_000.0, L, CM)
+check("a stock whose one-minute range is small next to its costs fails the gate's test",
+      tight is not None and tight > 1.0, f"ratio {tight:.2f} at a Rs 2 ATR")
+check("the same price with a wider range clears it comfortably",
+      wide is not None and wide < 1.0 and wide < tight, f"ratio {wide:.2f} at a Rs 10 ATR")
+check("no quote or no ATR is an unknown, not a pass or a fail",
+      scan_cost_ratio(0, 1000.1, 10.0, 1e4, L, CM) is None
+      and scan_cost_ratio(999.9, 1000.1, 0.0, 1e4, L, CM) is None)
+
+cst = {"X": S("X", 0.04), "Y": S("Y", 0.03), "Z": S("Z", 0.02), "DEAR": S("DEAR", 0.05),
+       "UNK": S("UNK", 0.03)}
+clive = {k: dict(open=500, high=520, low=498, ltp=515, volume=6e5) for k in cst}
+plain = {x.symbol: x.score for x in rank(cst, clive, 9 * 60 + 30, L)}
+costed = rank(cst, clive, 9 * 60 + 30, L,
+              cost_ratio={"X": 0.2, "Y": 0.5, "Z": 0.9, "DEAR": 1.4})
+cs = {x.symbol: x for x in costed}
+check("a name whose costs alone would fail the entry gate is never picked",
+      "DEAR" not in cs and "DEAR" in plain, str(sorted(cs)))
+check("an unknown cost is neither rewarded nor dropped",
+      "UNK" in cs and cs["UNK"].cost_ratio is None)
+check("cheaper to trade scores higher: the cheapest rises, the dearest falls",
+      cs["X"].score > plain["X"] and cs["Z"].score < plain["Z"] and "cheap p100" in cs["X"].reasons,
+      f"X {plain['X']:.3f}->{cs['X'].score:.3f}, Z {plain['Z']:.3f}->{cs['Z'].score:.3f}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("3. Cash positions: long and short through the engine's exits")
 
@@ -157,6 +207,54 @@ def open_stock(e, side, px=500.0, risk=4.0, qty=50, target=0.0):
                         SimpleNamespace(last_event=""), px, inv, risk, tgt, qty,
                         px + 0.05 if side > 0 else px - 0.05, 20.0, [["t", 0, 0, 0, px, 0]], pick)
     return ok, e.book.snapshot()[0] if ok else None
+
+
+class _Unknown(PaperBroker):
+    """An entry whose status cannot be read; the broker's position book shows `held`."""
+    def __init__(self, held):
+        super().__init__(CostModel(slippage_ticks_per_leg=0.0))
+        self.held = held
+
+    def place_structure(self, ticket, lots):
+        return [dict(ticket.legs[0], filled=False, fill_price=0.0, broker_status="unknown")], ["unknown"]
+
+    def net_position(self, symbol):
+        return self.held
+
+
+for side, held, want in ((BEAR, -50, 50), (BULL, 50, 50), (BEAR, 50, 0), (BULL, -50, 0)):
+    e = engine()
+    e.L.adopt_unknown_entry = True
+    e.broker = _Unknown(held)
+    open_stock(e, side)
+    snap = e.book.snapshot()
+    got = snap[0].qty if snap else 0
+    check(f"stock entry status unknown, side {side:+d}, broker {held:+d}: "
+          + (f"adopted x{want} under the software stop" if want else "not adopted (wrong side)") + ", halted",
+          got == want and e.halted and (not snap or (snap[0].side == side and snap[0].detail.get("adopted"))),
+          f"got {got}, halted {e.halted}")
+
+
+# A restart rebuilds the loss-streak pause and the per-playbook cap from the journal.
+e = engine()
+e.L.max_consecutive_losses, e.L.loss_streak_pause_min = 3, 30.0
+from datetime import datetime as _dt, timedelta as _td
+_now = _dt.now().astimezone()
+_r = lambda tid, opt, net, mins_ago, pb="ob_fvg_retest": {
+    "trade_id": tid, "opt": opt, "underlying": "NIFTY", "net_inr": net, "playbooks": [pb],
+    "ts_ist": (_now - _td(minutes=mins_ago)).isoformat()}
+e._resume_discipline([_r(1, "CE", -100, 20), _r(2, "PE", -50, 15), _r(3, "PE", -20, 10), _r(3, "PE", -5, 9)])
+check("restart after 3 losing trades 9 min ago: paused ~21 more minutes, careful on",
+      e.careful and 19 * 60 < e.paused_until - _now.timestamp() <= 21 * 60 + 5,
+      f"{e.paused_until - _now.timestamp():.0f} s")
+check("restart: per-playbook cap counts trades, not rows (trade 3 has two rows)",
+      e.playbook_count.get(("NIFTY", "ob_fvg_retest", BEAR)) == 2
+      and e.playbook_count.get(("NIFTY", "ob_fvg_retest", BULL)) == 1, str(e.playbook_count))
+e = engine()
+e.L.max_consecutive_losses = 3
+e._resume_discipline([_r(1, "CE", -100, 20), _r(2, "PE", -50, 15), _r(3, "PE", +80, 10)])
+check("restart: a win after two losses leaves no streak, no pause",
+      e.loss_streak == 0 and not e.careful and e.paused_until == 0.0)
 
 
 e = engine()
@@ -213,6 +311,83 @@ check("stocks are off by default in code (config/intraday.json turns them on)",
       IntradayLimits().stocks_enabled is False)
 
 # ─────────────────────────────────────────────────────────────────────────────
+section("3b. 2 Oct 2026 review: the chase guard and the constraints page (D-L2, D-L3)")
+
+import time as _time
+import arb.intraday_engine as _ie
+from arb import constraints as _cons
+
+_bars = [[f"2026-10-01T10:{m:02d}:00+05:30", 500.0, 501.0, 499.0, 500.0, 1000.0] for m in range(40)]
+
+
+class _RowsCandles:
+    def get(self, name, limit=120):
+        return [list(r) for r in _bars][-limit:]
+
+
+def stock_engine(**kw):
+    e = engine()
+    e.L = IntradayLimits(**kw)
+    e.candles = _RowsCandles()
+    e._closed_rows = lambda name, rows, t0=None: (rows, "")     # the bars are closed: test the guard
+    e.stocks = SimpleNamespace(active=[SimpleNamespace(symbol="AAA")],
+                               universe={"AAA": {"eq_symbol": "AAA-EQ", "eq_token": "11"}},
+                               slots={"AAA": 0})
+    return e
+
+
+_verdict = SimpleNamespace(tradable=True, side=BULL, grade="A", setups=[], veto="",
+                           reason="t", reversal=False, count=1,
+                           names=lambda: [], plays=lambda: ["test"], chain=lambda: [])
+_real_eval, _real_gate = _ie.evaluate, _ie.regime_gate
+_ie.evaluate = lambda rows, px, L, strike_step=0.0: _verdict
+_ie.regime_gate = lambda rows, L, name=None: ""
+try:
+    ec = stock_engine(decide_on_closed_bars=True, max_chase_atr=0.5)
+    ec.feed.store.ltp[0], ec.feed.store.bid[0], ec.feed.store.ask[0] = 510.0, 509.95, 510.05
+    ec._hunt_stocks(10_000.0)
+    check("D-L2: a stock 10 ATRs past the closed bar's close is not chased",
+          ec.rejects.get("stock:price_moved_since_close", 0) == 1 and ec.book.count() == 0,
+          f"rejects {ec.rejects}")
+    ec2 = stock_engine(decide_on_closed_bars=True, max_chase_atr=0.5)
+    ec2.feed.store.ltp[0], ec2.feed.store.bid[0], ec2.feed.store.ask[0] = 500.2, 500.15, 500.25
+    ec2._hunt_stocks(10_000.0)
+    check("D-L2: one near the close passes the guard (refused later or taken, never as a chase)",
+          "stock:price_moved_since_close" not in ec2.rejects, f"rejects {ec2.rejects}")
+    ec3 = stock_engine(decide_on_closed_bars=False, max_chase_atr=0.5)
+    ec3.feed.store.ltp[0], ec3.feed.store.bid[0], ec3.feed.store.ask[0] = 510.0, 509.95, 510.05
+    ec3._hunt_stocks(10_000.0)
+    check("D-L2: with decide_on_closed_bars off there is no chase guard, as for the indices",
+          "stock:price_moved_since_close" not in ec3.rejects, f"rejects {ec3.rejects}")
+finally:
+    _ie.evaluate, _ie.regime_gate = _real_eval, _real_gate
+
+# The constraints page sizes a stock the way _hunt_stocks does: with costs
+# inside the cap, the largest size whose stop-out PLUS its round trip fits.
+ep = stock_engine(risk_includes_costs=True, max_risk_pct_per_trade=5.0)
+ep.feed.store.ltp[0], ep.feed.store.bid[0], ep.feed.store.ask[0] = 500.0, 499.95, 500.05
+ep.verdicts["AAA"] = _verdict
+ep.evaluated_at["AAA"] = ep.verdict_at["AAA"] = _time.time()
+ep.stock_structures["AAA"] = SimpleNamespace(closes=[500.0], invalidation=lambda side: 490.0)
+_srow = _cons._stock_rows(ep, _time.time())[0]
+
+
+def _rt(q, px=500.05, bid=499.95, ask=500.05):
+    return (leg_cost(px, q, "BUY", "EQ", ep.cm) + leg_cost(px, q, "SELL", "EQ", ep.cm)
+            + 2 * ep.cm.slippage_points() * q + (ask - bid) * q)
+
+
+_want = max(q for q in range(0, 51) if 10.0 * q + _rt(q) <= 500.0)
+_shown = int(str(_srow["risk"]["v"]).split("·")[1].split("sh")[0])
+check("D-L3: the page sizes a stock by the engine's costs-inside bisection",
+      _shown == _want and _want < 50 and _srow["risk"]["ok"] is True,
+      f"page {_srow['risk']['v']} vs {_want} shares (cap/stop alone: 50)")
+check("D-L3: ...and shows the stop plus its costs against the cap",
+      abs(float(str(_srow["risk"]["v"]).split("·")[0].strip(" ₹").replace(",", ""))
+          - round(10.0 * _want + _rt(_want))) <= 1.0,
+      f"{_srow['risk']}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 section("4. The desk: whole-day figures after a restart, retried history")
 
 import numpy as np
@@ -248,8 +423,27 @@ c = _DeskCandles()
 desk = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, c, IntradayLimits(), api=_Api(fail=2))
 got = desk._live()
 check("a scan after a mid-day restart reads the exchange's day open/high/low and day volume",
-      got.get("AAA") == {"open": 500.0, "high": 520.0, "low": 495.0, "ltp": 518.0, "volume": 4e5},
+      got.get("AAA") == {"open": 500.0, "high": 520.0, "low": 495.0, "ltp": 518.0, "volume": 4e5,
+                         "recent_volume": None},
       str(got))
+check("...and admits it has no recent-window volume yet, rather than inventing one",
+      got["AAA"]["recent_volume"] is None)
+
+sd = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, _DeskCandles(), IntradayLimits())
+sd.candles._store.volume[0] = 1e5
+sd._snap(t=1000.0)
+sd.candles._store.volume[0] = 1.5e5
+sd._snap(t=1030.0)                          # inside the minute: not recorded
+check("volume is snapshotted at most once a minute", len(sd._vol_snaps) == 1)
+check("a window not yet 15 minutes old is unknown",
+      sd._recent_volume("AAA", 3e5, t=1000.0 + 10 * 60) is None)
+check("once it is, recent volume is today's counter minus the snapshot",
+      sd._recent_volume("AAA", 3e5, t=1000.0 + 15 * 60) == 2e5)
+z = StockDesk({"AAA": {"eq_token": "11"}}, {"AAA": 0}, _DeskCandles(), IntradayLimits())
+z.candles._store.volume[0] = 0.0
+z._snap(t=1000.0)
+check("a snapshot from before the stock's first tick is not a zero base",
+      z._recent_volume("AAA", 3e5, t=1000.0 + 20 * 60) is None)
 desk._seed_all(["AAA"], gap_sec=0.0, tries=4, backoff_sec=0.0)
 check("history refused for rate is retried, not given up on",
       "AAA" in c.seeded and desk.api.calls == 3,
@@ -272,6 +466,47 @@ desk._seed_all(["AAA"], gap_sec=0.0, tries=2, backoff_sec=0.0)
 check("...and the next rescan loads today's history once the API answers",
       desk.api.calls == calls + 1 and "AAA" in desk._seeded and "AAA" not in desk._disk_only
       and c.seeded["AAA"] != saved, f"{desk.api.calls - calls} more calls")
+
+section("5. Stocks: the index's risk cap unless set, never above 7% (owner, 6 Oct 2026)")
+from arb.config import stock_risk_pct
+L5 = IntradayLimits()
+L5.max_risk_pct_per_trade = 6.0
+L5.stocks_max_risk_pct = 0.0
+check("unset: a stock uses the index cap (6%)", stock_risk_pct(L5) == 6.0)
+L5.stocks_max_risk_pct = 7.0
+check("set to 7: a stock may risk 7%, the index cap stays 6%",
+      stock_risk_pct(L5) == 7.0 and L5.max_risk_pct_per_trade == 6.0)
+L5.stocks_max_risk_pct = 80.0
+check("a typo of 80 is held to the 7% ceiling", stock_risk_pct(L5) == 7.0)
+L5.max_risk_pct_per_trade, L5.stocks_max_risk_pct = 9.0, 0.0
+check("even the index cap raised to 9% leaves stocks at 7%", stock_risk_pct(L5) == 7.0)
+L5.max_risk_pct_per_trade, L5.stocks_max_risk_pct = 6.0, 7.0
+L6 = IntradayLimits()
+L6.max_risk_pct_per_trade = 6.0
+L6.stocks_max_risk_pct = 0.0
+# A wide stop (risk-bound size): the larger cap buys more shares, so the fixed
+# fees are a smaller share of the risk and the cost ratio falls.
+r8 = scan_cost_ratio(999.9, 1000.1, 15.0, 10_000.0, L5, CM)
+r6 = scan_cost_ratio(999.9, 1000.1, 15.0, 10_000.0, L6, CM)
+check("the scan's cost ratio uses the stock cap (7% < 6% ratio on a risk-bound size)",
+      r8 is not None and r6 is not None and r8 < r6, f"7%: {r8:.3f}  6%: {r6:.3f}")
+
+import builtins as _bi
+import arb.stockdesk as _sd
+_desk = _sd.StockDesk.__new__(_sd.StockDesk)
+_desk.L, _desk._same_key, _desk._same = IntradayLimits(), None, ({}, {})
+_desk._vol_day, _desk._vol_prof, _desk._vol_busy = None, {}, False
+_opened, _real_open = [], _bi.open
+_started = []
+_real_start = threading.Thread.start
+threading.Thread.start = lambda self: _started.append(self.name)
+_bi.open = lambda *a, **k: (_opened.append(a[0]), _real_open(*a, **k))[1]
+try:
+    first = _desk.same_time_for({"ABC": None}, 600)
+finally:
+    _bi.open, threading.Thread.start = _real_open, _real_start
+check("relative volume history is never read on the scan's own thread (21 Oct freeze)",
+      first == ({}, {}) and not _opened and _started == ["stock-volume"], f"{_opened} {_started}")
 
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")

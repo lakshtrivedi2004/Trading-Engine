@@ -1,0 +1,139 @@
+FIXED live, whole year (frozen halt)     n= 87 win= 53% Rs +10,690 (IN  +2,652 / OUT  +8,039) maxDD  4,058
+cache halt 20.20035, cfg 378066f05af5
+
+=== 1. independent re-implementation vs the original result file ===
+  R1 weekly W=40             re-run n=206 Rs  -5,257   original (206, -5257)  OK
+  R1 weekly W=40 plateau     re-run n=196 Rs  -4,027   original (196, -4027)  OK
+  R1 weekly W=60             re-run n=176 Rs  -2,912   original (176, -2912)  OK
+  R1 weekly W=60 plateau     re-run n=175 Rs  -6,019   original (175, -6019)  OK
+  R1 weekly W=120            re-run n= 88 Rs  -5,326   original (88, -5326)  OK
+  R1 weekly W=120 plateau    re-run n= 78 Rs  -5,495   original (78, -5495)  OK
+  R1 weekly W=all            re-run n=152 Rs    -183   original (152, -183)  OK
+  R1 weekly W=all plateau    re-run n=146 Rs  -1,405   original (146, -1405)  OK
+  R1 monthly W=40            re-run n=206 Rs -10,170   original (206, -10170)  OK
+  R1 monthly W=40 plateau    re-run n=197 Rs  -5,645   original (197, -5645)  OK
+  R1 monthly W=60            re-run n=161 Rs  -3,364   original (161, -3364)  OK
+  R1 monthly W=60 plateau    re-run n=170 Rs  -9,471   original (170, -9471)  OK
+  R1 monthly W=120           re-run n= 80 Rs  -7,682   original (80, -7682)  OK
+  R1 monthly W=120 plateau   re-run n= 73 Rs  -7,810   original (73, -7810)  OK
+  R1 monthly W=all           re-run n=143 Rs  +1,600   original (143, 1600)  OK
+  R1 monthly W=all plateau   re-run n=142 Rs    +512   original (142, 512)  OK
+  R2 weekly W=40             re-run n=137 Rs  -7,393   original (137, -7393)  OK
+  R2 weekly W=40 plateau     re-run n=111 Rs  -5,340   original (111, -5340)  OK
+  R2 weekly W=60             re-run n=120 Rs  +1,418   original (120, 1418)  OK
+  R2 weekly W=60 plateau     re-run n=106 Rs    +118   original (106, 118)  OK
+  R2 weekly W=120            re-run n= 64 Rs    -793   original (64, -793)  OK
+  R2 weekly W=120 plateau    re-run n= 56 Rs  +1,904   original (56, 1904)  OK
+  R2 weekly W=all            re-run n=111 Rs    -360   original (111, -360)  OK
+  R2 weekly W=all plateau    re-run n=101 Rs  -3,607   original (101, -3607)  OK
+  R2 monthly W=40            re-run n=110 Rs    +793   original (110, 793)  OK
+  R2 monthly W=40 plateau    re-run n= 99 Rs     +11   original (99, 11)  OK
+  R2 monthly W=60            re-run n=100 Rs    -570   original (100, -570)  OK
+  R2 monthly W=60 plateau    re-run n=100 Rs  +1,152   original (100, 1152)  OK
+  R2 monthly W=120           re-run n= 61 Rs  -1,051   original (61, -1051)  OK
+  R2 monthly W=120 plateau   re-run n= 56 Rs    -460   original (56, -460)  OK
+  R2 monthly W=all           re-run n=113 Rs  +5,060   original (113, 5060)  OK
+  R2 monthly W=all plateau   re-run n= 96 Rs    +777   original (96, 777)  OK
+  mismatches: 0
+
+=== 2. common window 2026-03-17.. : fixed on EXACTLY the days each variant trades ===
+  R1 weekly W=120            trades 130/134 common days: WF Rs -5,326 vs fixed on same days Rs +6,655 (original compared with fixed on all 134: Rs+6,081)
+  R1 weekly W=120 plateau    trades 130/134 common days: WF Rs -5,495 vs fixed on same days Rs +6,655 (original compared with fixed on all 134: Rs+6,081)
+  R1 monthly W=120           trades 125/134 common days: WF Rs -7,682 vs fixed on same days Rs +6,089 (original compared with fixed on all 134: Rs+6,081)
+  R1 monthly W=120 plateau   trades 125/134 common days: WF Rs -7,810 vs fixed on same days Rs +6,089 (original compared with fixed on all 134: Rs+6,081)
+  R2 weekly W=120            trades 130/134 common days: WF Rs   -793 vs fixed on same days Rs +6,655 (original compared with fixed on all 134: Rs+6,081)
+  R2 weekly W=120 plateau    trades 130/134 common days: WF Rs +1,904 vs fixed on same days Rs +6,655 (original compared with fixed on all 134: Rs+6,081)
+  R2 monthly W=120           trades 125/134 common days: WF Rs -1,051 vs fixed on same days Rs +6,089 (original compared with fixed on all 134: Rs+6,081)
+  R2 monthly W=120 plateau   trades 125/134 common days: WF Rs   -460 vs fixed on same days Rs +6,089 (original compared with fixed on all 134: Rs+6,081)
+
+=== 3. rank of the LIVE fixed set among random fixed grid combinations (6 values from the grid) ===
+  year: live Rs +10,690 beats 100.0% of 3000 random combos (median Rs-6,988, 90th pct Rs+1,903, max Rs+9,941)
+  IN  : live Rs  +2,652 beats  99.7% of 3000 random combos (median Rs-8,054, 90th pct Rs-1,885, max Rs+5,053)
+  OUT : live Rs  +8,039 beats 100.0% of 3000 random combos (median Rs+1,318, 90th pct Rs+4,995, max Rs+8,108)
+  uniform settings, whole year:
+    all indices 0/0                          n=420 win= 36% Rs -32,025 (IN -23,096 / OUT  -8,929) maxDD 37,312
+    all indices 1/1                          n=277 win= 38% Rs -20,575 (IN -16,671 / OUT  -3,905) maxDD 24,787
+    all indices 1.1/1.1                      n=191 win= 41% Rs  -8,157 (IN -10,146 / OUT  +1,989) maxDD 11,804
+    all indices 1.2/1.2                      n=128 win= 44% Rs    -689 (IN  -3,839 / OUT  +3,150) maxDD  6,854
+    all indices 1.3/1.3                      n= 80 win= 48% Rs    -264 (IN  -3,408 / OUT  +3,144) maxDD  5,381
+    all indices 1.4/1.4                      n= 51 win= 47% Rs    -589 (IN  -4,182 / OUT  +3,594) maxDD  6,507
+    all indices 1.5/1.5                      n= 35 win= 49% Rs    +685 (IN  -4,254 / OUT  +4,939) maxDD  6,323
+    all indices 1.6/1.6                      n= 24 win= 54% Rs  +1,580 (IN  -4,071 / OUT  +5,651) maxDD  5,986
+    all indices 1.8/1.8                      n= 15 win= 53% Rs  -1,261 (IN  -2,163 / OUT    +902) maxDD  3,371
+
+=== 4. each variant vs NON-hindsight fixed baselines on its own days (year Rs / IN / OUT) ===
+    fit-once = the variant's FIRST rebalance choice, held for every later day
+
+  R1 weekly W=40             WF  -5,257 (-4,649/  -608) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -6,078 (-2,457/-3,621)
+  R1 weekly W=40 plateau     WF  -4,027 (-2,040/-1,987) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -6,269 (-6,441/  +172)
+  R1 weekly W=60             WF  -2,912 (-1,125/-1,787) | live  +9,962 (+1,924/+8,039) | gate off -18,365 (-9,436/-8,929) | all 1.2  +1,336 (-1,814/+3,150) | fit-once  +2,821 (  +816/+2,004)
+  R1 weekly W=60 plateau     WF  -6,019 (-1,151/-4,868) | live  +9,962 (+1,924/+8,039) | gate off -18,365 (-9,436/-8,929) | all 1.2  +1,336 (-1,814/+3,150) | fit-once    +175 (-1,584/+1,759)
+  R1 weekly W=120            WF  -5,326 (-5,124/  -202) | live  +6,655 (-1,384/+8,039) | gate off -15,509 (-6,579/-8,929) | all 1.2    +380 (-2,770/+3,150) | fit-once  +2,265 (-2,536/+4,802)
+  R1 weekly W=120 plateau    WF  -5,495 (-5,403/   -92) | live  +6,655 (-1,384/+8,039) | gate off -15,509 (-6,579/-8,929) | all 1.2    +380 (-2,770/+3,150) | fit-once    +919 (-3,126/+4,046)
+  R1 weekly W=all            WF    -183 (-4,558/+4,375) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -6,078 (-2,457/-3,621)
+  R1 weekly W=all plateau    WF  -1,405 (-3,015/+1,610) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -6,269 (-6,441/  +172)
+  R1 monthly W=40            WF -10,170 (-4,478/-5,692) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  -6,991 (-2,747/-4,244)
+  R1 monthly W=40 plateau    WF  -5,645 (   +38/-5,683) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  -3,348 (-3,653/  +305)
+  R1 monthly W=60            WF  -3,364 (-2,655/  -709) | live  +8,909 (  +870/+8,039) | gate off -18,326 (-9,397/-8,929) | all 1.2    -550 (-3,700/+3,150) | fit-once    -115 (-3,238/+3,124)
+  R1 monthly W=60 plateau    WF  -9,471 (-5,379/-4,092) | live  +8,909 (  +870/+8,039) | gate off -18,326 (-9,397/-8,929) | all 1.2    -550 (-3,700/+3,150) | fit-once  -1,712 (-3,471/+1,759)
+  R1 monthly W=120           WF  -7,682 (-5,337/-2,345) | live  +6,089 (-1,949/+8,039) | gate off -15,143 (-6,214/-8,929) | all 1.2    -186 (-3,336/+3,150) | fit-once  +1,193 (-3,609/+4,802)
+  R1 monthly W=120 plateau   WF  -7,810 (-6,232/-1,578) | live  +6,089 (-1,949/+8,039) | gate off -15,143 (-6,214/-8,929) | all 1.2    -186 (-3,336/+3,150) | fit-once    -153 (-4,199/+4,046)
+  R1 monthly W=all           WF  +1,600 (-2,118/+3,718) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  +2,374 (  +369/+2,004)
+  R1 monthly W=all plateau   WF    +512 (-1,098/+1,610) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  -3,029 (-4,393/+1,364)
+  R2 weekly W=40             WF  -7,393 (-8,555/+1,162) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once    +997 (-2,845/+3,842)
+  R2 weekly W=40 plateau     WF  -5,340 (-7,932/+2,592) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -2,770 (-5,900/+3,130)
+  R2 weekly W=60             WF  +1,418 (-2,436/+3,854) | live  +9,962 (+1,924/+8,039) | gate off -18,365 (-9,436/-8,929) | all 1.2  +1,336 (-1,814/+3,150) | fit-once  +3,810 (   -33/+3,842)
+  R2 weekly W=60 plateau     WF    +118 (-3,493/+3,611) | live  +9,962 (+1,924/+8,039) | gate off -18,365 (-9,436/-8,929) | all 1.2  +1,336 (-1,814/+3,150) | fit-once  +2,068 (-3,347/+5,414)
+  R2 weekly W=120            WF    -793 (-5,936/+5,143) | live  +6,655 (-1,384/+8,039) | gate off -15,509 (-6,579/-8,929) | all 1.2    +380 (-2,770/+3,150) | fit-once  +2,334 (-2,621/+4,955)
+  R2 weekly W=120 plateau    WF  +1,904 (-4,065/+5,969) | live  +6,655 (-1,384/+8,039) | gate off -15,509 (-6,579/-8,929) | all 1.2    +380 (-2,770/+3,150) | fit-once    +921 (-3,211/+4,132)
+  R2 weekly W=all            WF    -360 (-2,133/+1,773) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once    +997 (-2,845/+3,842)
+  R2 weekly W=all plateau    WF  -3,607 (-6,379/+2,772) | live  +9,024 (  +985/+8,039) | gate off -25,224 (-16,294/-8,929) | all 1.2    -832 (-3,982/+3,150) | fit-once  -2,770 (-5,900/+3,130)
+  R2 monthly W=40            WF    +793 (-4,179/+4,971) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  +2,141 (-1,702/+3,842)
+  R2 monthly W=40 plateau    WF     +11 (-5,324/+5,335) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once     -56 (-5,471/+5,414)
+  R2 monthly W=60            WF    -570 (-5,547/+4,977) | live  +8,909 (  +870/+8,039) | gate off -18,326 (-9,397/-8,929) | all 1.2    -550 (-3,700/+3,150) | fit-once  +1,923 (-1,919/+3,842)
+  R2 monthly W=60 plateau    WF  +1,152 (-5,447/+6,600) | live  +8,909 (  +870/+8,039) | gate off -18,326 (-9,397/-8,929) | all 1.2    -550 (-3,700/+3,150) | fit-once    +733 (-4,681/+5,414)
+  R2 monthly W=120           WF  -1,051 (-5,642/+4,591) | live  +6,089 (-1,949/+8,039) | gate off -15,143 (-6,214/-8,929) | all 1.2    -186 (-3,336/+3,150) | fit-once    +933 (-3,084/+4,017)
+  R2 monthly W=120 plateau   WF    -460 (-6,232/+5,772) | live  +6,089 (-1,949/+8,039) | gate off -15,143 (-6,214/-8,929) | all 1.2    -186 (-3,336/+3,150) | fit-once    +204 (-3,674/+3,878)
+  R2 monthly W=all           WF  +5,060 (+1,042/+4,017) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once  +2,141 (-1,702/+3,842)
+  R2 monthly W=all plateau   WF    +777 (-2,071/+2,848) | live  +9,688 (+1,649/+8,039) | gate off -22,015 (-13,086/-8,929) | all 1.2    +312 (-2,838/+3,150) | fit-once     -56 (-5,471/+5,414)
+
+  variants beating the baseline in BOTH halves: live 0/32, gate off 30/32, all 1.2 2/32, fit-once 3/32
+  variants beating the baseline on the total:   live 0/32, gate off 32/32, all 1.2 10/32, fit-once 10/32
+
+=== 5. noise: spread of variants and week-block bootstrap of (walk-forward - fixed live) ===
+  WF - fixed over the 32 variants (own days): median Rs-10,136, IQR Rs-13,803 .. -8,807, best Rs-4,628, worst Rs-19,858; 0/32 positive
+  bootstrap (5000 resamples of ISO weeks, run() has no cross-day state so day P&L is additive):
+    R1 weekly W=40             weeks 45 diff Rs -14,281  90% CI Rs -26,610 ..     -809  P(diff>0)  4.0%
+    R1 weekly W=40 plateau     weeks 45 diff Rs -13,051  90% CI Rs -25,132 ..      +52  P(diff>0)  5.0%
+    R1 weekly W=60             weeks 41 diff Rs -12,875  90% CI Rs -25,458 ..      +30  P(diff>0)  5.0%
+    R1 weekly W=60 plateau     weeks 41 diff Rs -15,981  90% CI Rs -29,716 ..   -2,111  P(diff>0)  2.7%
+    R1 weekly W=120            weeks 28 diff Rs -11,982  90% CI Rs -20,562 ..   -3,633  P(diff>0)  0.7%
+    R1 weekly W=120 plateau    weeks 28 diff Rs -12,150  90% CI Rs -20,323 ..   -4,349  P(diff>0)  0.3%
+    R1 weekly W=all            weeks 45 diff Rs  -9,206  90% CI Rs -18,759 ..     +360  P(diff>0)  5.7%
+    R1 weekly W=all plateau    weeks 45 diff Rs -10,428  90% CI Rs -20,905 ..      +41  P(diff>0)  5.1%
+    R1 monthly W=40            weeks 44 diff Rs -19,858  90% CI Rs -32,933 ..   -6,572  P(diff>0)  0.8%
+    R1 monthly W=40 plateau    weeks 44 diff Rs -15,333  90% CI Rs -28,432 ..   -1,654  P(diff>0)  3.2%
+    R1 monthly W=60            weeks 40 diff Rs -12,273  90% CI Rs -24,892 ..     +369  P(diff>0)  5.5%
+    R1 monthly W=60 plateau    weeks 40 diff Rs -18,380  90% CI Rs -31,863 ..   -5,119  P(diff>0)  1.1%
+    R1 monthly W=120           weeks 27 diff Rs -13,771  90% CI Rs -22,641 ..   -5,432  P(diff>0)  0.2%
+    R1 monthly W=120 plateau   weeks 27 diff Rs -13,900  90% CI Rs -22,726 ..   -5,746  P(diff>0)  0.1%
+    R1 monthly W=all           weeks 44 diff Rs  -8,088  90% CI Rs -17,573 ..   +1,680  P(diff>0)  8.3%
+    R1 monthly W=all plateau   weeks 44 diff Rs  -9,176  90% CI Rs -19,216 ..     +888  P(diff>0)  6.7%
+    R2 weekly W=40             weeks 45 diff Rs -16,417  90% CI Rs -26,115 ..   -6,878  P(diff>0)  0.3%
+    R2 weekly W=40 plateau     weeks 45 diff Rs -14,363  90% CI Rs -24,748 ..   -4,244  P(diff>0)  1.0%
+    R2 weekly W=60             weeks 41 diff Rs  -8,544  90% CI Rs -20,324 ..   +2,882  P(diff>0) 11.1%
+    R2 weekly W=60 plateau     weeks 41 diff Rs  -9,844  90% CI Rs -21,007 ..   +1,016  P(diff>0)  6.7%
+    R2 weekly W=120            weeks 28 diff Rs  -7,448  90% CI Rs -15,290 ..     -220  P(diff>0)  4.4%
+    R2 weekly W=120 plateau    weeks 28 diff Rs  -4,751  90% CI Rs -13,154 ..   +2,320  P(diff>0) 14.0%
+    R2 weekly W=all            weeks 45 diff Rs  -9,384  90% CI Rs -18,813 ..     +360  P(diff>0)  5.5%
+    R2 weekly W=all plateau    weeks 45 diff Rs -12,631  90% CI Rs -22,598 ..   -2,981  P(diff>0)  1.2%
+    R2 monthly W=40            weeks 44 diff Rs  -8,895  90% CI Rs -19,598 ..   +1,218  P(diff>0)  7.9%
+    R2 monthly W=40 plateau    weeks 44 diff Rs  -9,677  90% CI Rs -19,909 ..     +843  P(diff>0)  6.5%
+    R2 monthly W=60            weeks 40 diff Rs  -9,478  90% CI Rs -20,873 ..   +1,352  P(diff>0)  7.8%
+    R2 monthly W=60 plateau    weeks 40 diff Rs  -7,756  90% CI Rs -18,607 ..   +3,461  P(diff>0) 12.2%
+    R2 monthly W=120           weeks 27 diff Rs  -7,140  90% CI Rs -15,638 ..     +954  P(diff>0)  7.7%
+    R2 monthly W=120 plateau   weeks 27 diff Rs  -6,549  90% CI Rs -14,597 ..   +1,014  P(diff>0)  8.2%
+    R2 monthly W=all           weeks 44 diff Rs  -4,628  90% CI Rs -12,316 ..   +3,288  P(diff>0) 16.7%
+    R2 monthly W=all plateau   weeks 44 diff Rs  -8,911  90% CI Rs -18,818 ..     +611  P(diff>0)  6.4%
+  vs gate off: WF ahead in 32/32 variants; P(diff>0) median 99%, variants with P>95%: 27, with P<5%: 0
+  vs fit-once: WF ahead in 10/32 variants; P(diff>0) median 35%, variants with P>95%: 0, with P<5%: 4

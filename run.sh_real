@@ -31,7 +31,7 @@ dim()   { printf '\033[2m%s\033[0m\n' "$*"; }
 [ -f .angel.env ] || { red ".angel.env missing"; exit 1; }
 
 live_pid() {
-  pgrep -f "run_bot.py --mode live" | head -n1 || true
+  pgrep -f "^venv/bin/python run_bot.py --mode live" | head -n1 || true
 }
 
 cmd="${1:-start}"
@@ -40,8 +40,8 @@ case "$cmd" in
     pid=$(live_pid)
     if [ -n "$pid" ]; then
       kill "$pid" && green "stopping LIVE engine (pid $pid) - it squares off open positions first"
-      for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-      kill -0 "$pid" 2>/dev/null && red "still running after 30s - check the log and the Angel app" || green "stopped"
+      for _ in $(seq 1 150); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      kill -0 "$pid" 2>/dev/null && red "still running after 150s - check the log and the Angel app" || green "stopped"
       rm -f "$PIDFILE"
     else dim "no live engine running"; fi
     exit 0 ;;
@@ -100,6 +100,18 @@ if held:
     print("\033[31mthe account already holds positions the engine did not open:\033[0m")
     for h in held: print("   ", h)
     print("close them in the Angel app first"); sys.exit(1)
+if L.exit_safety_fixes:
+    from arb.execution import LiveBroker
+    working = LiveBroker(api, None).open_orders()
+    if working is None:
+        print("\033[31mcould not read the Angel order book\033[0m"); sys.exit(1)
+    theirs = [w for w in working if not w["tag"].startswith("TE")]
+    for w in working:
+        print(f"  working order         {w['oid']} {w['symbol']} {w['side']} {w['status']}"
+              + ("  (the engine's own; cancelled at start)" if w["tag"].startswith("TE") else ""))
+    if theirs:
+        print("\033[31mthe account has working orders the engine did not place - cancel them in the Angel app first\033[0m")
+        sys.exit(1)
 risk = funds * L.max_risk_pct_per_trade / 100
 halt = funds * L.max_daily_loss_pct / 100
 print(f"  available funds       Rs {funds:,.2f}  ({src})")
@@ -115,6 +127,13 @@ echo
 red  "This places REAL orders with REAL money. Every trade can lose."
 dim  "The research log (research/PAPERS.md 0f-0i) has not shown a proven edge after costs;"
 dim  "the stock desk has not yet passed its replay. Start small and watch the first day."
+# 5 Oct 12:36: started from VS Code's terminal, the engine shared VS Code's snap
+# cgroup (OOMPolicy=stop) and was killed with it when memory ran out.
+if grep -q "snap.code" /proc/self/cgroup 2>/dev/null; then
+  red  "WARNING: this terminal is inside VS Code's memory group (snap.code)."
+  dim  "If VS Code or a research job runs out of memory, the LIVE engine is killed with it."
+  dim  "Prefer starting from a normal system terminal (GNOME Terminal), not VS Code's."
+fi
 printf 'Type REAL to start live trading: '
 read -r answer
 if [ "$answer" != "REAL" ]; then
@@ -125,6 +144,20 @@ mkdir -p "$LOGDIR"
 log="$LOGDIR/live_session_$(date +%Y%m%d_%H%M%S).log"
 nohup "$PY" run_bot.py --mode live --yes --port "$PORT" "$@" >"$log" 2>&1 &
 echo $! > "$PIDFILE"
+
+# Keep the laptop awake while real money is at risk (same lock as ./run.sh:110-120).
+# On 29 Sep a closed lid suspended the paper engine 10:20-10:38: no ticks, no exits.
+inhibit_ok=0
+block=$("$PY" -c 'import sys; sys.path.insert(0, "."); from arb.config import IntradayLimits as L; print(int(bool(getattr(L.load(), "live_block_sleep", False))))' 2>/dev/null || echo 0)
+if [ "$block" = 1 ] && command -v systemd-inhibit >/dev/null 2>&1; then
+  epid=$(cat "$PIDFILE")
+  nohup systemd-inhibit --what=sleep:idle:handle-lid-switch --mode=block \
+    --who="Trading-Engine" --why="LIVE engine running (pid $epid)" \
+    tail --pid="$epid" -f /dev/null >/dev/null 2>&1 &
+  ipid=$!
+  sleep 1
+  kill -0 "$ipid" 2>/dev/null && inhibit_ok=1
+fi
 
 for _ in $(seq 1 90); do
   if grep -q "scanning (live)" "$log" 2>/dev/null; then break; fi
@@ -138,4 +171,9 @@ green "LIVE engine running (pid $(cat "$PIDFILE"))"
 dim  "dashboard  http://0.0.0.0:$PORT"
 dim  "log        $log"
 dim  "stop       ./run.sh_real stop   ·  follow  ./run.sh_real logs"
+if [ "$inhibit_ok" = 1 ]; then
+  dim "sleep      blocked while the LIVE engine runs (closing the lid will not suspend)"
+else
+  red "sleep NOT blocked - keep the lid open and on charge; a suspended laptop cannot exit a position"
+fi
 grep -E "LIVE funds|stocks  " "$log" | sed 's/^/  /' || true

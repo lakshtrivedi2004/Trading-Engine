@@ -1,0 +1,221 @@
+pace = arb.regime.atr_ratio, atr_period 20, atr_baseline_bars 200, atr_by_index {'NIFTY': [1.3, 1.5], 'BANKNIFTY': [1.5, 1.5], 'SENSEX': [1.2, 1.2], 'MIDCPNIFTY': [0.8, 0.8], 'FINNIFTY': [1.5, 1.7]}, split 12:15
+final store: research_out/pace_live/final_20261005
+
+A. Logged pace (run_bot.py, engine._atr_ratio, forming bar included) vs
+   arb.regime.atr_ratio(period=20, baseline_bars=200) on the final stored bars
+   (Angel history after the engine's refreshes).
+   Variants: closed = bars before the logging minute (what regime_gate gets);
+   full = closed + the whole bar of the logging minute; part = closed +
+   that bar shrunk to the seconds elapsed (sqrt-time range).
+
+   readings parsed 1812, reconstructable 1812, capped at 2.00/0.50 23 (left out of the stats below)
+
+ all days
+  logged - closed                    n=1784 median|d|=0.038 p95|d|=0.190 max|d|=0.552 mean d=-0.012 <=0.01:  16% <=0.05:  62%
+  logged - full                      n=1784 median|d|=0.029 p95|d|=0.183 max|d|=0.539 mean d=-0.009 <=0.01:  22% <=0.05:  65%
+  logged - part                      n=1784 median|d|=0.020 p95|d|=0.182 max|d|=0.482 mean d=+0.007 <=0.01:  31% <=0.05:  74%
+ 29 Sep
+  logged - closed                    n= 630 median|d|=0.037 p95|d|=0.149 max|d|=0.522 mean d=-0.042 <=0.01:  13% <=0.05:  67%
+  logged - full                      n= 630 median|d|=0.033 p95|d|=0.136 max|d|=0.539 mean d=-0.041 <=0.01:  18% <=0.05:  65%
+  logged - part                      n= 630 median|d|=0.017 p95|d|=0.096 max|d|=0.482 mean d=-0.019 <=0.01:  33% <=0.05:  83%
+ 5 Oct
+  logged - closed                    n=1154 median|d|=0.038 p95|d|=0.200 max|d|=0.552 mean d=+0.004 <=0.01:  18% <=0.05:  60%
+  logged - full                      n=1154 median|d|=0.028 p95|d|=0.192 max|d|=0.516 mean d=+0.008 <=0.01:  25% <=0.05:  65%
+  logged - part                      n=1154 median|d|=0.022 p95|d|=0.191 max|d|=0.450 mean d=+0.022 <=0.01:  30% <=0.05:  69%
+
+ by index (logged - part)
+  BANKNIFTY                          n= 527 median|d|=0.016 p95|d|=0.175 max|d|=0.450 mean d=+0.006 <=0.01:  36% <=0.05:  78%
+  FINNIFTY                           n= 100 median|d|=0.096 p95|d|=0.225 max|d|=0.254 mean d=+0.098 <=0.01:  15% <=0.05:  39%
+  MIDCPNIFTY                         n= 100 median|d|=0.074 p95|d|=0.170 max|d|=0.368 mean d=+0.076 <=0.01:  19% <=0.05:  40%
+  NIFTY                              n= 529 median|d|=0.027 p95|d|=0.192 max|d|=0.482 mean d=-0.005 <=0.01:  24% <=0.05:  72%
+  SENSEX                             n= 528 median|d|=0.014 p95|d|=0.108 max|d|=0.370 mean d=-0.009 <=0.01:  40% <=0.05:  85%
+
+ forming-bar effect on the final bars (part - closed): the log is not the gate's number
+  part - closed                      n=1784 median|d|=0.023 p95|d|=0.078 max|d|=0.657 mean d=-0.020 <=0.01:  24% <=0.05:  83%
+  full - closed                      n=1784 median|d|=0.018 p95|d|=0.072 max|d|=0.636 mean d=-0.003 <=0.01:  31% <=0.05:  88%
+
+ clean readings (no dead feed in the last 20 min, no restart hole): 1478
+  logged - closed                    n=1478 median|d|=0.033 p95|d|=0.166 max|d|=0.552 mean d=+0.002 <=0.01:  17% <=0.05:  65%
+  logged - part                      n=1478 median|d|=0.018 p95|d|=0.163 max|d|=0.370 mean d=+0.019 <=0.01:  33% <=0.05:  77%
+  feed dead in last 20 min: logged - part n=  96 median|d|=0.087 p95|d|=0.350 max|d|=0.450 mean d=-0.097 <=0.01:  11% <=0.05:  32%
+  restart hole: logged - part        n= 211 median|d|=0.023 p95|d|=0.287 max|d|=0.482 mean d=-0.029 <=0.01:  26% <=0.05:  72%
+
+ clean readings by session (logged - part)
+  live_session_20260929_132359.log   n=   6 median|d|=0.012 p95|d|=0.028 max|d|=0.028 mean d=-0.010 <=0.01:  50% <=0.05: 100%
+  live_session_20260929_132827.log   n= 255 median|d|=0.013 p95|d|=0.056 max|d|=0.078 mean d=-0.011 <=0.01:  39% <=0.05:  94%
+  live_session_20261005_091840.log   n= 506 median|d|=0.059 p95|d|=0.201 max|d|=0.370 mean d=+0.072 <=0.01:  16% <=0.05:  46%
+  live_session_20261005_111748.log   n= 129 median|d|=0.006 p95|d|=0.028 max|d|=0.035 mean d=-0.006 <=0.01:  67% <=0.05: 100%
+  live_session_20261005_124838.log   n=  66 median|d|=0.009 p95|d|=0.026 max|d|=0.033 mean d=-0.008 <=0.01:  52% <=0.05: 100%
+  live_session_20261005_131346.log   n= 360 median|d|=0.015 p95|d|=0.055 max|d|=0.101 mean d=-0.003 <=0.01:  38% <=0.05:  92%
+  session_20260929_105547.log        n=   4 median|d|=0.018 p95|d|=0.025 max|d|=0.025 mean d=+0.016 <=0.01:  25% <=0.05: 100%
+  session_20260929_111756.log        n=  33 median|d|=0.040 p95|d|=0.094 max|d|=0.115 mean d=-0.020 <=0.01:  15% <=0.05:  64%
+  session_20260929_114726.log        n=   4 median|d|=0.024 p95|d|=0.037 max|d|=0.037 mean d=+0.023 <=0.01:  25% <=0.05: 100%
+  session_20260929_115232.log        n=  10 median|d|=0.008 p95|d|=0.034 max|d|=0.034 mean d=-0.009 <=0.01:  60% <=0.05: 100%
+  session_20260929_120257.log        n=  53 median|d|=0.016 p95|d|=0.052 max|d|=0.057 mean d=-0.016 <=0.01:  40% <=0.05:  94%
+  session_20260929_122931.log        n=  10 median|d|=0.054 p95|d|=0.162 max|d|=0.162 mean d=-0.066 <=0.01:   0% <=0.05:  40%
+  session_20260929_124116.log        n=  18 median|d|=0.042 p95|d|=0.091 max|d|=0.091 mean d=-0.040 <=0.01:  17% <=0.05:  61%
+  session_20260929_131039.log        n=  24 median|d|=0.005 p95|d|=0.017 max|d|=0.024 mean d=+0.003 <=0.01:  75% <=0.05: 100%
+
+ gate estimate (logged - forming-bar effect) vs backtest-equivalent closed pace, opposite sides of the threshold: 40 of 1784 (clean only: 27)
+   2026-09-29 13:29:36 SENSEX     gate~1.29 backtest 1.17 need 1.20 hole
+   2026-10-05 09:36:33 NIFTY      gate~1.32 backtest 1.29 need 1.30 
+   2026-10-05 09:38:33 SENSEX     gate~1.20 backtest 1.24 need 1.20 
+   2026-10-05 09:40:34 SENSEX     gate~1.21 backtest 1.19 need 1.20 
+   2026-10-05 10:29:39 NIFTY      gate~1.32 backtest 1.18 need 1.30 
+   2026-10-05 10:30:39 NIFTY      gate~1.33 backtest 1.16 need 1.30 
+   2026-10-05 10:32:39 NIFTY      gate~1.33 backtest 1.18 need 1.30 
+   2026-10-05 10:33:39 NIFTY      gate~1.34 backtest 1.18 need 1.30 
+   2026-10-05 10:34:40 NIFTY      gate~1.36 backtest 1.19 need 1.30 
+   2026-10-05 10:36:40 NIFTY      gate~1.36 backtest 1.21 need 1.30 
+   2026-10-05 10:37:40 NIFTY      gate~1.40 backtest 1.23 need 1.30 
+   2026-10-05 10:38:40 NIFTY      gate~1.35 backtest 1.20 need 1.30 
+   2026-10-05 10:39:40 NIFTY      gate~1.45 backtest 1.26 need 1.30 
+   2026-10-05 10:40:40 NIFTY      gate~1.49 backtest 1.28 need 1.30 
+   2026-10-05 10:41:40 SENSEX     gate~1.22 backtest 1.16 need 1.20 
+   2026-10-05 10:42:41 SENSEX     gate~1.20 backtest 1.14 need 1.20 
+   2026-10-05 10:43:41 NIFTY      gate~1.48 backtest 1.26 need 1.30 
+   2026-10-05 10:44:41 NIFTY      gate~1.50 backtest 1.26 need 1.30 
+   2026-10-05 12:10:01 SENSEX     gate~1.14 backtest 1.20 need 1.20 feed_dead
+   2026-10-05 13:46:58 SENSEX     gate~1.24 backtest 1.19 need 1.20 
+   2026-10-05 14:12:03 SENSEX     gate~1.21 backtest 1.19 need 1.20 
+   2026-10-05 14:15:03 NIFTY      gate~1.48 backtest 1.55 need 1.50 
+   2026-10-05 14:19:04 NIFTY      gate~1.48 backtest 1.55 need 1.50 
+   2026-09-29 11:19:03 BANKNIFTY  gate~1.35 backtest 1.54 need 1.50 hole
+   2026-09-29 11:20:03 BANKNIFTY  gate~1.30 backtest 1.56 need 1.50 hole
+   2026-09-29 11:21:04 BANKNIFTY  gate~1.35 backtest 1.58 need 1.50 hole
+   2026-09-29 11:22:04 BANKNIFTY  gate~1.36 backtest 1.57 need 1.50 hole
+   2026-09-29 11:23:04 BANKNIFTY  gate~1.33 backtest 1.55 need 1.50 hole
+   2026-09-29 11:30:05 BANKNIFTY  gate~1.47 backtest 1.51 need 1.50 hole
+   2026-09-29 11:49:35 NIFTY      gate~1.28 backtest 1.31 need 1.30 hole
+   2026-09-29 11:50:35 NIFTY      gate~1.28 backtest 1.32 need 1.30 hole
+   2026-09-29 11:51:35 SENSEX     gate~1.19 backtest 1.20 need 1.20 hole
+   2026-09-29 12:33:06 SENSEX     gate~1.08 backtest 1.22 need 1.20 
+   2026-09-29 12:42:20 NIFTY      gate~1.43 backtest 1.52 need 1.50 
+   2026-09-29 12:43:20 NIFTY      gate~1.48 backtest 1.54 need 1.50 
+   2026-09-29 12:44:21 NIFTY      gate~1.50 backtest 1.58 need 1.50 
+   2026-09-29 12:49:21 BANKNIFTY  gate~1.48 backtest 1.51 need 1.50 
+   2026-09-29 12:49:21 NIFTY      gate~1.47 backtest 1.50 need 1.50 
+   2026-09-29 12:50:21 BANKNIFTY  gate~1.45 backtest 1.52 need 1.50 feed_dead
+   2026-09-29 12:50:21 NIFTY      gate~1.43 backtest 1.52 need 1.50 feed_dead
+
+ readings where the logged value and the closed-bar value sit on opposite sides of the index's threshold: 54 of 1784
+
+ live-built bars: residual (logged - part) by minutes since the residual last reset
+ (a drop of > 0.04 = a history refresh replaced the live-built bars; clean readings)
+  live_session_20260929_132827.log   0-3 min: -0.027 (n=27)  4-7 min: -0.022 (n=24)  8-11 min: -0.006 (n=24)  12+ min: -0.007 (n=164)
+  live_session_20261005_091840.log   0-3 min: +0.039 (n=144)  4-7 min: +0.056 (n=124)  8-11 min: +0.083 (n=109)  12+ min: +0.130 (n=116)
+  live_session_20261005_131346.log   0-3 min: -0.039 (n=25)  4-7 min: +0.011 (n=21)  8-11 min: +0.007 (n=18)  12+ min: -0.007 (n=142)
+
+ largest |logged - part| (beyond what the forming-bar guess can explain):
+   2026-09-29 11:20:03 NIFTY      logged 1.44 closed 1.96 part 1.92 full 1.98  session_20260929_111756.log
+   2026-09-29 11:21:04 NIFTY      logged 1.47 closed 1.98 part 1.93 full 1.96  session_20260929_111756.log
+   2026-09-29 11:19:03 NIFTY      logged 1.46 closed 1.93 part 1.92 full 1.96  session_20260929_111756.log
+   2026-10-05 12:24:03 BANKNIFTY  logged 0.54 closed 1.01 part 0.99 full 1.06  live_session_20261005_111748.log
+   2026-10-05 12:25:03 NIFTY      logged 0.51 closed 1.01 part 0.95 full 1.00  live_session_20261005_111748.log
+   2026-09-29 11:24:04 NIFTY      logged 1.50 closed 1.93 part 1.92 full 1.95  session_20260929_111756.log
+   2026-09-29 11:23:04 NIFTY      logged 1.49 closed 1.95 part 1.90 full 1.93  session_20260929_111756.log
+   2026-09-29 11:22:04 NIFTY      logged 1.51 closed 1.96 part 1.91 full 1.95  session_20260929_111756.log
+   2026-09-29 11:25:05 NIFTY      logged 1.52 closed 1.95 part 1.92 full 1.94  session_20260929_111756.log
+   2026-10-05 12:23:03 BANKNIFTY  logged 0.59 closed 1.02 part 0.98 full 1.01  live_session_20261005_111748.log
+   2026-10-05 09:33:33 SENSEX     logged 1.63 closed 2.00 part 2.00 full 1.99  live_session_20261005_091840.log
+   2026-10-05 10:29:39 MIDCPNIFTY logged 1.48 closed 1.13 part 1.11 full 1.13  live_session_20261005_091840.log
+   2026-09-29 11:27:05 NIFTY      logged 1.51 closed 1.90 part 1.87 full 1.90  session_20260929_111756.log
+   2026-10-05 12:24:03 NIFTY      logged 0.59 closed 0.97 part 0.95 full 1.01  live_session_20261005_111748.log
+   2026-10-05 12:22:03 BANKNIFTY  logged 0.64 closed 1.04 part 0.99 full 1.02  live_session_20261005_111748.log
+   2026-09-29 11:26:05 NIFTY      logged 1.52 closed 1.94 part 1.87 full 1.90  session_20260929_111756.log
+   2026-09-29 11:28:05 NIFTY      logged 1.54 closed 1.90 part 1.88 full 1.93  session_20260929_111756.log
+   2026-10-05 12:24:03 SENSEX     logged 0.52 closed 0.88 part 0.85 full 0.90  live_session_20261005_111748.log
+   2026-10-05 12:21:02 BANKNIFTY  logged 0.70 closed 1.04 part 1.01 full 1.04  live_session_20261005_111748.log
+   2026-10-05 12:23:03 NIFTY      logged 0.64 closed 0.97 part 0.94 full 0.97  live_session_20261005_111748.log
+   2026-09-29 11:29:05 NIFTY      logged 1.56 closed 1.93 part 1.85 full 1.88  session_20260929_111756.log
+   2026-10-05 12:23:03 SENSEX     logged 0.56 closed 0.87 part 0.85 full 0.88  live_session_20261005_111748.log
+   2026-10-05 12:22:03 NIFTY      logged 0.68 closed 1.03 part 0.94 full 0.97  live_session_20261005_111748.log
+   2026-10-05 10:46:42 FINNIFTY   logged 1.25 closed 1.04 part 1.00 full 1.00  live_session_20261005_091840.log
+   2026-09-29 11:20:03 BANKNIFTY  logged 1.27 closed 1.56 part 1.52 full 1.58  session_20260929_111756.log
+
+ capped readings: logged vs final-bar closed ratio
+   23 readings at the cap, 14 also at the cap on the final bars
+   2026-10-05 09:31:33 BANKNIFTY  logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:31:33 FINNIFTY   logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:31:33 MIDCPNIFTY logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:31:33 NIFTY      logged 2.00 closed 1.86 part 1.85
+   2026-10-05 09:31:33 SENSEX     logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:32:33 BANKNIFTY  logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:32:33 FINNIFTY   logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:32:33 MIDCPNIFTY logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:32:33 NIFTY      logged 2.00 closed 1.86 part 1.85
+   2026-10-05 09:32:33 SENSEX     logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:33:33 BANKNIFTY  logged 2.00 closed 2.00 part 2.00
+   2026-10-05 09:33:33 FINNIFTY   logged 2.00 closed 2.00 part 2.00
+
+ residual (logged - part) by log file
+  live_session_20260929_132359.log   n=   9 median|d|=0.007 p95|d|=0.028 max|d|=0.028 mean d=-0.009 <=0.01:  56% <=0.05: 100%
+  live_session_20260929_132827.log   n= 315 median|d|=0.013 p95|d|=0.056 max|d|=0.129 mean d=-0.009 <=0.01:  40% <=0.05:  94%
+  live_session_20261005_091840.log   n= 506 median|d|=0.059 p95|d|=0.201 max|d|=0.370 mean d=+0.072 <=0.01:  16% <=0.05:  46%
+  live_session_20261005_111748.log   n= 222 median|d|=0.016 p95|d|=0.242 max|d|=0.450 mean d=-0.044 <=0.01:  44% <=0.05:  72%
+  live_session_20261005_124838.log   n=  66 median|d|=0.009 p95|d|=0.026 max|d|=0.033 mean d=-0.008 <=0.01:  52% <=0.05: 100%
+  live_session_20261005_131346.log   n= 360 median|d|=0.015 p95|d|=0.055 max|d|=0.101 mean d=-0.003 <=0.01:  38% <=0.05:  92%
+  session_20260929_105547.log        n=  12 median|d|=0.025 p95|d|=0.038 max|d|=0.038 mean d=-0.012 <=0.01:   8% <=0.05: 100%
+  session_20260929_105958.log        n=   6 median|d|=0.034 p95|d|=0.047 max|d|=0.047 mean d=-0.010 <=0.01:  17% <=0.05: 100%
+  session_20260929_111756.log        n=  87 median|d|=0.050 p95|d|=0.415 max|d|=0.482 mean d=-0.059 <=0.01:  15% <=0.05:  51%
+  session_20260929_114726.log        n=  12 median|d|=0.031 p95|d|=0.052 max|d|=0.052 mean d=-0.012 <=0.01:   8% <=0.05:  92%
+  session_20260929_115232.log        n=  30 median|d|=0.025 p95|d|=0.096 max|d|=0.099 mean d=-0.040 <=0.01:  20% <=0.05:  63%
+  session_20260929_120257.log        n=  78 median|d|=0.015 p95|d|=0.049 max|d|=0.057 mean d=-0.014 <=0.01:  42% <=0.05:  96%
+  session_20260929_122931.log        n=  15 median|d|=0.054 p95|d|=0.188 max|d|=0.188 mean d=-0.070 <=0.01:   0% <=0.05:  33%
+  session_20260929_124116.log        n=  30 median|d|=0.038 p95|d|=0.091 max|d|=0.132 mean d=-0.025 <=0.01:  10% <=0.05:  60%
+  session_20260929_131039.log        n=  36 median|d|=0.006 p95|d|=0.157 max|d|=0.163 mean d=+0.019 <=0.01:  61% <=0.05:  86%
+
+
+B. Live store (.cache/candles) vs backtest history (.cache/history), 28-30 Sep
+  NIFTY      common bars 1083, identical OHLC 1083, max |dO,dH,dL,dC| = 0.00, 0.00, 0.00, 0.00; only in store 0, only in history 8 (09-30T15:20..09-30T15:27)
+      pace store - history           n= 690 median|d|=0.000 p95|d|=0.000 max|d|=0.000 mean d=+0.000 <=0.01: 100% <=0.05: 100%
+  BANKNIFTY  common bars 1083, identical OHLC 1083, max |dO,dH,dL,dC| = 0.00, 0.00, 0.00, 0.00; only in store 0, only in history 8 (09-30T15:20..09-30T15:27)
+      pace store - history           n= 690 median|d|=0.000 p95|d|=0.000 max|d|=0.000 mean d=+0.000 <=0.01: 100% <=0.05: 100%
+  SENSEX     common bars 1083, identical OHLC 1083, max |dO,dH,dL,dC| = 0.00, 0.00, 0.00, 0.00; only in store 0, only in history 9 (09-30T15:15..09-30T15:27)
+      pace store - history           n= 690 median|d|=0.000 p95|d|=0.000 max|d|=0.000 mean d=+0.000 <=0.01: 100% <=0.05: 100%
+  FINNIFTY   common bars 1083, identical OHLC 1083, max |dO,dH,dL,dC| = 0.00, 0.00, 0.00, 0.00; only in store 0, only in history 8 (09-30T15:20..09-30T15:27)
+      pace store - history           n= 690 median|d|=0.000 p95|d|=0.000 max|d|=0.000 mean d=+0.000 <=0.01: 100% <=0.05: 100%
+  MIDCPNIFTY common bars 1083, identical OHLC 1083, max |dO,dH,dL,dC| = 0.00, 0.00, 0.00, 0.00; only in store 0, only in history 8 (09-30T15:20..09-30T15:27)
+      pace store - history           n= 690 median|d|=0.000 p95|d|=0.000 max|d|=0.000 mean d=+0.000 <=0.01: 100% <=0.05: 100%
+  (history lost 15:15-15:28 on every day since Aug 2026, both series; the store's
+   30 Sep copy was fetched before the close and lacks 15:20-15:28 that history has)
+
+
+C. 5 Oct snapshots of the engine's store (153 taken every ~10 s)
+  gate input (closed bars the engine held) minus final history bars, per closed minute:
+  BANKNIFTY                          n=  17 median|d|=0.004 p95|d|=0.017 max|d|=0.017 mean d=-0.002 <=0.01:  88% <=0.05: 100% | minutes with live-built bars in the ATR window 16, with gaps 0
+  NIFTY                              n=  18 median|d|=0.030 p95|d|=0.040 max|d|=0.040 mean d=-0.028 <=0.01:   6% <=0.05: 100% | minutes with live-built bars in the ATR window 17, with gaps 0
+  SENSEX                             n=  18 median|d|=0.003 p95|d|=0.020 max|d|=0.020 mean d=-0.000 <=0.01:  78% <=0.05: 100% | minutes with live-built bars in the ATR window 16, with gaps 0
+  live-built bar (tick sampler) minus the history bar that replaced it:
+  BANKNIFTY  bars 16: median |dO,dH,dL,dC| = 0.55, 0.00, 0.00, 0.48; TR live-history median +0.00, mean -0.18, mean |.| 2.63
+  NIFTY      bars 17: median |dO,dH,dL,dC| = 0.70, 0.00, 0.30, 0.20; TR live-history median -0.35, mean -0.47, mean |.| 0.81
+  SENSEX     bars 7: median |dO,dH,dL,dC| = 1.02, 0.00, 0.00, 0.00; TR live-history median +0.00, mean -1.47, mean |.| 3.66
+
+
+READING (5 Oct 2026, written after the run)
+- Same formula and data: engine and backtest both call arb.regime.atr_ratio(20, 200) on
+  1-minute 09:15-15:29 index bars. The live store's history bars for 28-30 Sep are
+  identical to .cache/history (1083/1083 bars, pace difference 0.000).
+- The log's "pace" is not the gate's number. engine._atr_ratio includes the forming bar
+  (33 s old at the log time); regime_gate drops it (_closed_rows). Effect on the final bars:
+  median 0.023, p95 0.078, mean -0.020, so the log reads a little LOW against the gate.
+- Clean sessions (no dead feed, no restart hole): logged vs reconstructed median |d| 0.006-0.017,
+  p95 0.03-0.06 (29 Sep 13:28 live, 5 Oct 11:17 / 12:48 / 13:13). That is the estimate noise of
+  the forming bar; the gate there equals the backtest. Snapshots 14:49-15:14 measure it
+  directly: gate input minus final history, median 0.003-0.030, max 0.040.
+- Three live faults make the gate differ from the backtest:
+  1 dead feed: the sampler keeps opening a bar a minute from the last LTP, so it writes flat
+    bars. 5 Oct 12:15-12:26 the pace read 0.51-0.70 where history says 0.95-1.01. The gate
+    stays shut (the safe direction) until a history refresh replaces those bars.
+  2 restart hole: the engine was down 11:03-11:17 on 29 Sep and the first NIFTY history fetch
+    was refused (rate limit) until 11:33, so the window lacked those minutes. NIFTY read
+    1.44-1.56 against 1.9; BANKNIFTY 1.30-1.36 against 1.55 (the gate shut where the backtest passed).
+  3 live-built bars between history refreshes, 5 Oct 09:18-11:16 session only: the error
+    grows from +0.04 to +0.13 with minutes since the last refresh, up to +0.25, and drops back to 0
+    at each refresh. NIFTY 10:29-10:44 had gate ~1.32-1.50 against backtest 1.16-1.28 at a 1.30
+    threshold, so the gate was OPEN where the backtest would not trade (the unsafe direction). The
+    afternoon live-built bars came out slightly SMALLER than history (NIFTY TR -0.35 median).
+    The cause of the morning inflation is not proven here: the tick book (data/book_*.f4)
+    holds only one frame a minute, which is too coarse to rebuild the bars.
+- Opening gap: the first bar's true range includes the overnight gap, so the pace is capped at
+  2.00 until 09:35. Both live and backtest do this, so it is consistent, not a mismatch.

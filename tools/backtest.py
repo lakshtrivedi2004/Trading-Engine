@@ -46,18 +46,19 @@ def work(args):
         D[k]["adr"] = sum(p["hi"] - p["lo"] for p in prev) / len(prev) if prev else 0.0
     for i in range(lo, hi):
         iso = rows[i][0]; m = mins(iso)
-        if m < 9 * 60 + 30 or m > 14 * 60 + 45:
+        if m < 9 * 60 + 15 + int(L.warmup_minutes) or m > 14 * 60 + 45:
             continue
         seg = rows[i - 399:i + 1]
         spot = seg[-1][4]
-        if regime_gate(seg, L, now=datetime.fromisoformat(iso)):
+        if regime_gate(seg, L, now=datetime.fromisoformat(iso), name=name):
             continue
         v = evaluate(seg, spot, L, strike_step=STEP[name])
         if not v.tradable:
             continue
-        st = analyse(seg, strength=L.swing_strength, min_bars=L.min_structure_bars)
+        st = analyse(seg, strength=L.swing_strength, min_bars=L.min_structure_bars, limits=L)
         lead = v.setups[0] if v.setups else None
-        inv = structural_invalidation(st, v.side, lead.invalidation if lead else None)
+        inv = structural_invalidation(st, v.side, lead.invalidation if lead else None,
+                                      nearest=bool(getattr(L, "stop_nearest_swing", False)))
         if not inv:
             continue
         risk = abs(spot - inv)
@@ -92,11 +93,14 @@ def work(args):
                 ex = min(o, lvl) if sd > 0 else max(o, lvl)
                 why = "trail_stop" if pos.index_trailed else "stop"; break
             if pos.index_target and ((sd > 0 and h >= pos.index_target) or (sd < 0 and l <= pos.index_target)):
-                win = rows[j - 399:j + 1] + [rows[j]]
+                # Bars to j-1 completed, j still forming: live try_extend sees no
+                # more when the target is touched (review R1 - the old window
+                # read bar j's own close, a look-ahead worth ~Rs 6,000 a year).
+                win = rows[j - 399:j] + [rows[j]]
                 if not trailing.try_extend(pos, win, pos.index_target, L, STEP[name]):
                     ex, why = pos.index_target, "target"; break
             r_now = (c - spot) * sd / risk
-            if j - i >= L.time_stop_min and r_now < L.time_stop_min_r:
+            if L.time_stop_min and j - i >= L.time_stop_min and r_now < L.time_stop_min_r:
                 ex, why = c, "time_stop"; break
             trailing.update(pos, rows[j - 199:j + 1] + [rows[j]], L, index_px=c)
         if ex is None:
@@ -113,9 +117,11 @@ def work(args):
                         dayrng=(max(r[2] for r in sofar) - min(r[3] for r in sofar)) / adr,
                         mfeR=0.0,u=name, iso=iso, day=iso[:10], wd=d.weekday(), m=m, i=i, j=j, side=v.side,
                         grade=v.grade, plays=[s.name for s in v.setups], risk=risk, delta=delta,
-                        R=(move - cost_pts / delta) / risk, net=net, why=why, held=j - i,
+                        R=(move - cost_pts / delta) / risk, net=net, why=why, held=j - i, atr=a,
+                        prem_risk_inr=prem_risk * lot,
                         er=efficiency([r[4] for r in seg[-17:-1]]) * 15 ** 0.5,
-                        ar=atr_ratio(seg, period=L.atr_period, baseline_bars=L.atr_baseline_bars),
+                        ar=atr_ratio(seg, period=L.atr_period, baseline_bars=L.atr_baseline_bars,
+                                     no_gap=bool(getattr(L, "pace_no_gap", False))),
                         rev=v.reversal))
     return out
 EXP = {"NIFTY": 1, "SENSEX": 3}          # weekly expiry weekday (Tue, Thu)
@@ -128,8 +134,10 @@ def is_expiry(t):
     if t["u"] == "BANKNIFTY": return d == last_wd(d, 1)
     return d.weekday() == EXP[t["u"]]
 def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=False,
-        stop_after_loss=False, theta=None, halt_pct=30.0):
-    """theta(t) -> Rs decay to subtract (default none)."""
+        stop_after_loss=False, theta=None, halt_pct=30.0, side_cooldown=0):
+    """theta(t) -> Rs decay to subtract (default none). side_cooldown: minutes
+    after a losing trade during which no trade on the SAME side is taken on any
+    index (owner's F4, 1 Oct 2026: one idea, one trade)."""
     out = []
     by = {}
     for t in cands: by.setdefault((t["u"], t["day"]), []).append(t)
@@ -139,8 +147,10 @@ def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=Fals
     for d in sorted(days):
         ts = sorted(days[d], key=lambda t: (t["m"], t["u"]))
         busy_until, n, pnl, streak, pause, last_loss, plays = -1, 0, 0.0, 0, -1, -10**9, {}
+        loss_side = 0
         for t in ts:
             if t["m"] <= busy_until or t["m"] < pause or t["m"] - last_loss < 3: continue
+            if side_cooldown and t["side"] == loss_side and t["m"] - last_loss < side_cooldown: continue
             if n >= max_trades or pnl <= -halt_pct * 100: continue
             key = (t["u"], t["plays"][0] if t["plays"] else "", t["side"])
             if per_play and plays.get(key, 0) >= per_play: continue
@@ -150,7 +160,7 @@ def run(cands, ok=lambda t: True, max_trades=15, per_play=2, stop_after_win=Fals
             plays[key] = plays.get(key, 0) + 1
             busy_until = t["m"] + t["held"]
             if net < 0:
-                streak += 1; last_loss = busy_until
+                streak += 1; last_loss = busy_until; loss_side = t["side"]
                 if streak >= 3: pause, streak = busy_until + 30, 0
                 if stop_after_loss: break
             else:

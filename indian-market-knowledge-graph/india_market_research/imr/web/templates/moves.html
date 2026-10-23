@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}What moved the markets{% endblock %}{% block heading %}What moved the markets{% endblock %}
+{% block content %}
+<p>Each day's move is split into the part explained by global and macro factors and the <b>index-specific</b> part.
+Sensitivities (betas) are estimated on the <b>previous year only</b>, so a day never helps explain itself. US markets
+close after India, so a US move counts on the next Indian day.</p>
+<form class="bar autosubmit" method="get">
+  <input type="hidden" name="mode" value="{{ mode }}">
+  <label>Index<select name="index">{% for a in avail %}<option {% if a == name %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  <label>Day<select name="day">{% for d in days %}<option value="{{ d.strftime('%Y-%m-%d') }}" {% if d == day %}selected{% endif %}>{{ d.strftime('%a %d %b %Y') }}</option>{% endfor %}</select></label>
+  <label>Sessions listed <span id="nout"></span><input type="range" name="n" min="5" max="60" value="{{ n }}" data-out="nout"></label>
+</form>
+<p>{{ text }}</p>
+{{ chart(bar, bar_height) }}
+
+<h3>{{ name }}: last {{ n }} sessions</h3>
+<div class="tablewrap"><table><thead><tr><th class="l">Date</th><th>Actual</th><th>Explained</th><th>Index-specific</th>
+<th class="l">Biggest factor</th><th class="l">Unusual?</th></tr></thead><tbody>
+{% for r in recent %}<tr><td class="l">{{ r.date.strftime('%a %d %b %Y') }}</td>
+<td class="{{ r.actual|sign }}">{{ r.actual|pct }}</td><td class="{{ r.explained|sign }}">{{ r.explained|pct }}</td>
+<td class="{{ r.spec|sign }}">{{ r.spec|pct }}</td><td class="l">{{ r.top }} ({{ r.top_val|pct }})</td>
+<td class="l">{{ 'yes' if r.unusual else '' }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="note">"Unusual" = the index-specific part is more than 2x its normal size: a day to look for domestic news,
+flows or positioning.</p>
+
+<h2>How much of daily movement the factors explain</h2>
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th>All history</th><th>Last year</th>
+<th class="l">Current sensitivities (beta)</th></tr></thead><tbody>
+{% for p in power %}<tr><td class="l">{{ p.name }}</td><td>{{ p.all|pct(0, False) }}</td><td>{{ p.year|pct(0, False) }}</td>
+<td class="l">{{ p.betas }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="note">Out-of-sample R²: the share of daily variance explained using only past data. Low numbers for Nifty and
+Sensex are normal (Roll 1988; Cutler, Poterba &amp; Summers 1989). Bank indices score higher because the broad index
+(which contains banks) is one of their factors. A beta of 0.30 on the S&amp;P 500 means a 1% US move overnight has
+typically gone with a 0.30% move here.</p>
+{{ chart(beta_chart, 320) }}
+{% endblock %}

@@ -1,0 +1,15 @@
+# One AI market view (prices + news + engine -> Gemini/OpenAI), logged to
+# journal/ai_watch_<day>.jsonl; places nothing. Needs .ai.env in the checkout.
+[Unit]
+Description=Trading-Engine AI market watch (one view)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/Trading-Engine
+ExecStart=/root/Trading-Engine/venv/bin/python tools/analyst.py watch --once
+StandardOutput=append:/root/Trading-Engine/logs/ai_watch.log
+StandardError=append:/root/Trading-Engine/logs/ai_watch.log
+Nice=10

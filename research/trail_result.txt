@@ -1,0 +1,8 @@
+today's trailing                   n= 86 win= 55% year Rs +16,820 (IN  +7,136 / OUT  +9,684) avg  +196 worst   -740 maxDD  4,105 | exits {'trail_stop': 33, 'stop': 31, 'target': 20, 'prem_trail': 2}
+trail from first higher low        n= 86 win= 52% year Rs +14,861 (IN  +8,728 / OUT  +6,133) avg  +173 worst   -740 maxDD  3,573 | exits {'trail_stop': 48, 'stop': 18, 'target': 18, 'prem_trail': 2}
+target floor 2R                    n=123 win= 37% year Rs  +2,263 (IN  -1,053 / OUT  +3,316) avg   +18 worst   -794 maxDD  5,698 | exits {'stop': 54, 'trail_stop': 42, 'target': 12, 'time_stop': 5, 'prem_trail': 5, 'squareoff': 4, 'prem_stop': 1}
+skip if target < 2R                n=  5 win= 20% year Rs  -1,953 (IN  -2,161 / OUT    +208) avg  -391 worst   -663 maxDD  2,161 | exits {'stop': 4, 'trail_stop': 1}
+extensions 2 -> 10                 n= 86 win= 55% year Rs +16,835 (IN  +7,136 / OUT  +9,699) avg  +196 worst   -740 maxDD  4,105 | exits {'trail_stop': 34, 'stop': 31, 'target': 19, 'prem_trail': 2}
+no time stop (wait for SL)         n= 86 win= 55% year Rs +16,820 (IN  +7,136 / OUT  +9,684) avg  +196 worst   -740 maxDD  4,105 | exits {'trail_stop': 33, 'stop': 31, 'target': 20, 'prem_trail': 2}
+first-swing + floor 2R + ext 10    n=124 win= 35% year Rs     -22 (IN    +676 / OUT    -698) avg    -0 worst   -740 maxDD  7,602 | exits {'trail_stop': 80, 'stop': 27, 'target': 10, 'prem_trail': 5, 'squareoff': 1, 'prem_stop': 1}
+owner's full rule (+ no time stop) n=124 win= 35% year Rs     -22 (IN    +676 / OUT    -698) avg    -0 worst   -740 maxDD  7,602 | exits {'trail_stop': 80, 'stop': 27, 'target': 10, 'prem_trail': 5, 'squareoff': 1, 'prem_stop': 1}

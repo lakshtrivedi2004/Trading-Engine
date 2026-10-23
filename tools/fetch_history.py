@@ -14,13 +14,14 @@ logging.disable(logging.CRITICAL)
 from datetime import datetime, timedelta
 from arb.config import Credentials
 from arb.feed import AngelSession
+from arb.candles import candle_data  # shared rate budget with the engines
 OUT = os.path.join(ROOT, ".cache", "history"); os.makedirs(OUT, exist_ok=True)
 s = AngelSession(Credentials.load()).login(); api = s.api
 def get(exch, token, interval, start, end, tries=6):
     for k in range(tries):
         time.sleep(float(os.environ.get("GAP", "12")))
         try:
-          r = api.getCandleData({"exchange": exch, "symboltoken": token, "interval": interval,
+          r = candle_data(api, {"exchange": exch, "symboltoken": token, "interval": interval,
                                "fromdate": start.strftime("%Y-%m-%d %H:%M"), "todate": end.strftime("%Y-%m-%d %H:%M")})
         except Exception as ex:
           r = {"message": str(ex)[:80]}

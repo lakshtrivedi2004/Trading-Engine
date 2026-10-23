@@ -1,0 +1,649 @@
+module: M01
+title: Introduction to Stock Markets
+summary: Why invest, asset classes, market ecosystem (SEBI, brokers, depositories, clearing), IPO lifecycle, how stocks move, returns math, indices, jargon, order types, settlement, corporate actions, macro events, developing a point of view.
+nodes:
+  - id: investing
+    type: Concept
+    name: Investing
+    chapter: 1
+    summary: Deploying surplus cash into asset classes to fight inflation, create wealth and meet financial goals.
+    facts:
+      - Idle cash loses to inflation; example: Rs 20k/month surplus held as cash for 20 yrs ~ Rs 1.7 Cr vs ~Rs 4.26 Cr invested at 12%.
+      - Corpus is highly sensitive to rate of return; small rate changes have large compounding impact.
+      - Reasons to invest - fight inflation, create wealth, meet life's financial aspirations.
+    links: [{to: inflation, rel: RELATED_TO}, {to: asset_allocation, rel: USES}, {to: compounding, rel: USES}]
+
+  - id: asset_class
+    type: Concept
+    name: Asset Class
+    chapter: 1
+    summary: A category of investment with particular risk and return characteristics - fixed income, equity, real estate, commodities (precious metals).
+    facts:
+      - Fixed income - limited risk to principal, interest paid periodically, capital returned at maturity; ~8-11% (2014).
+      - Equity - no capital guarantee; Indian equities ~14-15% CAGR over 15 years; best companies >20% CAGR.
+      - Real estate - rental income + capital appreciation; large outlay, illiquid, no official return metric.
+      - Bullion (gold/silver) - ~8% CAGR over 20 years; via jewelry or ETFs.
+      - Risk and return go hand in hand.
+      - Fixed income can lose in real terms - a 9% FD with 10% inflation = -1% real return.
+    links: [{to: asset_allocation, rel: RELATED_TO}, {to: equity, rel: RELATED_TO}, {to: fixed_income, rel: RELATED_TO}]
+
+  - id: fixed_income
+    type: Instrument
+    name: Fixed Income Instruments
+    aliases: [Bonds, Fixed Deposits, Debt instruments]
+    chapter: 1
+    summary: Instruments with limited principal risk paying interest (FDs, G-secs, PSU bonds like HUDCO/NHAI, corporate bonds).
+    links: [{to: asset_class, rel: IS_A}]
+
+  - id: equity
+    type: Instrument
+    name: Equity (Shares)
+    aliases: [Stocks, Shares]
+    chapter: [1, 6]
+    summary: Part-ownership of a publicly listed company traded on BSE/NSE; highest long-run return, no capital guarantee.
+    facts:
+      - A share represents part ownership; owner entitled to dividends, bonus, splits, rights, voting.
+      - Buying a share means taking the same kind of risk as the promoter, scaled by holding.
+    links: [{to: asset_class, rel: IS_A}, {to: stock_exchange, rel: RELATED_TO}, {to: corporate_actions, rel: RELATED_TO}]
+
+  - id: asset_allocation
+    type: Concept
+    name: Asset Allocation
+    chapter: 1
+    summary: Allocating money across asset classes based on risk appetite.
+    facts:
+      - Young professional example - ~70% equity, 20% precious metals, 10% fixed income.
+      - Retired example - ~80% fixed income, 10% equity, 10% precious metals.
+    links: [{to: asset_class, rel: USES}, {to: diversification, rel: RELATED_TO}]
+
+  - id: stock_exchange
+    type: Participant
+    name: Stock Exchange (NSE / BSE)
+    aliases: [NSE, BSE, National Stock Exchange, Bombay Stock Exchange, Stock Market]
+    chapter: [2, 6]
+    summary: Electronic marketplace matching buyers and sellers; India's two main exchanges are NSE and BSE.
+    facts:
+      - Exists electronically; accessed only via a registered stock broker.
+      - Exchange's order-matching algorithm pairs orders; seller can be one or many counterparties.
+      - Different opinions make a market - a trade needs an opposing view.
+      - Regional exchanges are being phased out.
+    links: [{to: sebi, rel: REGULATED_BY}, {to: stock_broker, rel: RELATED_TO}, {to: clearing_corporation, rel: RELATED_TO}]
+
+  - id: market_participants
+    type: Participant
+    name: Market Participants
+    chapter: 2
+    summary: Domestic retail, NRI/OCI, domestic institutions (e.g. LIC), domestic AMCs (mutual funds), Foreign Institutional Investors (FIIs).
+    facts:
+      - FIIs transact large amounts so their activity moves market sentiment.
+      - Everyone's agenda is to make profitable transactions; greed/fear drive unfair practices, hence regulation.
+    links: [{to: sebi, rel: REGULATED_BY}, {to: fii, rel: RELATED_TO}]
+
+  - id: fii
+    type: Participant
+    name: Foreign Institutional Investors (FII/FPI)
+    aliases: [FII, FPI]
+    chapter: 2
+    summary: Foreign corporates/funds/individuals investing in India in large size; flows impact sentiment.
+    bot_use: Track FII net buy/sell flows as a sentiment input.
+    links: [{to: market_participants, rel: IS_A}]
+
+  - id: sebi
+    type: Participant
+    name: SEBI (Securities and Exchange Board of India)
+    aliases: [SEBI, Regulator]
+    chapter: 2
+    summary: India's securities market regulator - develops exchanges, protects retail investors, regulates participants and intermediaries.
+    facts:
+      - Ensures exchanges, brokers, corporates act fairly; prevents manipulation by large investors; protects retail.
+      - Regulates CRAs (CRISIL, ICRA, CARE), debenture trustees, depositories (NSDL, CDSL), DPs, FIIs, merchant bankers, AMCs, PMS (min Rs 25 lakh at the time), brokers/sub-brokers.
+      - Has final say on whether a company can go public.
+      - Publishes entity rules in its 'Legal Framework' section.
+    links: [{to: ipo, rel: RELATED_TO}]
+
+  - id: stock_broker
+    type: Participant
+    name: Stock Broker
+    chapter: 3
+    summary: SEBI-registered trading member of an exchange; your gateway to markets via a trading account.
+    facts:
+      - Services - market access, margins, dealing/software support, contract notes, fund transfers, back office.
+      - Access modes - call & trade, web, trading terminal (e.g. Zerodha Kite).
+      - Charges brokerage for services.
+    links: [{to: sebi, rel: REGULATED_BY}, {to: trading_account, rel: RELATED_TO}, {to: contract_note, rel: RELATED_TO}]
+
+  - id: trading_account
+    type: Concept
+    name: Trading Account
+    chapter: 3
+    summary: Account with a broker used to buy/sell securities; linked to a DEMAT account and exactly one bank account.
+    facts:
+      - Only one bank account (in your own name) can be linked to a trading account at a time.
+    links: [{to: demat_account, rel: RELATED_TO}]
+
+  - id: demat_account
+    type: Concept
+    name: DEMAT Account
+    chapter: 3
+    summary: Electronic vault holding dematerialised shares, maintained by a depository (NSDL or CDSL) through a Depository Participant.
+    facts:
+      - Paper certificates converted to electronic form post-1996 ('dematerialisation').
+      - Only two depositories in India - NSDL and CDSL.
+      - You open a DEMAT account through a DP (agent of the depository).
+    links: [{to: depository, rel: PART_OF}]
+
+  - id: depository
+    type: Participant
+    name: Depository (NSDL / CDSL) and Depository Participant
+    aliases: [NSDL, CDSL, DP]
+    chapter: 3
+    summary: NSDL and CDSL hold securities electronically; DPs (banks/brokers) are their agents.
+    links: [{to: sebi, rel: REGULATED_BY}]
+
+  - id: clearing_corporation
+    type: Participant
+    name: Clearing Corporation (NSCCL / ICCL)
+    aliases: [NSCCL, ICCL, NSE Clearing]
+    chapter: 3
+    summary: Exchange subsidiaries that guarantee settlement - match debits/credits and prevent default.
+    links: [{to: clearing_and_settlement, rel: RELATED_TO}]
+
+  - id: company_funding_lifecycle
+    type: Process
+    name: Company Funding Lifecycle
+    chapter: 4
+    summary: Seed (promoter + angels) -> Series A (VC) -> Series B -> Series C (Private Equity) -> IPO; valuation rises as revenue/profit validate business.
+    facts:
+      - Angel investors invest pre-revenue, take maximum risk (as much as promoter), small amounts.
+      - Seed fund becomes initial share capital in the company's bank account.
+      - Face value - nominal denomination per share (e.g. Rs 10).
+      - Authorized shares - total shares available; issued shares are a subset allotted to holders.
+      - VC invests early-stage, smaller amounts; PE invests large sums in mature firms and takes board seats.
+      - Capex can be funded by internal accruals, equity (VC/PE/IPO) or debt (loans/bonds).
+      - Implied valuation = investment / stake (e.g. 7 Cr for 14% => 50 Cr).
+      - Credible prior VC/PE rounds are a quality signal for IPO companies.
+    formula: {implied_valuation: "investment_amount / stake_fraction"}
+    links: [{to: ipo, rel: PREREQUISITE}, {to: capex, rel: RELATED_TO}, {to: face_value, rel: RELATED_TO}]
+
+  - id: capex
+    type: Concept
+    name: Capital Expenditure (Capex)
+    chapter: 4
+    summary: Spending to expand/improve the business (plants, stores, capacity).
+    links: [{to: company_funding_lifecycle, rel: RELATED_TO}]
+
+  - id: face_value
+    type: Concept
+    name: Face Value (Par Value)
+    aliases: [FV, Par value]
+    chapter: [4, 8, 11]
+    summary: Fixed nominal denomination of a share; dividends and splits are referenced to it.
+    facts:
+      - Dividend % = dividend per share / face value (Infosys Rs 42 on FV 5 => 840%).
+    links: [{to: dividend, rel: RELATED_TO}, {to: stock_split, rel: RELATED_TO}]
+
+  - id: ipo
+    type: Process
+    name: Initial Public Offering (IPO)
+    aliases: [IPO, Primary Market issue]
+    chapter: [4, 5]
+    summary: First offer of a company's shares to the public, moving it from private to listed (primary -> secondary market).
+    facts:
+      - Reasons - raise capex funds, spread promoter risk, exit for early investors, reward employees via ESOPs, visibility.
+      - Sequence - appoint merchant banker -> registration statement to SEBI -> SEBI nod -> DRHP -> road show -> price band -> book building -> closure -> listing day.
+      - DRHP contents - IPO size, shares offered, use of funds with timeline, business model, financials, MD&A, risks, management.
+      - Book building - investors bid within the price band; listing price usually where max bids received.
+      - Undersubscription signals negative sentiment; oversubscription Nx = bids/shares offered.
+      - Green shoe option - over-allotment up to ~15% extra shares if oversubscribed.
+      - Fixed price IPO has no band; cut-off price = final discovered price within band.
+      - Most Indian IPOs follow book building.
+    bot_use: Subscription multiple and anchor/VC pedigree are pre-listing sentiment features; listing day = start of secondary trading.
+    caveats: [Investors should read the DRHP; some companies list without healthy prior funding rounds.]
+    links: [{to: sebi, rel: REGULATED_BY}, {to: merchant_banker, rel: USES}, {to: drhp, rel: USES}, {to: primary_market, rel: PART_OF}, {to: fpo, rel: RELATED_TO}, {to: ofs, rel: RELATED_TO}]
+
+  - id: merchant_banker
+    type: Participant
+    name: Merchant Banker (BRLM / Lead Manager)
+    aliases: [BRLM, Book Running Lead Manager]
+    chapter: 5
+    summary: Assists IPO - due diligence, DRHP, underwriting, price band, road shows, appointing registrars/bankers.
+    links: [{to: ipo, rel: RELATED_TO}, {to: sebi, rel: REGULATED_BY}]
+
+  - id: drhp
+    type: Concept
+    name: Draft Red Herring Prospectus (DRHP)
+    aliases: [DRHP]
+    chapter: 5
+    summary: Public IPO disclosure document with business, financials, use of proceeds, risks and management.
+    links: [{to: ipo, rel: PART_OF}]
+
+  - id: primary_market
+    type: Concept
+    name: Primary vs Secondary Market
+    chapter: 5
+    summary: Primary market = IPO bidding/issuance; secondary market = trading on exchange after listing.
+    links: [{to: stock_exchange, rel: RELATED_TO}]
+
+  - id: fpo
+    type: Process
+    name: Follow-on Public Offer (FPO)
+    aliases: [FPO]
+    chapter: supplementary
+    summary: Post-listing public issue of fresh (dilutive) shares via DRHP + book building, used to fund new projects; rare since OFS (2012).
+    example: Engineers India FPO Feb 2014, band 145-150, 3x oversubscribed, lower band 4.2% below market.
+    links: [{to: ofs, rel: CONTRADICTS}]
+
+  - id: ofs
+    type: Process
+    name: Offer for Sale (OFS)
+    aliases: [OFS]
+    chapter: supplementary
+    summary: Exchange window for promoters to sell existing shares (no new shares) at/above a floor price; also to meet minimum public shareholding.
+    facts:
+      - Only top 200 companies by market cap may use OFS (per source).
+      - Allotment settled to demat T+1.
+      - PSU minimum public shareholding 25% example.
+    example: NTPC OFS Aug 2017, 46.35 mn shares, floor Rs 168, fully subscribed.
+    links: [{to: fpo, rel: RELATED_TO}]
+
+  - id: price_drivers
+    type: Concept
+    name: What Moves Stock Prices
+    chapter: 6
+    summary: Prices move on news/events (company, industry, economy) and expectations, and on demand-supply imbalance even without news.
+    facts:
+      - Good news -> buyers lift offers repeatedly -> price rally (Infosys new CEO example 3000->3016 in 5 min).
+      - Industry-wide news (e.g. NASSCOM cutting IT budget outlook) hits all sector stocks.
+      - Large liquid stocks move even without news; illiquid small caps may barely move.
+      - Macro/political events (e.g. 2014 election) move the whole market.
+    bot_use: News/event sentiment and sector contagion features; liquidity filter - illiquid names don't respond.
+    links: [{to: market_events, rel: RELATED_TO}, {to: bid_ask, rel: RELATED_TO}]
+
+  - id: holding_period
+    type: Concept
+    name: Holding Period
+    chapter: 6
+    summary: Period you intend to hold a position - minutes to forever.
+    links: [{to: trader_types, rel: RELATED_TO}]
+
+  - id: absolute_return
+    type: Formula
+    name: Absolute Return
+    chapter: 6
+    summary: Percentage gain irrespective of time.
+    formula: {absolute_return_pct: "(end_value / start_value - 1) * 100"}
+    example: Buy 3030, sell 3550 => 17.16%.
+    conditions: {use_when: "holding period <= 1 year"}
+    links: [{to: cagr, rel: RELATED_TO}]
+
+  - id: cagr
+    type: Formula
+    name: Compounded Annual Growth Rate (CAGR)
+    aliases: [CAGR]
+    chapter: 6
+    summary: Annualised growth rate over multiple years.
+    formula: {cagr: "(end_value / start_value) ** (1 / years) - 1"}
+    example: 3030 -> 3550 over 2 years => 8.2% CAGR (below an 8.5% FD).
+    conditions: {use_when: "holding period > 1 year"}
+    facts: [Compare returns only on an annualised basis; 17.16% in 6 months ~ 34.32% annualised (simple).]
+    links: [{to: absolute_return, rel: RELATED_TO}, {to: compounding, rel: RELATED_TO}]
+
+  - id: trader_types
+    type: Concept
+    name: Trader and Investor Types
+    chapter: 6
+    summary: Traders (short view, unbiased long/short) vs investors (multi-year holding).
+    facts:
+      - Day trader - opens and closes intraday, no overnight risk, ~5-6 stocks/day.
+      - Scalper - very large size, very short hold, tiny per-share profit (e.g. 10,000 sh x Rs 0.10).
+      - Swing trader - holds days to weeks.
+      - Growth investor - companies growing on industry/macro trends.
+      - Value investor - good companies beaten down by short-term sentiment (L&T 1200->690->1440).
+      - Traders and investors differ on risk-taking ability and holding period.
+    links: [{to: holding_period, rel: RELATED_TO}]
+
+  - id: market_index
+    type: Concept
+    name: Stock Market Index (Nifty / Sensex)
+    aliases: [Nifty, Nifty 50, Sensex, CNX Nifty, S&P BSE Sensex, Index]
+    chapter: 7
+    summary: Basket of large, liquid stocks acting as a barometer of the market/economy; Nifty (NSE) and Sensex (BSE).
+    facts:
+      - Uses - information, benchmarking performance, trading (via derivatives), portfolio hedging.
+      - Index up = participants optimistic about future; down = pessimistic.
+      - Weights by free-float market capitalisation; stocks must keep qualifying or get replaced.
+      - A stock's weight is the share of index movement attributable to it (e.g. ITC 7.6% in 2014).
+      - Sectoral indices - Bank Nifty, CNX IT etc.
+      - Majority of traders trade the index.
+    bot_use: Benchmark strategy returns against Nifty; use index as regime/market-trend filter; hedge with index futures.
+    links: [{to: free_float_market_cap, rel: USES}, {to: index_futures, rel: RELATED_TO}, {to: hedging, rel: RELATED_TO}, {to: sectoral_index, rel: RELATED_TO}]
+
+  - id: sectoral_index
+    type: Concept
+    name: Sectoral Index
+    aliases: [Bank Nifty, Nifty Bank, CNX IT, Nifty IT]
+    chapter: 7
+    summary: Index of a specific sector (Bank Nifty, CNX IT) reflecting sector sentiment.
+    links: [{to: market_index, rel: VARIANT_OF}]
+
+  - id: free_float_market_cap
+    type: Formula
+    name: Free Float Market Capitalisation
+    chapter: 7
+    summary: Market value of shares available for trading; basis of Indian index weights.
+    formula: {free_float_mcap: "free_float_shares * price", weight_i: "ffmcap_i / sum(ffmcap)"}
+    links: [{to: market_index, rel: PART_OF}, {to: market_capitalisation, rel: VARIANT_OF}]
+
+  - id: bull_bear_market
+    type: Concept
+    name: Bull / Bear Market
+    aliases: [Bullish, Bearish]
+    chapter: 8
+    summary: Bullish = expecting rise (index rising period = bull market); bearish = expecting fall.
+    links: [{to: trend, rel: RELATED_TO}]
+
+  - id: trend
+    type: Concept
+    name: Trend
+    chapter: 8
+    summary: General market direction and its strength - bullish, bearish or sideways.
+    links: [{to: dow_theory, rel: RELATED_TO}]
+
+  - id: week52_high_low
+    type: Concept
+    name: 52-Week High / Low and All-Time High / Low
+    chapter: 8
+    summary: Highest/lowest traded price over last 52 weeks (or since listing).
+    facts: [Many believe a 52-week high indicates a bullish trend ahead and a 52-week low a bearish trend.]
+    conditions: {bullish_hint: "close >= max(high, 252 sessions)", bearish_hint: "close <= min(low, 252 sessions)"}
+    bot_use: Breakout/momentum filter.
+    links: [{to: breakout, rel: RELATED_TO}]
+
+  - id: long_position
+    type: Concept
+    name: Long Position
+    chapter: 8
+    summary: Buy first, sell later; bullish; profit if price rises.
+    links: [{to: short_position, rel: OPPOSITE_OF}, {to: square_off, rel: RELATED_TO}]
+
+  - id: short_position
+    type: Concept
+    name: Short Position (Shorting)
+    chapter: 8
+    summary: Sell first (borrowed), buy back later; bearish; profit if price falls, loss if it rises.
+    facts:
+      - Exchange handles borrowing/returning in the background.
+      - Multi-day shorts are best done in the derivatives market (equity cash shorts are intraday).
+    links: [{to: long_position, rel: OPPOSITE_OF}, {to: futures_contract, rel: RELATED_TO}]
+
+  - id: square_off
+    type: Concept
+    name: Square Off
+    chapter: 8
+    summary: Closing an existing position - sell to close a long, buy to close a short (not a new short/long).
+    links: [{to: intraday_position, rel: RELATED_TO}]
+
+  - id: intraday_position
+    type: Concept
+    name: Intraday Position
+    chapter: 8
+    summary: Position initiated with intent to square off the same day.
+    links: [{to: mis_product, rel: RELATED_TO}]
+
+  - id: ohlc
+    type: Concept
+    name: OHLC and Volume
+    aliases: [Open High Low Close, Volume]
+    chapter: [8, 9]
+    summary: Open, high, low, close prices of a period; volume = total shares transacted.
+    facts: [Open is fixed once set; high and low update as price trades intraday.]
+    links: [{to: candlestick, rel: RELATED_TO}, {to: volume, rel: RELATED_TO}]
+
+  - id: market_segment
+    type: Concept
+    name: Market Segments
+    chapter: 8
+    summary: Capital market (equity 'EQ', preference shares, warrants, ETFs), Futures & Options (leveraged derivatives), Wholesale Debt Market (G-secs, T-bills, bonds).
+    links: [{to: derivatives, rel: RELATED_TO}]
+
+  - id: trading_terminal
+    type: Product
+    name: Trading Terminal / Market Watch
+    aliases: [Kite, Market Watch]
+    chapter: 9
+    summary: Broker software to view quotes (LTP, % change, OHLC, volume), market depth and place/modify orders.
+    facts:
+      - Order book tracks orders (open/completed/rejected) and allows modify/cancel; trade book shows executed trades.
+      - Market depth (snap quote) shows top 5 bid/ask levels with order counts and quantities.
+    links: [{to: order_types, rel: RELATED_TO}, {to: bid_ask, rel: RELATED_TO}]
+
+  - id: order_types
+    type: Concept
+    name: Order Types (Limit, Market, SL, SL-M)
+    aliases: [Limit order, Market order, Stop loss order, SL-M]
+    chapter: 9
+    summary: Limit = specific price (may not fill); Market = immediate at available prices (price uncertainty); SL/SL-M = passive stop that activates at trigger price.
+    facts:
+      - Market orders walk the book and fill at multiple prices; dangerous for active traders in fast markets.
+      - Stop loss is passive until trigger price is crossed; for a long, trigger is set slightly above the SL limit price (e.g. trigger 256, SL 255).
+    conditions:
+      long_stop: {trigger_price: "> stop_price", activates_when: "ltp <= trigger_price"}
+    bot_use: Prefer limit orders to control slippage; place SL/SL-M orders immediately after entry.
+    links: [{to: stop_loss, rel: RELATED_TO}, {to: bid_ask, rel: RELATED_TO}, {to: product_types, rel: RELATED_TO}]
+
+  - id: product_types
+    type: Concept
+    name: Product Types (CNC, MIS, NRML)
+    aliases: [CNC, MIS, NRML]
+    chapter: 9
+    summary: CNC = delivery (hold in demat); MIS = intraday margin product (auto square-off); NRML = normal (carry-forward F&O).
+    links: [{to: mis_product, rel: RELATED_TO}, {to: margin, rel: RELATED_TO}]
+
+  - id: mis_product
+    type: Product
+    name: MIS (Margin Intraday Square-off)
+    aliases: [MIS]
+    chapter: 9
+    summary: Intraday leveraged product squared off same day.
+    links: [{to: product_types, rel: PART_OF}]
+
+  - id: bid_ask
+    type: Concept
+    name: Bid, Ask and Market Depth
+    aliases: [Bid price, Ask price, Offer, Order book depth, Spread]
+    chapter: 9
+    summary: Bid = best prices buyers will pay; ask/offer = prices sellers demand; depth shows top 5 levels each side.
+    facts:
+      - Lowest ask has highest priority for sellers; highest bid for buyers (price priority).
+      - A market buy of 10 shares with 2 @ best ask fills across several levels and moves LTP.
+      - Understanding order stacking is critical for intraday traders.
+    formula: {spread: "best_ask - best_bid", mid: "(best_ask + best_bid)/2"}
+    bot_use: Estimate slippage by walking the depth for order size; use bid/ask totals as order-flow imbalance feature.
+    links: [{to: liquidity, rel: MEASURES}, {to: impact_cost, rel: RELATED_TO}]
+
+  - id: clearing_and_settlement
+    type: Process
+    name: Clearing and Settlement (T+2 per source)
+    aliases: [T+2, T+1, Settlement cycle]
+    chapter: 10
+    summary: Buy on T day - funds + charges debited T; shares credited to demat end of T+2 (per source); sale proceeds credited T+2.
+    facts:
+      - Contract note issued on T day for all trades.
+      - BTST (buy today sell tomorrow) sells shares not yet in demat - risk of short delivery, esp. in B-group/illiquid stocks.
+      - Sold shares are blocked immediately.
+    caveats: [Source describes T+2; India moved to T+1 settlement in 2023 - verify current cycle.]
+    links: [{to: clearing_corporation, rel: USES}, {to: btst, rel: RELATED_TO}, {to: contract_note, rel: RELATED_TO}]
+
+  - id: btst
+    type: Strategy
+    name: BTST / ATST
+    aliases: [Buy Today Sell Tomorrow]
+    chapter: 10
+    summary: Selling shares bought the previous day before they reach demat.
+    caveats: [Short-delivery/auction risk especially in illiquid and B-group stocks; avoid unless risk understood.]
+    links: [{to: clearing_and_settlement, rel: RELATED_TO}]
+
+  - id: contract_note
+    type: Concept
+    name: Contract Note
+    chapter: [3, 10]
+    summary: Legal record of trades and charges issued by broker on trade day.
+    links: [{to: transaction_charges, rel: RELATED_TO}]
+
+  - id: transaction_charges
+    type: Concept
+    name: Transaction Charges (brokerage, STT, exchange fees, GST, SEBI fees, stamp duty)
+    aliases: [Charges, STT, Brokerage]
+    chapter: 10
+    summary: Costs on every trade - brokerage, Securities Transaction Tax, exchange transaction charges, service tax/GST, SEBI turnover fee.
+    example: 2014 delivery buy of Rs 1,00,000 - brokerage 20, STT 100 (0.1%), txn 3.25, tax ~2.9, SEBI 0.2 => ~Rs 126.
+    caveats: [Rates in source are dated; use current schedule.]
+    bot_use: Always deduct full round-trip costs in backtests; costs dominate high-frequency strategies.
+    links: [{to: stt, rel: RELATED_TO}]
+
+  - id: corporate_actions
+    type: Event
+    name: Corporate Actions
+    chapter: 11
+    summary: Board-initiated, shareholder-approved actions that change the stock - dividends, bonus, split, rights, buyback.
+    bot_use: Adjust historical prices for splits/bonuses; flag ex-dates to avoid false gaps in signals.
+    links: [{to: dividend, rel: RELATED_TO}, {to: bonus_issue, rel: RELATED_TO}, {to: stock_split, rel: RELATED_TO}, {to: rights_issue, rel: RELATED_TO}, {to: buyback, rel: RELATED_TO}]
+
+  - id: dividend
+    type: Event
+    name: Dividend
+    chapter: 11
+    summary: Distribution of profits (or reserves) per share, expressed as % of face value; interim or final.
+    facts:
+      - Not mandatory; can be paid from reserves even in a loss year.
+      - Timeline - declaration date (AGM) -> ex-dividend date -> record date (~30 days after declaration); stock is cum-dividend until ex-date.
+      - Ex-date is set ~2 business days before record date due to T+2; buy before ex-date to be entitled.
+      - High payout makes sense when growth opportunities are exhausted.
+    bot_use: Price drops roughly by dividend amount on ex-date - adjust backtests; dividend arbitrage awareness.
+    links: [{to: corporate_actions, rel: PART_OF}, {to: face_value, rel: USES}, {to: dividend_yield, rel: RELATED_TO}]
+
+  - id: bonus_issue
+    type: Event
+    name: Bonus Issue
+    chapter: 11
+    summary: Free shares from reserves in a fixed ratio (e.g. 2:1 = 2 new per 1 held); share count rises, price adjusts, value unchanged.
+    formula: {post_price: "pre_price * held / (held + bonus)"}
+    example: "1:1 - 100 sh @75 -> 200 sh @37.5; value 7,500 unchanged."
+    facts: [Done to improve retail affordability/liquidity when share price is high.]
+    links: [{to: corporate_actions, rel: PART_OF}, {to: stock_split, rel: RELATED_TO}]
+
+  - id: stock_split
+    type: Event
+    name: Stock Split
+    chapter: 11
+    summary: Face value split (e.g. FV 10 -> 5); shares multiply, price divides, market cap unchanged.
+    formula: {split_factor: "old_fv / new_fv", post_price: "pre_price / split_factor"}
+    example: FV 10 -> 2 (1:5) - 100 sh @900 -> 500 sh @180.
+    links: [{to: corporate_actions, rel: PART_OF}, {to: face_value, rel: USES}]
+
+  - id: rights_issue
+    type: Event
+    name: Rights Issue
+    chapter: [11, supplementary]
+    summary: Fresh capital raised from existing shareholders in proportion to holding (e.g. 1:4) at a discount; dilutive.
+    caveats: [Don't be swayed by discount; if market price < rights price, buy in market instead.]
+    links: [{to: corporate_actions, rel: PART_OF}]
+
+  - id: buyback
+    type: Event
+    name: Share Buyback
+    chapter: 11
+    summary: Company buys back its own shares, reducing share count.
+    facts:
+      - Reasons - improve EPS, consolidate promoter stake, prevent takeover, signal confidence, support price.
+      - Usually positive for share price.
+    links: [{to: corporate_actions, rel: PART_OF}, {to: eps, rel: AFFECTS}]
+
+  - id: market_events
+    type: Event
+    name: Key Macro Events
+    chapter: 12
+    summary: Monetary policy, inflation, IIP, PMI, Budget and quarterly earnings move markets.
+    links: [{to: monetary_policy, rel: RELATED_TO}, {to: inflation, rel: RELATED_TO}, {to: iip, rel: RELATED_TO}, {to: pmi, rel: RELATED_TO}, {to: union_budget, rel: RELATED_TO}, {to: earnings_announcement, rel: RELATED_TO}]
+
+  - id: monetary_policy
+    type: Event
+    name: RBI Monetary Policy (Repo, Reverse Repo, CRR)
+    aliases: [RBI policy, Repo rate, Reverse repo, CRR]
+    chapter: 12
+    summary: RBI balances growth vs inflation via key rates; reviewed periodically (quarterly per source).
+    facts:
+      - Repo - rate at which RBI lends to banks; higher = costlier borrowing, slower growth; markets dislike hikes.
+      - Reverse repo - rate at which RBI borrows from banks; hike tightens money supply.
+      - CRR - share of deposits banks must keep with RBI; higher CRR drains liquidity.
+      - Rate-sensitive sectors react first - banks, autos, housing finance, real estate, metals.
+      - Higher rates curb inflation; lower rates tend to raise inflation.
+    bot_use: Event-day volatility regime; sector rotation on rate decisions.
+    links: [{to: inflation, rel: AFFECTS}, {to: interest_rates, rel: RELATED_TO}]
+
+  - id: interest_rates
+    type: Concept
+    name: Interest Rates
+    summary: Cost of money; drives borrowing, growth, inflation, bond prices, currency and futures pricing.
+    links: [{to: monetary_policy, rel: RELATED_TO}]
+
+  - id: inflation
+    type: Concept
+    name: Inflation (CPI / WPI)
+    aliases: [CPI, WPI]
+    chapter: 12
+    summary: Sustained rise in general prices measured by WPI (wholesale) and CPI (retail); MOSPI publishes CPI ~2nd week monthly.
+    facts:
+      - High inflation is a bad signal for markets.
+      - CPI is what matters to consumers.
+    links: [{to: monetary_policy, rel: RELATED_TO}]
+
+  - id: iip
+    type: Event
+    name: Index of Industrial Production (IIP)
+    aliases: [IIP]
+    chapter: 12
+    summary: Monthly industrial production index by MOSPI; rising = positive for markets; low IIP pressures RBI to cut rates.
+    links: [{to: market_events, rel: PART_OF}]
+
+  - id: pmi
+    type: Event
+    name: Purchasing Managers Index (PMI)
+    aliases: [PMI]
+    chapter: 12
+    summary: Survey-based manufacturing/services activity index.
+    conditions: {expansion: "pmi > 50", contraction: "pmi < 50", no_change: "pmi == 50"}
+    links: [{to: market_events, rel: PART_OF}]
+
+  - id: union_budget
+    type: Event
+    name: Union Budget
+    chapter: 12
+    summary: Annual finance ministry presentation (around Feb 1 now; last week of Feb per source) with policy/tax changes; strong market reactions.
+    example: July 2014 cigarette duty hike -> ITC -3.5% and index drag since ITC is a heavyweight.
+    links: [{to: market_events, rel: PART_OF}]
+
+  - id: earnings_announcement
+    type: Event
+    name: Quarterly Earnings Announcement
+    chapter: 12
+    summary: Listed companies report quarterly revenue, expenses, taxes, profit and sometimes guidance.
+    facts:
+      - Price reacts to actual vs street expectation - beat = up, miss = down, in-line = flat with negative bias.
+      - Indian quarters - Q1 Apr-Jun (results ~July), Q2 Jul-Sep (~Oct), Q3 Oct-Dec (~Jan), Q4 Jan-Mar (~Apr); Infosys usually reports first.
+    conditions: {signal: "sign(actual - consensus)", in_line: "flat_to_negative_bias"}
+    bot_use: Earnings-surprise strategies; avoid holding through results unless intended; widen stops/IV crush awareness.
+    links: [{to: market_events, rel: PART_OF}, {to: iv_crush, rel: RELATED_TO}]
+
+  - id: point_of_view
+    type: Concept
+    name: Point of View (POV) and Instrument Selection
+    aliases: [POV]
+    chapter: 13
+    summary: Success requires a researched directional view (via FA, TA, quant) plus choosing the right instrument to express it.
+    facts:
+      - Methods - Fundamental, Technical, Quantitative analysis, outside views (avoid relying on outside views).
+      - Long-term very bullish -> delivery equity; short-term (1 week) bullish -> futures; bullish with limited risk -> options.
+      - Bullish can be expressed via spot, futures, calls, puts combos or synthetic positions.
+    bot_use: Map signal horizon/conviction to instrument - equity for long-term, futures for short-term directional, options for capped-risk/event trades.
+    links: [{to: technical_analysis, rel: USES}, {to: fundamental_analysis, rel: USES}, {to: quantitative_analysis, rel: USES}, {to: futures_contract, rel: RELATED_TO}, {to: options, rel: RELATED_TO}]

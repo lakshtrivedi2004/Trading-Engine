@@ -3,8 +3,10 @@
 Fetched on a background thread and served from memory. The trading engine never
 waits on this - a chart that fails to load must not delay an order.
 """
+import hashlib
 import json
 import os
+import tempfile
 import threading
 import time
 from collections import deque
@@ -12,17 +14,136 @@ from datetime import timedelta
 
 import numpy as np
 
+try:
+    import fcntl                   # POSIX: the budget is shared across processes
+except ImportError:                # pragma: no cover - Windows: per process only
+    fcntl = None
+
 from arb.instruments import IST, now_ist, parse_expiry
 from arb.volume import VolumeTracker
+from arb.fileio import write_json
 
 INTERVALS = {"1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
              "1h": "ONE_HOUR", "1d": "ONE_DAY"}
 SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
 
+# Angel's historical endpoint: 3 requests/s, 150/min, 5000/hour per API key
+# (Angel's published limits), and in practice it refuses bursts well before
+# that ("Access denied because of exceeding access rate"). Every caller - the
+# index candles and the stock desk in this process, AND any other engine on the
+# same host using the same key (prod and dev) - draws from one shared budget,
+# kept in a lock-protected file, with headroom under each published limit.
+HIST_GAP_SEC = 1.0                # <= 1/s       (limit 3/s)
+HIST_PER_MIN = 100                # <= 100/min   (limit 150/min)
+HIST_PER_HOUR = 4000              # <= 4000/hour (limit 5000/hour)
+HIST_RETRY_SEC = (5.0, 15.0, 30.0)
+_hist_lock = threading.Lock()
+
+
+def _rate_limited(text):
+    # Seen live: "Access denied because of exceeding access rate"; Angel's docs
+    # word it "403 Access denied because of exceeding rate limit". Match both.
+    t = str(text).lower()
+    return "access rate" in t or "rate limit" in t or "access denied" in t
+
+
+def _budget_path(api):
+    # A hash, not the key itself: /tmp is world-readable and an 8-character
+    # Angel key would otherwise be the whole file name (review D-B3).
+    key = str(getattr(api, "api_key", "") or "default")
+    tag = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), f"angel_hist_{tag}.json")
+
+
+_local_stamps = []
+
+
+def _take_slot_local():
+    """The same budget within this process only, for when the shared file
+    cannot be used (owned by another user, /tmp read-only or full) - pacing
+    must degrade, never stop history altogether (review D-B2)."""
+    while True:
+        with _hist_lock:
+            now = time.time()
+            _local_stamps[:] = [t for t in _local_stamps if 0.0 <= now - t < 3600.0]
+            wait = (_local_stamps[-1] + HIST_GAP_SEC - now) if _local_stamps else 0.0
+            for window, cap in ((60.0, HIST_PER_MIN), (3600.0, HIST_PER_HOUR)):
+                inside = [t for t in _local_stamps if now - t < window]
+                if len(inside) >= cap:
+                    wait = max(wait, inside[0] + window - now)
+            if wait <= 0:
+                _local_stamps.append(now)
+                return
+        time.sleep(min(wait, 5.0))
+
+
+def _take_slot(api):
+    """Block until one getCandleData call fits the shared budget, and book it.
+
+    The file holds the last hour's request times. It is only read and written
+    under an exclusive lock (fcntl, so it holds across processes); the waiting
+    happens outside the lock so another engine is never stuck behind a sleeper.
+    """
+    path = _budget_path(api)
+    while True:
+        try:
+            lf = open(path + ".lock", "a+")
+        except OSError:
+            return _take_slot_local()
+        with _hist_lock, lf:
+            if fcntl is not None:
+                fcntl.flock(lf, fcntl.LOCK_EX)
+            try:
+                with open(path) as fh:
+                    stamps = [float(t) for t in json.load(fh)]
+            except (OSError, ValueError, TypeError):
+                stamps = []
+            now = time.time()
+            # Only the past hour: a stamp from the future (the clock stepped
+            # back) would otherwise block every call for the size of the step
+            # (review D-B1).
+            stamps = [t for t in stamps if 0.0 <= now - t < 3600.0]
+            wait = (stamps[-1] + HIST_GAP_SEC - now) if stamps else 0.0
+            for window, cap in ((60.0, HIST_PER_MIN), (3600.0, HIST_PER_HOUR)):
+                inside = [t for t in stamps if now - t < window]
+                if len(inside) >= cap:
+                    wait = max(wait, inside[0] + window - now)
+            if wait <= 0:
+                stamps.append(now)
+                try:
+                    write_json(path, stamps)
+                except OSError:
+                    pass
+                return
+        time.sleep(min(wait, 5.0))
+
+
+def candle_data(api, params):
+    """api.getCandleData within the shared budget, retried on a rate refusal.
+
+    A refusal is retried after 5 s, 15 s and 30 s rather than left to the next
+    refresh: losing the morning's history means the engine reads structure off
+    stale bars until then. Any other error is raised at once."""
+    for k in range(len(HIST_RETRY_SEC) + 1):
+        _take_slot(api)
+        err, r = None, None
+        try:
+            r = api.getCandleData(params)
+        except Exception as e:
+            err = e
+        refused = (_rate_limited(err) if err is not None else
+                   isinstance(r, dict) and r.get("status") is False
+                   and _rate_limited(r.get("message", "")))
+        if not refused or k == len(HIST_RETRY_SEC):
+            if err is not None:
+                raise err
+            return r
+        time.sleep(HIST_RETRY_SEC[k])
+
 
 class CandleStore:
     def __init__(self, api, underlyings, interval="5m", lookback_days=5,
-                 refresh_sec=300.0, cache_dir=None, log=lambda *_: None):
+                 refresh_sec=900.0, cache_dir=None, log=lambda *_: None):
         self.api = api
         self.underlyings = {u.name: u for u in underlyings}
         self.interval = interval
@@ -55,6 +176,7 @@ class CandleStore:
         self._vol = VolumeTracker()
         self.live = {}                 # name -> [iso, o, h, l, c, v] for the open bucket
         self.max_rows = 3000           # ~8 sessions of 1-minute bars
+        self.stale_tick_sec = 30.0     # no index tick for this long: build no live bar (sparse index ticks reach ~20 s)
         self._fetch_errors = {}        # name -> last error text, logged once
         self._live_thread = None
         # The option premium chart: one mid-price row per minute for every
@@ -124,19 +246,57 @@ class CandleStore:
         from datetime import datetime
         return datetime.fromtimestamp(start, IST).strftime("%Y-%m-%dT%H:%M:%S+05:30")
 
+    SUSPEND_GAP_SEC = 5.0
+
+    def _woke_from_suspend(self, st):
+        """True once after the machine slept. Ticks are stamped on the monotonic
+        clock, which stops in suspend, so after a lid-open quotes from before
+        the sleep read as fresh and the open live bar would span the whole gap
+        as one fake bar (13 Oct 2026 review). CLOCK_BOOTTIME keeps counting
+        through a sleep and CLOCK_MONOTONIC does not, so their gap grows by
+        exactly the time slept (Linux; elsewhere this never fires)."""
+        boot = getattr(time, "CLOCK_BOOTTIME", None)
+        if boot is None:
+            return False
+        slept = time.clock_gettime(boot) - time.monotonic()
+        last, self._slept = getattr(self, "_slept", None), slept
+        if last is None or slept - last < self.SUSPEND_GAP_SEC:
+            return False
+        recv = getattr(st, "recv_ns", None)
+        if recv is not None:
+            recv[:] = 0                        # every quote stale until it ticks again
+        self.live.clear()                      # no bar may span the sleep
+        self.fetched_at.clear()                # history again at the next refresh pass
+        self.log(f"[candles] the machine slept {slept - last:.0f} s: quotes marked stale, "
+                 f"open bars dropped, history refresh due")
+        return True
+
     def _sample_live(self):
         st = self._store
         if st is None:
             return
         now = time.time()
+        if self._woke_from_suspend(st):
+            return
         iso = self._bucket_iso(now)
         if hasattr(st, "ask") and (not self._premium or self._premium[-1][0] != iso):
             b, a = st.bid, st.ask
             with self._lock:
                 self._premium.append((iso, np.where((b > 0) & (a > 0), (b + a) / 2, st.ltp)))
+        recv = getattr(st, "recv_ns", None)
+        now_ns = time.perf_counter_ns()
         for name, slot in self._spot_slots.items():
             px = float(st.ltp[slot])
             if px <= 0:
+                continue
+            # A dead feed must not invent bars. Without this the last price
+            # was written as a flat bar every minute: 5 Oct 12:16-12:26 the
+            # pace read 0.50 against a true 1.03, and 20 flat bars make ATR 0,
+            # which the regime gate used to pass. A minute with no tick is left
+            # missing; the next history refresh fills it. Index slots only - a
+            # quiet cash stock legitimately goes seconds without a trade.
+            if recv is not None and self.stale_tick_sec > 0 and name not in self._memory_only \
+                    and (now_ns - int(recv[slot])) / 1e9 > self.stale_tick_sec:
                 continue
             bar = self.live.get(name)
             if bar is None or bar[0] != iso:
@@ -145,7 +305,14 @@ class CandleStore:
                 if bar is not None:
                     with self._lock:
                         rows = self.data.get(name) or []
-                        if not rows or rows[-1][0] < bar[0]:
+                        if rows and rows[-1][0] == bar[0]:
+                            # A history row for this same minute was fetched
+                            # while the minute was still open, so it is partial;
+                            # the bar built from every tick is the complete one
+                            # (review D-H1).
+                            rows[-1] = bar
+                            self.data[name] = rows
+                        elif not rows or rows[-1][0] < bar[0]:
                             rows.append(bar)
                             # Bounded: the engine reads at most a few hundred.
                             keep = int(self.max_rows)
@@ -200,10 +367,7 @@ class CandleStore:
 
     def _save_cache(self, name, rows):
         try:
-            tmp = self._cache_path(name) + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(rows, fh)
-            os.replace(tmp, self._cache_path(name))
+            write_json(self._cache_path(name), rows)
         except Exception:
             pass
 
@@ -217,7 +381,7 @@ class CandleStore:
             "fromdate": start.strftime("%Y-%m-%d 09:15"),
             "todate": end.strftime("%Y-%m-%d %H:%M"),
         }
-        r = self.api.getCandleData(params)
+        r = candle_data(self.api, params)
         # SmartApi reports API errors as a dict with status False rather than
         # raising, so without this check a refused request is an empty success.
         if isinstance(r, dict) and r.get("status") is False:
@@ -232,7 +396,7 @@ class CandleStore:
             if not force and fresh < self.refresh_sec * 0.9:
                 continue                      # cache still current; spend nothing
             try:
-                rows = self._fetch(u)
+                rows = self._complete_only(self._fetch(u))
                 if rows:
                     with self._lock:
                         # Merge rather than replace: history is authoritative for
@@ -246,10 +410,15 @@ class CandleStore:
                     self._save_cache(name, snap)
                     if self._fetch_errors.pop(name, None):
                         self.log(f"[candles] {name}: historical API recovered")
+                else:
+                    # An accepted request with no bars is never right for a
+                    # multi-day window, and silently ignoring it leaves the
+                    # index on live bars alone with nothing in the log to say so.
+                    raise RuntimeError(f"empty response - no candles returned for "
+                                       f"token {u.spot_token} on {u.spot_exchange}")
             except Exception as e:
                 self._report_fetch_error(name, e)
-            # The historical endpoint is rate limited; space the calls generously.
-            time.sleep(2.5)
+            # Spacing between calls is candle_data's shared budget, not a sleep here.
 
     def _report_fetch_error(self, name, err):
         """Say it once per outage, and say what it means.
@@ -273,7 +442,11 @@ class CandleStore:
     def _run(self):
         while not self._stop.is_set():
             self.refresh_once()
-            self._stop.wait(self.refresh_sec)
+            # Looked at every minute: refresh_once skips what is still current at
+            # no cost, so a refused index is retried in a minute and history
+            # comes back within a minute of a suspend (the wait's clock stops
+            # while the machine sleeps; the wall-clock age it checks does not).
+            self._stop.wait(min(60.0, self.refresh_sec))
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="candles", daemon=True)
@@ -303,12 +476,23 @@ class CandleStore:
     def seed(self, name, rows):
         """Merge fetched 1-minute history under the live bars (a new stock pick).
         History is authoritative for the minutes it covers; newer live bars stay."""
+        rows = self._complete_only(rows)
         if not rows:
             return
         with self._lock:
             mine = self.data.get(name) or []
             tail = [r for r in mine if r[0] > rows[-1][0]]
             self.data[name] = (list(rows) + tail)[-int(self.max_rows):]
+
+    def _complete_only(self, rows):
+        """History rows whose minute has fully elapsed. Angel's history API
+        also returns the minute still in progress; merged as the last row it
+        became the "closed" bar the engine decided on, with a wrong close and
+        a missing wick, until the next refresh (review D-H1, 2 Oct 2026)."""
+        if not rows:
+            return rows
+        cur = self._bucket_iso(time.time())
+        return [r for r in rows if str(r[0]) < cur]
 
     def premium(self, slot, limit=30):
         """Closing mid of one option per minute, oldest first, live mid last."""

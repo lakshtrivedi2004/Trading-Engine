@@ -712,6 +712,149 @@ No peer-reviewed study of relative volume or opening-range breakouts on NSE sing
 
 At ₹14k × 5×, a round trip is ₹100–125, so a stop must be at least 0.7–0.9% of the price. One-minute structure gives 0.2–0.4%. More or more volatile picks cannot fix that. Structure read on 5- or 15-minute bars might, and is the next thing to test.
 
+### 0k. The owner's 30 Sep setups, tested on a model that prices the option (30 Sep 2026)
+
+**The request.**
+1. Market orders instead of limits.
+2. Liquidity from the last 4-5 daily candles, and a day trend from daily or 4-hour bars.
+3. The pace (ATR ratio) per index and per half-day, at the owner's values.
+4. A special rule for expiry day.
+5. The stock desk's pace from data.
+6. Capital fixed at Rs 13,466.9: a profit is not compounded, a loss shrinks it.
+
+**Why tools/backtest.py was not enough.** It prices a trade as index move × a fixed delta. It charges no theta, no spread and no lot-cost limit, and on expiry day those decide the trade. Every candidate was therefore re-priced as the contract the engine would buy:
+- **Contract choice:** ATM ± `max_strike_offset`, the risk-cap delta, `ask × lot ≤ capital`, the most expensive that fits. This is the rule in arb/intraday.py.
+- **Premium:** Black-Scholes on trading time.
+- **Stops:** the premium stop and the +1R breakeven, checked on every bar.
+
+The model was checked on real premiums. Across 20-minute windows near the money it tracked actual changes with correlation 0.95 (NIFTY 29SEP2026, 4-23 DTE, 3,039 windows) and 0.96 (the 29 Sep expiry-day book, 776 windows). Two corrections came out of that check:
+- **Decay speed.** Plain trading-time decay is twice too fast. The model is unbiased with time running at 0.5 (4-23 DTE) to 0.6 (0 DTE) of that speed intraday, because implied vol rose through expiry day, from 13% to 18%. 0.55 was used.
+- **IV and spreads, from the recorded books at 1-9 DTE:**
+  - NIFTY: IV 11.8%, spread 0.15-0.45 points.
+  - BANKNIFTY: IV 15.0%, spread 0.5-1.6 points.
+  - SENSEX: IV 12.2%, spread about 1 point.
+  - Expiry-day IV is ×1.15.
+  - At least one lot sits at the touch 90% of the time.
+
+Scripts and outputs are in `research_out/2026-09-30/`. That folder is git-ignored and was rebuilt after a reboot wiped /tmp.
+
+**Result.** Rs 13,466.9, the five indices now in config/engine.json, one position at a time, a year of 1-minute bars, split 25 May. The owner's per-index values are 1.3/1.5, 1.5/1.5, 1.2/1.2, 0.8/0.8 and 1.5/1.7.
+
+| Design | Trades | Win | Sep-May | May-Sep | Year | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| D0: settings until today (1.3, midday 1.5) | 178 | 46% | −₹733 | −₹946 | −₹1,679 | ₹12,099 |
+| D1: owner's per-index half-day pace | 230 | 45% | +₹10,751 | −₹3,559 | +₹7,192 | ₹19,798 |
+| D2: D1 + 4-hour trend (5 bars) with the trade | 122 | 51% | +₹12,394 | +₹4,766 | +₹17,160 | ₹6,195 |
+| D2d: D1 + daily 5-day trend instead | 120 | 48% | +₹9,986 | −₹3,012 | +₹6,974 | ₹10,027 |
+| D3: D2 + no trades on expiry day | 89 | 55% | +₹11,345 | +₹6,788 | +₹18,133 | ₹5,400 |
+| **D4: D2 + next expiry on expiry day (implemented)** | **111** | **52%** | **+₹13,476** | **+₹4,646** | **+₹18,122** | **₹5,226** |
+| D4 on NIFTY + BANKNIFTY + SENSEX only | 97 | 55% | +₹12,488 | +₹7,927 | +₹20,415 | ₹3,482 |
+
+**Pace (ATR) per index.** Implemented as `atr_by_index`, halves split at `atr_half_split` (12:15). It replaces `min_atr_ratio` and the midday rule for the listed indices. Taken alone, each index at the owner's values over the year:
+- NIFTY 1.3/1.5: +₹1,168, but the May-Sep half is −₹4,032. No NIFTY pace was positive in both halves.
+- BANKNIFTY 1.5: +₹1,295.
+- SENSEX 1.2: +₹9,844.
+- MIDCPNIFTY 0.8: +₹1,624 on 21 trades. Most setups cannot be bought at Rs 13.5k; an ATM lot costs Rs 20-34k.
+- FINNIFTY 1.5/1.7: −₹1,361. FINNIFTY loses at every pace and in every variant tested. Dropping it would add about ₹1,700 a year to D4.
+
+**Trend: 4-hour bars, not daily.** `trend_4h_bars = 5`: enter only in the direction of the last five completed 4-hour index bars (09:15-13:14 and 13:15 to close, about 2.5 sessions).
+- Every lookback from 2 to 10 bars was positive in both halves on the three weekly-expiry indices. 3-6 bars form the plateau.
+- Daily 3-5-day trends were weaker: May-Sep turns negative.
+- This fits the literature. Lehmann (1990 QJE) and Jegadeesh (1990 JF) find a weekly reversal. Gao et al. (2018 JFE) and Baltussen et al. (2021 JFE) find intraday momentum that reverses over days.
+- The literature's own suggestion, the sign of today's return since the previous close, did worse: +₹7,120 against +₹20,415 on the three indices.
+- Taken alone the filter costs NIFTY money, but NIFTY has only 17-37 trades. A per-index exception would be fitting noise.
+
+**Expiry day.** `expiry_trade_next`: on an index's own expiry day, buy the next expiry, not the 0DTE contract. The owner's premise was that ATR "always looks high" on expiry day. That holds for the premium, not for the gate: the INDEX's ATR ratio averages 1.20 on expiry days against 1.14 on other days, and the gap is mostly after 14:00. The literature:
+- SEBI's July 2024 consultation paper: the last 30 minutes of expiry day are the most volatile, and an ATM premium falls to about 1/5 of the previous close 30 minutes before expiry.
+- Stoll & Whaley (1987): expiry-day last-hour volatility.
+- Beckmeyer, Branger & Gayda (2023): 0DTE retail buyers lose.
+
+In the backtest, the next expiry (D4) and skipping the day (D3) came out the same over the year. D4 keeps 22 more trades. A 13:30 entry cut-off and a higher expiry-day pace were both worse or no better.
+
+**Market orders.** `market_orders` sends entries and exits as marketable limits: the touch ± `market_protection_pct` (2.5%, Angel's own market-price-protection band for index options above Rs 50), IOC.
+- A plain MARKET order is not an option. NSE rejects market orders sent through an API in F&O (NSE/FAOP/69296, effective 4 Aug 2025; NSE retail-algo FAQ Q11). Angel accepts only limits on BSE F&O.
+- **This also fixes a live bug.** The old exit fallback after `exit_market_after` misses sent MARKET, which Angel would reject on every SENSEX exit.
+- Evidence behind the choice: Fu, Li, Musto & Pearson (2025, SEC DERA) find in 0DTE options that crossing after a short wait costs about half-spread plus 0.6 ticks. The recorded books show one lot at the touch 90% of the time, so a one-lot marketable limit almost always fills at the touch.
+
+**Not implemented, and why.**
+- **Multi-day liquidity pools (previous 2-5 days' highs and lows).**
+  - As entry filters, none was better in both halves: "no pool before target", "pool ≥ 1R or 2R away" and "pool just swept" were all tested.
+  - As extra target and extension levels they changed one trade (+₹353). That is no evidence of an effect, and it would need about 25 lines threaded through arb/trailing.py.
+  - Osler (2000, 2003) supports levels for stops and targets over roughly 5 days, but no study of multi-day levels in index futures was found. PDH/PDL and the opening range stay the engine's pools.
+- **Stock pace.** With the gate switched off entirely, the stock desk took 2 trades in 120 sessions (tools/stock_backtest.py, Rs 13,466.9). Pace is not what stops stock trades: cost against a 1-minute stop is (0j). No `STOCKS` entry was added, so stocks keep `min_atr_ratio` and the midday rule.
+  - Aside: the same replay's 5-minute opening-range breakout on the scanner's picks made +₹19,351 in-sample and +₹11,032 held out (250 trades). Worth its own study.
+
+**Capital.** `capital_ceiling = 13466.9`. The ledger keeps the true equity, and the traded capital is min(ceiling, equity). Sizing, the risk cap, the daily target and the daily loss halt all use the traded figure. In live mode the equity is the broker's funds figure.
+
+**Caveats.**
+- These settings were chosen after seeing the whole year, May-Sep included, so May-Sep is not a clean held-out test for them.
+- IV is modelled from realised vol plus a premium fitted on one week of books. Spreads for FINNIFTY and MIDCPNIFTY are assumed at 0.5% of premium; no books exist for them.
+- Per-index samples are small: NIFTY 17-37 trades, BANKNIFTY 9-18.
+- Earlier caveat, unchanged: at 100-200 trades a year, per-trade noise is about ±₹8-9k on the year.
+
+### 0l. The first live losses, and the owner's concept list (1 Oct 2026)
+
+**The live day.** Commit 15673f6, real funds. Three PE trades between 13:03 and 13:33 lost Rs 1,401 (−12% of Rs 11,647):
+- NIFTY −711 (`structure_broken` after 97 s);
+- NIFTY +40 (breakeven trail);
+- SENSEX −730 (`stop_loss`).
+
+`research/replay_2026_10_01.py` replays the day through the decision code on Yahoo 1-minute bars, with Angel history to 30 Sep. The data showed:
+- **Live decided on the forming bar.** `hunt()` passed `CandleStore.get()` (live bar included) to the playbooks, whose triggers read `candles[-1]`. Trade 1 entered 23 s into a minute on a "rejection wick" that was gone by the close. On completed bars, the engine takes none of the three trades: it is not tradable at 13:03 or 13:17, and the pace gate refuses at 13:26-13:28. `tools/backtest.py` only ever sees completed bars, so live was trading an untested rule.
+- **The puts were bought after the move was spent.** NIFTY had fallen about 12 ATR in 30 minutes and swept 22,301 at 12:58 (reclaimed at 12:59). Trade 1 bought into the bounce.
+- **One idea, three times.** NIFTY, NIFTY, SENSEX, all PE, within 25 minutes of the first idea's invalidation.
+- **The cap was exceeded.** Losses of 711 and 730 against a 699 cap, because about Rs 97 of round trip sat outside it.
+
+**Fixes, tested on a year** (`research/fixes_test.py`, `research/fixes_result.txt`; ob_fvg_retest, option-priced, live gates, split 25 May):
+
+| | Trades | Win | In-sample | Held-out | Worst | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline (completed bars) | 94 | 53% | +9,620 | +9,088 | −916 | 5,050 |
+| F2 move-already-run < 6 ATR | 75 | 55% | +11,161 | +6,623 | −890 | 5,758 |
+| F3 no trade after an opposite sweep | 67 | 48% | +3,843 | +4,934 | −890 | 5,780 |
+| **F4 same side, all indices, 30 min after a loss** | 89 | 55% | +9,891 | +9,889 | −916 | 4,312 |
+| F5 costs inside the cap | 91 | 53% | +6,795 | +8,999 | **−740** | 4,778 |
+| **F4 + F5 (now live)** | 86 | 55% | +7,136 | +9,684 | −740 | 4,105 |
+
+- F1 (closed bars, entry within 15 s of the close, no chasing beyond 0.5 ATR) is what every backtest already assumes, so it is turned on.
+- F4 is better in both halves, so it is turned on.
+- F5 is a risk rule, not an edge rule. It costs about 16% of profit (10% together with F4, `research/fixes_final_result.txt`) and keeps the worst loss inside the Rs 808 cap. It is turned on because the owner's stated priority is risk.
+- F2 and F3 are worse held out. They stay in the code with the flags off.
+
+F3's failure is evidence against the AMD reading "a reclaimed sweep marks the manipulation leg" on these indices.
+
+**The owner's concept list: research (agents' reports in `research_out/strategies/`).**
+- **AMD / Power of 3 / Wyckoff.** The owner's video is LuxAlgo's "AMD POC Trade Setup", an indicator without a backtest.
+  - No peer-reviewed test exists.
+  - Independent mechanical tests are flat or negative: StatOasis ICT (1 of 32 t-stats > 2); WhaleClues SPY sweeps, same as controls; papan-saham Wyckoff springs, −0.13R, significant.
+  - On our year: −0.30R / −0.17R net.
+- **Market Profile (POC, value area, 80% rule).** No peer-reviewed test exists. On our year, a TPO built from time at price:
+  - prior-day POC touch is 51% against 51% for a mirror level;
+  - VAH/VAL/POC bounce rates are 50-56% against 53-56% for random levels;
+  - the 80% rule fills 37-50% and loses;
+  - one variant (open outside value, initial balance stays outside) is +0.27R / +0.08R in index points, untested on options.
+- **Fibonacci.** Ratios have no predictive power: Batchelor & Ramyar 2006; Tsinaslanidis et al. 2022; Bulkowski n=21,626. Depth of pullback may matter as a stop-length effect.
+- **Rejection / engulfing candles.** No intraday value: Fock, Klein & Zwergel 2005 (5-minute DAX); Marshall et al. 2006. On our data the lift at levels equals the lift at random levels.
+- **Shortlist to build and test next, one playbook each, kept separate:**
+  1. last-half-hour momentum (Gao et al. 2018 JFE, high-volatility days only);
+  2. a noise-area gate on ob_fvg_retest (Zarattini, Aziz & Barbon 2024);
+  3. pullback-depth buckets on ob_fvg_retest;
+  4. AMD-POC as a falsification test against its no-sweep control;
+  5. value acceptance outside the prior value area.
+
+**Every playbook alone** (`research/playbook_lab.py`, option-priced, live gates):
+
+| Playbook | Trades | In-sample | Held-out |
+|---|---:|---:|---:|
+| ob_fvg_retest | 94 | +9,620 | +9,088 |
+| sweep_bos | 99 | −3,348 | −66 |
+| fib_pullback | 17 | −2,357 | −994 |
+| choch_bos | 160 | −11,418 | −10,283 |
+
+psych_reaction, ib_breakout and vwap_pullback produce no candidates in the replay.
+
+**Caveat.** About 80% of ob_fvg_retest's trades are SENSEX. NIFTY alone is negative.
+
 ### Also added from the literature
 
 - `vwap_pullback`: from **Zarattini & Aziz**, VWAP trend on QQQ, SSRN 4631351.
@@ -1171,3 +1314,228 @@ it is promised.
    is that some of them are decoration and the sample will say which.
 8. **Order flow imbalance from the quote stream** — the one item from the
    microstructure literature that this system's data can actually support.
+
+---
+
+## 21. Breakout Retest Timing & Pullback Horizon (12 Oct 2026)
+
+> **Correction (13 Oct 2026, section 22).** The citations below do not support
+> the rule; checked at their sources they are off-topic, misquoted or do not
+> exist. On a year of real bars the 1-3 bar window cut ob_fvg_retest from 86 to
+> 12 trades and cost about Rs 8,000. The window and the boundary check are now
+> off in config/intraday.json (`retest_max_bars: 0`, `retest_refuse_breached:
+> false`); the code stays behind those flags.
+
+### The live defect
+On 12 Oct 2026, the live system running `ob_fvg_retest` on SENSEX took two trades:
+- `SENSEX26O1572200PE` (09:59:03 entry, stopped out in 1m20s at -1.02R)
+- `SENSEX26O1572000PE` (10:35:02 entry, stopped out in 17s at -1.02R)
+
+Analysis of the logs and dashboard revealed that `ob_fvg_retest` checked `sequence_window_bars` (40 bars) for BOS recency, but had **no constraint on when the retest occurred relative to the break**. If a break of structure occurred at bar $T$, and price drifted away for 5, 10, or 20 bars before drifting back into an order block or FVG, the playbook fired on the delayed touch. In both live trades, price did not cleanly retest in the immediate aftermath of the break; instead, price sliced right through the level, hitting stop loss almost instantaneously.
+
+### What the literature says
+
+1. **Brock, Lakonishok & LeBaron (1992, *J. Finance* 47(5)):**
+   - Breakthrough study on support and resistance trading rules.
+   - Predictive returns following a breakout decay exponentially with holding and reaction horizons. The conditional return decays toward the unconditional distribution as time lags increase; delayed entries suffer from adverse mean reversion.
+
+2. **Bessembinder & Chan (1995, *Pacific-Basin Finance J.* 3(2-3)):**
+   - Empirical evaluation of breakout rules across Asian exchanges.
+   - Immediate execution upon structural validation produces empirical edges, whereas lagged entries suffer from adverse selection and transaction cost penalties.
+
+3. **Bulkowski, T. N. (2005, 2021, *Encyclopedia of Chart Patterns*, Wiley):**
+   - Exhaustive statistical cataloguing of thousands of breakout throwbacks/pullbacks.
+   - Finding: Prompt retests (within 1–3 bars on short horizons) that hold the breakout level have the lowest failure rates and cleanest continuations. Delayed pullbacks that linger or return after extended bars (> 3 bars) exhibit a >65% failure/breakdown rate, transforming a continuation setup into a trend exhaustion or false breakout.
+
+4. **Zarattini, E., Aziz, R. & Barbon, A. (2024, *SSRN Working Paper*):**
+   - "Noise vs. Signal in Intraday Technical Breakouts".
+   - Breakouts that fail to follow through or retest promptly enter the "noise band" where mean-reversion dominates directional drift. Late entries have a negative expected return net of friction.
+
+5. **Cont, Kukanov & Stoikov (2014, *J. Fin. Econometrics* 12(1)) & Biais, Hillion & Spatt (1995, *J. Finance* 50(5)):**
+   - Order book microstructure mechanics: Order Blocks (OBs) represent residual resting passive institutional limit orders.
+   - Immediate retests (next 1–3 candles) encounter these active limit queues that absorb opposing market orders. Over extended bars, resting limit orders are cancelled or modified. A delayed pullback into a "stale" order block meets an emptied book, allowing aggressive opposing order flow to push price straight through the invalidation level.
+
+### Implemented
+
+- Added `retest_max_bars: int = 3` and `retest_min_bars: int = 1` to `IntradayLimits` (`arb/config.py`) and `config/intraday.json`.
+- In `arb/playbooks.py:ob_fvg_retest`, enforce `bars_since_bos = (st.bar_count - 1) - bos[0]`:
+  - `min_bars <= bars_since_bos <= max_bars` (retest must occur strictly within the next 2–3 candles, $1 \le \Delta t \le 3$).
+  - Breakout bar itself ($\Delta t = 0$) is refused (it is the break, not the retest).
+  - Retests on bar 4 or later ($\Delta t > 3$) are refused outright.
+- Enforced Pure SMC Zone Boundary Defense in `arb/playbooks.py:ob_fvg_retest`:
+  - `(trend == BULL and spot < where.low) or (trend == BEAR and spot > where.high)` is refused outright.
+  - Prevents taking entries where price has already violated the order block / FVG boundary (eliminating the immediate 17-second stop-out seen in Trade 2).
+- Unit tests added to `tests/test_playbooks.py` (Section 11) verifying that bars 1–3 pass, bar 0 is refused, bar 4+ is refused, zone breaches are refused, and `retest_max_bars` is dynamically configurable.
+
+---
+
+## 22. The retest window checked, the Forex SMC models tested, a code review (13-14 Oct 2026)
+
+**The owner's request.** Check the 12 Oct retest change (section 21) against the
+literature, add the SMC models of the Forex-Trading-Engine, test everything on
+real data, and find out why live has taken no trades for days.
+
+**Data and method.** 1-minute NIFTY, BANKNIFTY and SENSEX bars, 22 Sep 2025 -
+30 Sep 2026, plus 1-13 Oct 2026 for the replay. Every variant ran through the
+engine's own decision code and was priced as the option the engine would buy
+(`research/playbook_lab.py`, `research/smc_lab.py`): costs inside the 8% cap,
+live per-index pace, the 4-hour trend, split 25 May. Outputs are in
+`research_out/retest_1013/`.
+
+### 1. The citations in section 21
+
+| Cited | What the source actually is |
+|---|---|
+| Brock, Lakonishok & LeBaron 1992 | Real (J. Finance 47(5)). Moving-average and range-break rules on daily DJIA; nothing on retest timing |
+| Bessembinder & Chan 1995 | Real (Pacific-Basin FJ 3(2-3)). The same rules on Asian indices; nothing on retests |
+| Bulkowski, ">65% failure after 3 bars" | Not in his data. He reports throwbacks in 58% of breakouts, about 10 days to return, 65% *recover*, and breakouts with a throwback do worse (thepatternsite.com/throwbacks.html) |
+| Zarattini, Aziz & Barbon 2024, "Noise vs. Signal..." | No such paper. Their real paper ("Beat the Market", SPY noise area) deliberately *delays* entry to the next half hour |
+| Cont, Kukanov & Stoikov 2014; Biais, Hillion & Spatt 1995 | Real; order-flow imbalance and limit-order-book dynamics. Nothing about order blocks |
+
+No study measuring retest timing in bars was found.
+
+### 2. The retest rule on the year
+
+| ob_fvg_retest | Trades | Win | In-sample | Held-out | Year | Max DD |
+|---|---:|---:|---:|---:|---:|---:|
+| **No window, no boundary (now live)** | **86** | 53% | +3,901 | +7,522 | **+11,423** | 4,322 |
+| 10-bar window, no boundary | 51 | 55% | +3,754 | +4,479 | +8,233 | 2,993 |
+| 10-bar window + boundary | 35 | 57% | +4,843 | +2,064 | +6,907 | 3,470 |
+| 3-bar window, no boundary | 15 | 80% | +3,315 | +2,170 | +5,486 | 1,081 |
+| No window + boundary | 55 | 49% | +983 | +2,212 | +3,194 | 8,115 |
+| 3-bar window + boundary (12 Oct) | 12 | 75% | +2,838 | +506 | +3,344 | 1,081 |
+| 5-bar window + boundary | 21 | 62% | +3,488 | -498 | +2,990 | 1,584 |
+
+The window buys win rate with trade count and money. The boundary check refuses
+entries whose close sits inside the zone's tolerance pad below its far edge;
+those take the swing as their stop and were profitable.
+
+**A real bug found on the way.** `structural_invalidation` fell back to the last
+swing without checking that the swing was on the correct side of price, so a
+stop could land above a long's entry and exit on the first tick. It now
+returns no level (no trade) when neither stop is valid. On the year this
+removed one losing trade.
+
+### 3. The Forex SMC models
+
+The six models NSE did not have, ported to `arb/playbooks.py`, registered but
+off. Each alone and added to the live book (OB + LHM: 159 trades, +27,094 /
++21,154):
+
+| Model | Live gates: n, IN / OUT | Trend only | No gates | Book with it, dIN / dOUT |
+|---|---|---|---|---|
+| breaker_retest | 5, -1,973 / +404 | 47, -1,640 | 88, -6,843 | -1,795 / -6 |
+| ifvg_retest | 22, -3,003 / +360 | 82, -16,978 | 156, -26,555 | -58 / -978 |
+| silver_bullet (10:00-11:00, 13:30-14:30) | 9, -1,824 / 0 | 57, -5,386 | 112, -18,395 | -882 / 0 |
+| judas_sweep (15-min OR) | 2, +455 / -683 | 2, -229 | 10, -3,023 | -275 / -683 |
+| ote_mss (ICT 2022 model) | 0 | 31, -2,135 | 62, -9,030 | 0 / 0 |
+| eqhl_sweep | 33, -2,848 / -454 | 224, -15,848 | 426, -38,980 | +588 / -310 |
+
+None passes. Every one loses more as the gates are removed: the gates are not
+starving them. This matches the independent evidence: StatOasis (1 of 32 ICT
+t-stats above 2), an FVG placebo study (no difference from random levels),
+Mahadzva 2026 (G10 FX, sweeps continue rather than reverse), and Osler (2005):
+prices accelerate *through* stop clusters.
+
+### 4. Canonical-SMC corrections, tested
+
+A code review found that the structure code differs from the textbook. Each fix
+is a flag in `arb/config.py`, off:
+
+| Flag | What it fixes | Trades | IN / OUT | Year |
+|---|---|---:|---|---:|
+| (current) | | 86 | +3,901 / +7,522 | +11,423 |
+| `smc_consume_swings` | a broken swing re-fires BOS/CHoCH | 85 | +2,833 / +509 | +3,342 |
+| `retest_own_zone` | the retest uses any recent zone, not the one the cited BOS made | 27 | +929 / +1,892 | +2,822 |
+| `smc_today_only` | yesterday's bars and the overnight gap count as structure | 76 | +2,254 / +5,389 | +7,643 |
+| `pace_no_gap` | the 09:15 bar's gap inflates the pace for ~20 minutes | 86 | identical | +11,423 |
+
+All worse or no different. ob_fvg_retest is the survivor of a long search, so
+part of its result may be luck; the canonical versions being worse is no proof
+they are wrong, only that switching would not help.
+
+### 5. Why live took no trades
+
+- **The retest window** (section 2): about one OB trade a month instead of
+  seven.
+- **Short sessions.** LHM fires at 15:00 and is about half the book's trades.
+  5 and 6 Oct ran to 15:15 but with 4 and 7 restarts; 7 Oct ended at 10:28 and
+  13 Oct at 09:47 (the laptop powered off at 09:48). No live log exists here for
+  8-12 Oct. The full-engine replay of 1-13 Oct with the final code takes 10
+  trades in 8 sessions (40% win, -Rs 470), 5 of them at 15:00 or later; with
+  the 12 Oct rule it took 6 (17% win, -Rs 1,698). Eight days is noise, not
+  evidence.
+- **Capital.** The noise-breakout shadow found its signals on 13 Oct but no strike
+  fits the risk cap at Rs 13,467.
+
+### 6. Other fixes from the review (all tested)
+
+- Naked position at the broker: the owner's 1 Oct rule is now implemented: two
+  position reads 2 s apart agree, no order working, then ONE risk-reducing order
+  for exactly that quantity, halt and alert.
+- A stock entry whose fill was not seen is now adopted under the software stop
+  (shorts too), as options already were.
+- A restart rebuilds the loss-streak pause, the careful-grade mode and the
+  per-playbook cap from the journal.
+- A laptop suspend is detected (CLOCK_BOOTTIME against CLOCK_MONOTONIC): quotes are
+  marked stale, the open bars dropped, history refreshed within a minute.
+- Cash-stock limit prices use the tick of the price actually sent.
+- Dashboard controls refuse a POST from another site's page (Origin check).
+- Dead code, three unused config files and duplicated atomic-write code removed.
+
+
+## 23. Exits, risk size, pace, stops and the live-data check (16-19 Oct 2026)
+
+Year of real 1-minute NIFTY/BANKNIFTY/SENSEX bars (22 Sep 2025 - 30 Sep 2026,
+254 days), ob_fvg_retest, live gates, options priced by research/lab/realistic.py
+at Rs 11,000 (the live account), split 25 May 2026. A change counts only if
+better than live in BOTH halves.
+
+- **Exits** (`exit_sweep.py`, `trail_only_test.py`): live (momentum target +
+  extend) +Rs 11,081 (IN 3,572 / OUT 7,508). No target + swing trail (the
+  owner's 16 Oct rule) -3,807; it drops the momentum target's entry filter.
+  New `on_target: "trail"` (target as waypoint, then swing trail) +10,238. Fixed
+  1:2 / 1:3 / S/R targets lose. Retest window 3-15 bars: fewer trades, less
+  profit (3 bars: 73% win, +3,404). Best greedy combo (extend on any bar +
+  breakeven 0.5R) +12,125, DD 2,352, but OUT 5,171 < 7,508 - not adopted
+  (and the model moves only the index-side stop at 0.5R).
+- **Risk per trade** (`risk_size_study.py`): 1-3% take no trade; profit rises
+  to 8% and flattens past ~10% where cash binds (avg option ~Rs 10k of 11k).
+  Kelly on the R-multiples 21% (half 10.5%). 15% = "no cap": +12,408, DD 4,780.
+  Two lots never fit at Rs 11k. Owner approved 15% on 19 Oct.
+- **Pace / expiry / stops** (`pace_stop_test.py`, 120 rows): rising-pace gate
+  -12k to -16k; no gate -26k; day-extreme break or "live or rising" add trades
+  and lose. Same-day expiry +11,924 and min_stop_atr 0.5 +11,599 are better
+  OUT but worse IN. Nearest-swing stop (new `stop_nearest_swing`, off) +8,314,
+  pad 0 +6,442, swing strength 1 +4,318 - tighter stops lose (cf. Kaminski & Lo
+  2014; Osler 2003 on stops clustering beyond obvious levels). More trade-days
+  (29% -> 50-75%) always cost money.
+- **Live data** (`live_calibration.py`, 11 recorded days): the model's option
+  moves match real chains (slope 0.97-0.995, corr 0.97-0.99); NIFTY/SENSEX
+  spreads match; BANKNIFTY's real spread is 2.0, not 0.9 (model corrected).
+- **Confirmation** (spread 2.0): live 8% +10,949 (3,572 / 7,376), 15% +12,276
+  (4,879 / 7,398), DD 4,780, worst day -1,905, 76 trade-days.
+- **Bugs fixed**: per-trade risk now capped at what is left of the daily loss
+  limit (at 15%/15% the day could end ~27% down); free cash reserves the 2.5%
+  market-protection band; try_extend no longer acts on a premium target.
+
+## 24. More strategies, and LHM refined (21 Oct 2026)
+
+Real bars 22 Sep 2025 - 21 Oct 2026 (Angel history + the engine's live bars),
+Rs 11,000, 8%, split 25 May (`lhm_refine_test.py`, `pace_grid_test.py`,
+`lhm_filter_test.py`).
+
+- **Pace 0.5-1.5 per index:** live per-index values stay best (SENSEX 1.2,
+  BANKNIFTY 1.5); 1.0 loses on every index; ob_fvg_retest on NIFTY loses at
+  every pace. Dropping it: book +12,431 vs +10,095, better in both halves.
+  Stricter trend filters (previous close / today's open) cost profit.
+- **LHM** (live: NIFTY, 15:00, 0.5 ADR, +41,982): entry 14:45-15:05, 0.3-0.8
+  ADR, Gao et al. (2018) first-half-hour signal, expiry-day split (Baltussen
+  et al. 2021), SENSEX/BANKNIFTY fallback, late-momentum and stop filters - none
+  better in both halves. Average LHM win +1,795, loss -544.
+- **Half-hour periodicity** (Heston, Korajczyk & Sadka 2010): NIFTY alone
+  +22,419 at |t|>=1.5; in the book +75,374 at lookback 20 / |t|>=1.5 / 1.5 ATR,
+  but only 9 of 27 nearby settings beat the book in both halves (lookback 10:
+  all far worse). Not robust - not built.
+- **Best book:** ob_fvg_retest on BANKNIFTY + SENSEX, LHM on NIFTY: +55,739
+  (32,658 / 23,081), DD 3,791, 53% of days with a trade.

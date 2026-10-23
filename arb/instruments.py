@@ -5,6 +5,8 @@ import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from arb.fileio import write_json
+
 IST = timezone(timedelta(hours=5, minutes=30))
 SCRIP_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
@@ -28,7 +30,7 @@ def years_to_expiry(expiry_str, ref=None):
     return max(secs, 60.0) / (365.0 * 24 * 3600)
 
 
-def load_scrip_master(max_age_hours=12, force=False):
+def load_scrip_master(max_age_hours=12, force=False, tries=3, retry_sec=10.0, stale_ok_hours=96):
     """Download the scrip master, caching it for the day. Contract definitions
     change only overnight, so re-downloading 8 MB mid-session is pure latency."""
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -38,14 +40,30 @@ def load_scrip_master(max_age_hours=12, force=False):
         if age < max_age_hours:
             with open(path) as fh:
                 return json.load(fh), f"cache ({age:.1f}h old)"
-    req = urllib.request.Request(SCRIP_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(data, fh)
-    os.replace(tmp, path)
-    return data, "downloaded"
+    err = None
+    for attempt in range(tries):
+        try:
+            req = urllib.request.Request(SCRIP_URL, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(data, list) or not data:
+                raise ValueError("empty or malformed scrip master")
+            write_json(path, data)
+            return data, "downloaded"
+        except Exception as e:                  # network, timeout, bad JSON
+            err = e
+            if attempt + 1 < tries:
+                time.sleep(retry_sec * (attempt + 1))
+    # 6 Oct 09:17: one read timeout here ended the live engine before the
+    # open. Contract definitions are listed days ahead, so yesterday's file
+    # is a safe fallback; expired contracts are filtered out downstream.
+    if os.path.exists(path):
+        age = (time.time() - os.path.getmtime(path)) / 3600.0
+        if age < stale_ok_hours:
+            with open(path) as fh:
+                return json.load(fh), (f"STALE cache ({age:.1f}h old) - download failed: "
+                                       f"{type(err).__name__}: {str(err)[:80]}")
+    raise err
 
 
 def _strike(scrip):
@@ -157,11 +175,35 @@ def live_futures(scrip_master, underlying="NIFTY", segment="NFO",
     return out[:n]
 
 
+_HOLIDAYS = None
+
+
+def holidays():
+    """Exchange trading holidays (config/holidays.json), as 'YYYY-MM-DD' strings.
+
+    Without them every holiday looked like an open market: the engine logged in
+    at 09:15, found no ticks, and the feed reconnected all day (review F-L1,
+    2 Oct 2026 - Gandhi Jayanti). An unreadable file means no holidays, never
+    a refusal to trade."""
+    global _HOLIDAYS
+    if _HOLIDAYS is None:
+        try:
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "config", "holidays.json")
+            with open(path) as fh:
+                _HOLIDAYS = set(json.load(fh).get("holidays") or [])
+        except (OSError, ValueError, AttributeError):
+            _HOLIDAYS = set()
+    return _HOLIDAYS
+
+
 def market_phase(ref=None, start="09:15", end="15:15"):
-    """'preopen' | 'open' | 'closed' | 'weekend' for the given IST time."""
+    """'preopen' | 'open' | 'closed' | 'weekend' | 'holiday' for the given IST time."""
     ref = ref or now_ist()
     if ref.weekday() >= 5:
         return "weekend"
+    if ref.strftime("%Y-%m-%d") in holidays():
+        return "holiday"
     sh, sm = (int(x) for x in start.split(":"))
     eh, em = (int(x) for x in end.split(":"))
     t = ref.hour * 60 + ref.minute

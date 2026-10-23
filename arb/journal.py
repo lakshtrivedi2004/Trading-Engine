@@ -7,7 +7,6 @@ import csv
 import json
 import os
 import threading
-from datetime import datetime
 
 from arb.instruments import now_ist
 
@@ -69,20 +68,6 @@ class Journal:
                     w.writerow(INTRADAY_COLUMNS)
                 w.writerow(["+".join(t.get(c) or []) if c == "playbooks" else t.get(c, "")
                             for c in INTRADAY_COLUMNS])
-
-    def rebuild_intraday_csv(self):
-        """Regenerate this day's intraday sheet from its JSONL. Returns rows written."""
-        if not os.path.exists(self.jsonl_path):
-            return 0
-        with open(self.jsonl_path) as fh:
-            trades = [t for t in (json.loads(line) for line in fh if line.strip())
-                      if "exit_reason" in t]
-        with self._lock:
-            if os.path.exists(self.intraday_csv_path):
-                os.remove(self.intraday_csv_path)
-        for t in trades:
-            self._append_intraday_csv(t)
-        return len(trades)
 
     def _append_csv(self, fill):
         o = fill["opportunity"]

@@ -8,11 +8,10 @@ it writes the last spot it saw at the close into ``journal/settlements.json``, s
 a leg's exit stays reviewable for the whole paper run without another API call.
 """
 import json
-import os
 import threading
-import time
 
-from arb.instruments import IST, now_ist, parse_expiry
+from arb.instruments import now_ist, parse_expiry
+from arb.fileio import write_json
 
 
 class SettlementBook:
@@ -40,11 +39,7 @@ class SettlementBook:
             self._data[self._key(underlying, expiry)] = {
                 "level": round(float(level), 2), "source": source,
                 "at": now_ist().isoformat(timespec="seconds")}
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(self._data, fh, indent=1, sort_keys=True)
-            os.replace(tmp, self.path)
+            write_json(self.path, self._data, indent=1, sort_keys=True)
         return True
 
     def record_todays_expiries(self, pairs, spot_of):

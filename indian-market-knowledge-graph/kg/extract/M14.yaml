@@ -1,0 +1,210 @@
+module: M14
+title: Personal Finance - Insurance
+summary: Health insurance as the first step of a financial plan (authored by Ditto) - honest disclosure, sizing the cover, co-payment and room-rent caps, pre-existing disease waiting periods and loading, specific-illness waiting periods, permanent exclusions, sub-limits and hospital blacklists, floaters, group and employer plans, a gimmick-or-not verdict on common features, claim settlement vs incurred claims ratio, and porting. Indirectly relevant to bots - it protects the trader's capital base, so drawdowns are never forced by medical emergencies.
+global_caveat: Product features, waiting periods and IRDAI rules are as of ~2021-22; verify current IRDAI regulations (e.g. moratorium/waiting-period reforms) before relying on numbers.
+nodes:
+  - id: insurance_basics
+    type: Concept
+    name: Insurance (Risk Transfer) - basics
+    chapter: [1, 2]
+    summary: Insurance transfers the financial risk of rare, high-cost events to an insurer in exchange for a premium; health and term life insurance come before an emergency fund and before investing. Insurers price risk through pooling and are exposed to adverse selection and moral hazard, which explains most policy restrictions.
+    facts:
+      - Order of priority - health insurance + term insurance -> emergency corpus -> goal investing.
+      - Restrictions (waiting periods, co-pay, exclusions) exist to contain customer and hospital abuse.
+    bot_use: Capital-protection precondition - a trading account should never be the emergency or medical fund.
+    links: [{to: health_insurance, rel: RELATED_TO}, {to: emergency_fund, rel: PREREQUISITE}, {to: risk_management, rel: RELATED_TO}]
+
+  - id: health_insurance
+    type: Product
+    name: Health Insurance (Indemnity)
+    chapter: [1, 3]
+    summary: Pays hospitalisation bills up to the sum insured; the core protection product. Premiums rise every year (~4-6% medical inflation adjustment plus age-band jumps, occasionally regulator-approved repricing) but cannot be raised because you claimed.
+    facts:
+      - First 30 days - only accidental hospitalisation is covered.
+      - Healthcare costs inflate ~6-7%/yr.
+      - Premium increases are not caused by your own claims (urban myth).
+    links: [{to: insurance_basics, rel: IS_A}, {to: cover_amount_sizing, rel: USES}, {to: policy_waiting_periods, rel: PART_OF}]
+
+  - id: insurance_disclosure
+    type: Rule
+    name: Full Medical Disclosure (Non-disclosure risk)
+    chapter: [2, 5]
+    summary: Declare every pre-existing condition and habit directly to the insurer on the proposal form - never rely on an agent's verbal assurance. Non-disclosure lets the insurer repudiate the claim or cancel the policy; a loading charge and a waiting period are far better than a rejected claim.
+    conditions:
+      rule: "disclose all medical history, medication, smoking/alcohol on the form itself"
+    links: [{to: pre_existing_disease, rel: RELATED_TO}, {to: perverse_incentives_agents, rel: RELATED_TO}]
+
+  - id: perverse_incentives_agents
+    type: Psychology
+    name: Perverse Incentives of Agents
+    chapter: [2, 3]
+    summary: Agents earn commission on premium, so they upsell (Rs 50 lakh-1 crore covers via fear) or under-report your conditions to close the sale; evaluate advice by the adviser's incentive.
+    links: [{to: insurance_disclosure, rel: RELATED_TO}, {to: confirmation_bias, rel: RELATED_TO}]
+
+  - id: cover_amount_sizing
+    type: Rule
+    name: Choosing the Sum Insured
+    chapter: 3
+    summary: Most expensive treatments rarely cross ~Rs 20 lakh; a Rs 10-20 lakh base cover (boosted by no-claim bonus and restoration) handles most cases. Rs 5 lakh may be inadequate within a decade given 6-7% medical inflation. A smaller cover is fine for the elderly or if you can't sustain the premium - lapsing a policy is the worst outcome. For rare huge bills, add a super top-up instead of buying a huge base cover.
+    params: {base_cover_inr: "10-20 lakh", medical_inflation: "6-7%/yr", premium_inflation: "4-6%/yr"}
+    links: [{to: super_top_up, rel: RELATED_TO}, {to: no_claim_bonus, rel: RELATED_TO}, {to: inflation, rel: AFFECTS}]
+
+  - id: co_payment
+    type: Concept
+    name: Co-payment Clause
+    chapter: 4
+    summary: You pay a fixed % of every claim (e.g. 20%) in exchange for a lower premium - gives you 'skin in the game'. Usually a bad trade.
+    example: "20% co-pay saved Rs 1,800/yr on a Rs 7,000 premium, but a Rs 2 lakh claim cost Rs 40,000 out of pocket (~22 years of savings)."
+    conditions:
+      avoid_unless: "mandatory, or buying for elderly with pre-existing diseases where it cuts premium sharply"
+    links: [{to: room_rent_cap, rel: RELATED_TO}, {to: health_insurance, rel: PART_OF}]
+
+  - id: room_rent_cap
+    type: Concept
+    name: Room Rent Cap / Proportionate Deduction
+    chapter: 4
+    summary: A cap on room rent (e.g. 1% of sum insured per day). Choosing a costlier room makes the insurer pay proportionately on all room-linked charges (surgeon, consultant, diagnostics), not only the rent difference.
+    formula: {payable_fraction: "cap_rent / actual_rent", applied_to: "room rent + associated charges"}
+    example: "Cap Rs 5,000, room Rs 10,000 -> insurer pays 50%; a Rs 50,000 surgeon fee pays only Rs 25,000."
+    conditions:
+      prefer: "no room-rent cap; at least single private room allowed"
+    links: [{to: co_payment, rel: RELATED_TO}]
+
+  - id: pre_existing_disease
+    type: Concept
+    name: Pre-existing Disease (PED) Waiting Period and Loading
+    chapter: 5
+    summary: Declared conditions (diabetes, BP, etc.) trigger a PED waiting period (usually 2-4 years) during which related complications aren't covered, and/or a loading charge on the premium (typically 10-20%, up to ~150% for multiple illnesses); insurers may also reject the proposal.
+    params: {ped_waiting_years: "2-4", loading: "10-20% typical, up to 150%"}
+    links: [{to: insurance_disclosure, rel: RELATED_TO}, {to: policy_waiting_periods, rel: PART_OF}, {to: porting, rel: RELATED_TO}]
+
+  - id: policy_waiting_periods
+    type: Concept
+    name: Waiting Periods (Initial, Specific Illness, PED)
+    chapter: [5, 6]
+    summary: Three layers - initial 30 days (accidents only); specific-illness list (cataract, stones, deviated septum, hernia, joint replacement etc. - treatments that can be deferred), typically 2 years; PED waiting 2-4 years. Dengue, malaria, fractures, most cancers and heart conditions are covered after 30 days.
+    params: {initial_days: 30, specific_illness_years: 2, ped_years: "2-4"}
+    links: [{to: health_insurance, rel: PART_OF}, {to: porting, rel: RELATED_TO}]
+
+  - id: insurance_exclusions
+    type: Concept
+    name: Permanent Exclusions, Sub-limits, Non-medical Items, Blacklisted Hospitals
+    chapter: 6
+    summary: Insurer defences against abuse - permanent exclusions (substance/alcohol-induced illness, cosmetic treatment, external congenital conditions); disease-wise sub-limits (e.g. cardiac Rs 2.5L, knee Rs 2.75L, cataract Rs 50k regardless of cover) - avoid policies with them; non-medical consumables excluded; only 'just and reasonable' treatment per medical council norms paid; blacklisted hospitals can be refused.
+    example: "Rs 10 lakh cover, slipped-disc bill Rs 4.36 lakh, insurer paid only Rs 2 lakh due to a sub-limit."
+    conditions:
+      check_before_buying: "no disease-wise sub-limits; read permanent exclusion list; check hospital blacklist; get a second opinion for expensive procedures"
+    links: [{to: health_insurance, rel: PART_OF}, {to: consumables_cover, rel: RELATED_TO}]
+
+  - id: family_floater
+    type: Product
+    name: Family Floater Policy
+    chapter: 7
+    summary: One shared sum insured for self, spouse and children at a discount to individual plans; risks within a family are correlated, so the shared cover can run out. Children must exit after an age limit; parents usually excluded. Online discounts are small (<5% first year); real discounts come from wellness programmes, multi-year tenure or floaters.
+    links: [{to: health_insurance, rel: VARIANT_OF}, {to: restoration_benefit, rel: RELATED_TO}]
+
+  - id: group_health_insurance
+    type: Product
+    name: Group and Employer Health Insurance
+    chapter: 7
+    summary: Customised contracts for a group via a master policyholder (bank, employer). Cheaper and often with no waiting periods (invaluable for those with serious PEDs), but pricing is repriced yearly at the insurer's discretion, features are set by the master policyholder, and cover ends if you leave the job or the group dissolves (re-underwriting then). Keep a personal policy alongside an employer cover.
+    conditions:
+      rule: "employer cover + personal base policy (or a super top-up aligned to the employer cover)"
+    links: [{to: health_insurance, rel: VARIANT_OF}, {to: super_top_up, rel: RELATED_TO}]
+
+  - id: restoration_benefit
+    type: Concept
+    name: Restoration Benefit
+    chapter: 8
+    summary: Restores the sum insured after a claim. Useful in floaters; often neutered by fine print (only for a different illness, or only after the cover is fully exhausted). Verdict - not a gimmick, but buyer beware.
+    links: [{to: family_floater, rel: RELATED_TO}]
+
+  - id: no_claim_bonus
+    type: Concept
+    name: No Claim Bonus (NCB)
+    chapter: 8
+    summary: Cover grows (e.g. +50% of base) for each claim-free year up to a cap (50%-200% depending on plan); some plans claw it back after a claim, never below base. Verdict - not a gimmick.
+    example: "Rs 10L base, 50% NCB -> 15L after 1 claim-free year, 20L after 2; a claim drops it back to 15L."
+    links: [{to: cover_amount_sizing, rel: RELATED_TO}]
+
+  - id: insurance_feature_verdicts
+    type: Rule
+    name: Health Insurance Features - Gimmick or Not
+    chapter: [8, 9]
+    summary: Ditto's verdicts on marketed features.
+    facts:
+      - Network hospitals (cashless) - not a gimmick.
+      - AYUSH cover - slightly gimmicky (only in government-certified AYUSH hospitals with inpatient admission).
+      - Restoration benefit - not a gimmick, but buyer beware.
+      - Pre/post hospitalisation (e.g. 30/60 days to 60/180 days) - near-universal, nothing extraordinary.
+      - Day care (<24h procedures like chemo, dialysis, appendicitis) - not a gimmick; make sure it's covered.
+      - No claim bonus - not a gimmick.
+      - Domiciliary cover - slightly gimmicky (needs inability to move / no bed, doctor certification, 72h+).
+      - Consumables add-on (2-10% of bill) - not a gimmick but touch-and-go; better if bundled with inflation protection.
+      - Critical illness - slightly gimmicky (narrow severity definitions; a super top-up or term plan does better).
+      - Top-up - highly gimmicky (deductible applies per hospitalisation).
+      - Super top-up - not a gimmick, but align policy dates.
+      - Claim settlement ratio - not a gimmick, but needs context (with ICR).
+      - Porting - not a gimmick.
+    links: [{to: restoration_benefit, rel: RELATED_TO}, {to: no_claim_bonus, rel: RELATED_TO}, {to: super_top_up, rel: RELATED_TO}, {to: consumables_cover, rel: RELATED_TO}, {to: critical_illness_cover, rel: RELATED_TO}]
+
+  - id: consumables_cover
+    type: Concept
+    name: Consumables / Non-medical Expenses Add-on
+    chapter: 9
+    summary: Gloves, PPE, admin and TV charges are usually excluded (2-10% of a bill); an add-on (~Rs 1,000/yr) covers them. It's marginal unless bundled with inflation protection.
+    links: [{to: insurance_exclusions, rel: RELATED_TO}]
+
+  - id: critical_illness_cover
+    type: Product
+    name: Critical Illness Policy
+    chapter: 9
+    summary: Covers a listed set of severe diseases, often only at specified severity, and pricing can change sharply. For lump-sum income replacement use term insurance; for medical bills a super top-up is broader. Verdict - slightly gimmicky.
+    links: [{to: super_top_up, rel: RELATED_TO}, {to: term_insurance, rel: RELATED_TO}]
+
+  - id: term_insurance
+    type: Product
+    name: Term Life Insurance
+    chapter: 9
+    summary: Pure life cover paying a lump sum to dependants on death within the term; the recommended vehicle for lump-sum protection (instead of critical-illness lump sums or investment-linked insurance).
+    links: [{to: insurance_basics, rel: IS_A}]
+
+  - id: top_up
+    type: Product
+    name: Top-up Health Plan
+    chapter: 9
+    summary: Large cover above a deductible, but the deductible applies to each hospitalisation separately, so several mid-size bills below the deductible are never paid. Verdict - highly gimmicky.
+    links: [{to: super_top_up, rel: OPPOSITE_OF}]
+
+  - id: super_top_up
+    type: Product
+    name: Super Top-up Health Plan
+    chapter: 9
+    summary: Very cheap large cover (e.g. Rs 50 lakh for ~Rs 1,000s/yr) that pays once the aggregate bills within a policy year cross the deductible. Choose the deductible equal to the existing base or employer cover, and align policy-year dates with that cover, otherwise the deductible must be met again in a new term.
+    formula: {payout: "max(0, sum(claims_in_policy_year) - deductible), capped at cover"}
+    example: "Deductible Rs 5L, bills 7L then 3L in the same year -> super top-up pays 2L + 3L; a plain top-up pays 2L + 0."
+    conditions:
+      deductible: "= base/employer cover"
+      dates: "super top-up renewal aligned with base/employer policy year"
+    links: [{to: top_up, rel: VARIANT_OF}, {to: group_health_insurance, rel: RELATED_TO}, {to: cover_amount_sizing, rel: RELATED_TO}]
+
+  - id: claim_settlement_ratio
+    type: Ratio
+    name: Claim Settlement Ratio (CSR) and Incurred Claims Ratio (ICR)
+    chapter: 9
+    summary: CSR = % of claims settled; it can be gamed (clearing last year's backlog, settling many small claims while rejecting large ones, combining motor/health for general insurers). Read it alongside ICR and scale (large customer base). Get the numbers from the IRDAI annual report.
+    formula:
+      csr: "claims_settled / (claims_booked + outstanding_start - outstanding_end)"
+      icr: "claims_paid / net_premiums_collected"
+    conditions:
+      icr_high: ">100% -> insurer losing money (regulator may force merger)"
+      icr_low: "~50% -> may be stingy on large claims"
+    links: [{to: health_insurance, rel: MEASURES}]
+
+  - id: porting
+    type: Process
+    name: Porting a Health Policy
+    chapter: 9
+    summary: Move a policy to a new insurer while carrying over waiting-period credit. Apply 45-60 days before renewal and prove continuous coverage with documents; credit applies only up to the old sum insured (plus bonus) - extra cover serves fresh waiting periods; the new insurer may re-underwrite. Verdict - not a gimmick; usually better than buying fresh.
+    params: {window_days_before_renewal: "45-60"}
+    links: [{to: policy_waiting_periods, rel: RELATED_TO}, {to: pre_existing_disease, rel: RELATED_TO}]

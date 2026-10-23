@@ -45,7 +45,7 @@ def atr(candles, period=20):
     return sum(trs) / len(trs) if trs else 0.0
 
 
-def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0)):
+def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0), no_gap=False):
     """Current ATR against its own trailing baseline, capped.
 
     The baseline is the median true range over the preceding ``baseline_bars``,
@@ -57,14 +57,22 @@ def atr_ratio(candles, period=20, baseline_bars=200, cap=(0.5, 2.0)):
     """
     if len(candles) < period + 1:
         return 0.0
-    recent = atr(candles, period)
-    if recent <= 0:
-        return 0.0
     window = candles[-(baseline_bars + 1):]
     if len(window) < period + 2:
         return 0.0
-    trs = sorted(true_range(window[i - 1][4], window[i][2], window[i][3])
-                 for i in range(1, len(window)))
+
+    def tr(a, b):
+        # pace_no_gap (13 Oct 2026 review): a session's first bar measures its
+        # own range, not the overnight gap, which otherwise pins the ratio at
+        # the cap for the first ~20 minutes of every gapped day.
+        if no_gap and a[0][:10] != b[0][:10]:
+            return b[2] - b[3]
+        return true_range(a[4], b[2], b[3])
+    all_tr = [tr(window[i - 1], window[i]) for i in range(1, len(window))]
+    recent = sum(all_tr[-period:]) / period
+    if recent <= 0:
+        return 0.0
+    trs = sorted(all_tr)
     mid = len(trs) // 2
     base = trs[mid] if len(trs) % 2 else 0.5 * (trs[mid - 1] + trs[mid])
     if base <= 0:
@@ -136,12 +144,20 @@ def session_phase(start="09:15", end="15:30", now=None):
     return "midday"
 
 
-def regime_gate(candles, L, now=None):
+def regime_gate(candles, L, now=None, name=None):
     """The reason to refuse this bar, or "" if the tape is worth trading.
 
     Refusals are deliberately named after what failed so the dashboard's reject
-    counter stays readable.
+    counter stays readable. `name` picks a per-index pace from L.atr_by_index
+    (first half, second half of the day), which replaces min_atr_ratio and the
+    midday rule for that index.
     """
+    halves = (getattr(L, "atr_by_index", None) or {}).get(name) if name else None
+    need = float(L.min_atr_ratio)
+    if halves:
+        t = now or now_ist()
+        second = t.hour * 60 + t.minute >= _minutes(str(getattr(L, "atr_half_split", "12:15")))
+        need = float(halves[1 if second else 0])
     # Never trade a sideways market: the index must have travelled at least as
     # efficiently as a random walk would (expected ratio 1/sqrt(n)), so the bar
     # is derived from the window, not typed in. Its own switch (sideways_bars =
@@ -161,24 +177,28 @@ def regime_gate(candles, L, now=None):
         return "no_candles"
 
     ar = 0.0
-    if L.min_atr_ratio > 0:
+    if need > 0:
         if len(candles) < L.atr_period + 1:
             return "candles_warming_up"
-        ar = atr_ratio(candles, period=L.atr_period,
-                       baseline_bars=L.atr_baseline_bars)
+        ar = atr_ratio(candles, period=L.atr_period, baseline_bars=L.atr_baseline_bars,
+                       no_gap=bool(getattr(L, "pace_no_gap", False)))
         if ar <= 0:
+            # Zero range over the whole ATR window is not a quiet market, it is
+            # a dead feed (flat bars at the last price): never a pass.
+            if atr(candles, L.atr_period) <= 0:
+                return "no_range_bars"
             # Not enough history to know the tape's own normal. That is a fact
             # about our data, not about the market, and it is only a refusal
             # when the operator asked for one.
             if not getattr(L, "trade_unknown_regime", True):
                 return "regime_unknown"
-        elif ar < L.min_atr_ratio:
+        elif ar < need:
             return "regime_too_quiet"
 
     mode = str(getattr(L, "midday_mode", "strict"))
     if getattr(L, "skip_midday", False):
         mode = "block"
-    if mode != "off" and session_phase(now=now) == "midday":
+    if not halves and mode != "off" and session_phase(now=now) == "midday":
         if mode == "block":
             return "midday_chop"
         # "strict": the middle of the day is tradable on a day that is actually
@@ -195,4 +215,72 @@ def regime_gate(candles, L, now=None):
         if min(cp, 1.0 - cp) > (0.5 - L.min_close_position):
             return "bar_indecisive"
 
+    return ""
+
+
+def trend_4h(candles, bars=5, split="13:15"):
+    """+1 / -1: the direction of the last `bars` completed 4-hour bars of the
+    1-minute series (each session cut at `split`), 0 with too little history.
+    The bucket still forming is left out. research/PAPERS.md 0k: 3-6 bars all
+    helped out of sample; daily 3-5 day trends did not (short-term reversal)."""
+    closes, key = [], None
+    for r in candles:
+        k = (r[0][:10], r[0][11:16] >= split)
+        if k != key:
+            closes.append(r[4]); key = k
+        else:
+            closes[-1] = r[4]
+    closes = closes[:-1]
+    if len(closes) <= bars:
+        return 0
+    d = closes[-1] - closes[-1 - bars]
+    return (d > 0) - (d < 0)
+
+
+def run_in_direction(candles, side, bars=30, period=20):
+    """How far price has already travelled in `side`'s direction, in ATRs.
+
+    For a long: the last close minus the lowest low of the last `bars` bars.
+    For a short: the highest high of those bars minus the last close. The ATR is
+    the one before the window's last bar, as the entry code uses. 0.0 without
+    enough history. `candles` must be completed bars (owner's 1 Oct review: a
+    put bought after a 12-ATR fall, at the bottom, is the move already spent).
+    """
+    if len(candles) < max(bars, period + 2):
+        return 0.0
+    a = atr(candles[:-1], period=period)
+    if a <= 0:
+        return 0.0
+    win = candles[-bars:]
+    c = candles[-1][4]
+    if side > 0:
+        return (c - min(r[3] for r in win)) / a
+    return (max(r[2] for r in win) - c) / a
+
+
+def swept_against(candles, side, lookback=10, pool_bars=30, reclaim_bars=3):
+    """Did the market recently run the stops on the OTHER side and reclaim?
+
+    A sell-side sweep (a low below the prior `pool_bars` lows, closed back above
+    that pool within `reclaim_bars`) is the manipulation leg of a move UP, so a
+    put bought after it buys the trap. Mirror for calls. Looks at sweeps whose
+    extreme bar is within the last `lookback` completed bars, and only while
+    price is still on the reclaimed side. Returns "" or a short reason.
+    """
+    n = len(candles)
+    if n < pool_bars + lookback + 1:
+        return ""
+    last = candles[-1][4]
+    for k in range(n - lookback, n):
+        pool = candles[k - pool_bars:k]
+        if side < 0:                      # a put fears a sell-side sweep
+            lvl = min(r[3] for r in pool)
+            if candles[k][3] < lvl and last > lvl and any(
+                    r[4] > lvl for r in candles[k:min(n, k + 1 + reclaim_bars)]):
+                return "sellside_swept"
+        else:                             # a call fears a buy-side sweep
+            lvl = max(r[2] for r in pool)
+            if candles[k][2] > lvl and last < lvl and any(
+                    r[4] < lvl for r in candles[k:min(n, k + 1 + reclaim_bars)]):
+                return "buyside_swept"
     return ""

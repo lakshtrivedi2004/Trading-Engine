@@ -1,7 +1,7 @@
 {
-  "starting_capital": 10000.0,
+  "starting_capital": 13466.0,
   "daily_target_pct": 10.0,
-  "max_strike_offset": 4,
+  "max_strike_offset": 5,
   "min_delta": 0.15,
   "max_spread_points": 3.0,
   "allow_selling": false,
@@ -20,14 +20,89 @@
   "swing_strength": 2,
   "min_structure_bars": 25,
   "require_order_block": true,
-  "squareoff_minutes": 15.0,
-  "no_new_trades_minutes": 30.0,
+  "squareoff_minutes": 1.0,
+  "no_new_trades_minutes": 5.0,
   "warmup_minutes": 15.0,
   "playbooks": [
     "ob_fvg_retest"
   ],
+  "retest_max_bars": 0,
+  "retest_min_bars": 1,
+  "retest_refuse_breached": false,
   "min_atr_ratio": 1.3,
   "midday_min_atr_ratio": 1.5,
   "extend_giveback_r": 0.25,
-  "stocks_enabled": true
+  "stocks_enabled": true,
+  "stocks_top_k": 5,
+  "stocks_spike_watch": "on",
+  "stocks_spike_ratio": 5.0,
+  "stocks_spike_k": 3,
+  "stocks_spike_hold_min": 15,
+  "stocks_movers_min": 5,
+  "stocks_options": "shadow",
+  "stocks_option_strikes": 4,
+  "capital_ceiling": 13466.9,
+  "atr_by_index": {
+    "NIFTY": [
+      1.5,
+      1.5
+    ],
+    "BANKNIFTY": [
+      1.5,
+      1.5
+    ],
+    "SENSEX": [
+      1.2,
+      1.2
+    ],
+    "MIDCPNIFTY": [
+      0.8,
+      0.8
+    ],
+    "FINNIFTY": [
+      1.5,
+      1.7
+    ]
+  },
+  "atr_half_split": "12:15",
+  "trend_4h_bars": 5,
+  "expiry_trade_next": true,
+  "market_orders": true,
+  "market_protection_pct": 2.5,
+  "live_block_sleep": true,
+  "exit_safety_fixes": true,
+  "order_tags": false,
+  "order_duration": "IOC",
+  "adopt_unknown_entry": true,
+  "order_rate_per_sec": 8.0,
+  "decide_on_closed_bars": true,
+  "entry_window_sec": 15.0,
+  "max_chase_atr": 0.5,
+  "same_side_cooldown_min": 30.0,
+  "risk_includes_costs": true,
+  "exit_slip_spreads": 1.0,
+  "exit_slip_frac": 0.01,
+  "exact_trade_costs": true,
+  "last_half_hour": "on",
+  "lhm_ai_verify": "on",
+  "lhm_ai_provider": "gemini_api",
+  "lhm_ai_model": "gemini-3.1-pro-preview",
+  "lhm_ai_credentials": "trading-509306-7bd596db4681.json",
+  "lhm_ai_location": "global",
+  "lhm_ai_thinking": "high",
+  "lhm_ai_timeout_sec": 90,
+  "lhm_ai_min_confidence": 0,
+  "noise_breakout": "shadow",
+  "nb_indices": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "nb_vm": 1.0,
+  "nb_minr": 1.5,
+  "nb_grid_min": 30,
+  "nb_lo": "09:45",
+  "nb_hi": "14:45",
+  "nb_sigma_days": 14,
+  "nb_sigma_min_days": 10
 }

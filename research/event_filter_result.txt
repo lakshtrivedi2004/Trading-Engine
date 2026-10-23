@@ -1,0 +1,26 @@
+BASELINE OB + LHM                                          n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days {'LHM': 72, 'OB': 87}
+
+== rbi: 9 dates, 3 with book trades
+   only those days                                         n=  3 win=100% IN  +2,013 OUT    +157 tot  +2,170 DD      0 0.01/s   1%days
+   skip those days                                         n=156 win= 49% IN +25,081 OUT +20,997 tot +46,079 DD  4,822 0.61/s  48%days | dIN  -2,013 dOUT    -157
+   event days: only after the announcement                 n=157 win= 50% IN +26,712 OUT +20,997 tot +47,710 DD  3,649 0.62/s  49%days | dIN    -382 dOUT    -157
+
+== fed: 10 dates, 4 with book trades
+   only those days                                         n=  5 win= 20% IN    -682 OUT    -698 tot  -1,379 DD  2,037 0.02/s   2%days
+   skip those days                                         n=154 win= 51% IN +27,776 OUT +21,852 tot +49,628 DD  3,649 0.61/s  48%days | dIN    +682 dOUT    +698  BETTER BOTH
+   event days: only after the announcement                 n=159 win= 50% IN +27,094 OUT +21,154 tot +48,248 DD  3,649 0.63/s  50%days | dIN      +0 dOUT      +0
+
+== budget: 1 dates, 1 with book trades
+   only those days                                         n=  3 win= 67% IN    +625 OUT      +0 tot    +625 DD    672 0.01/s   0%days
+   skip those days                                         n=156 win= 50% IN +26,469 OUT +21,154 tot +47,624 DD  3,649 0.61/s  49%days | dIN    -625 dOUT      +0
+   event days: only after the announcement                 n=158 win= 51% IN +27,766 OUT +21,154 tot +48,920 DD  3,649 0.62/s  50%days | dIN    +672 dOUT      +0
+
+== rbi+budget: 10 dates, 4 with book trades
+   only those days                                         n=  6 win= 83% IN  +2,637 OUT    +157 tot  +2,794 DD    672 0.02/s   2%days
+   skip those days                                         n=153 win= 49% IN +24,457 OUT +20,997 tot +45,454 DD  4,822 0.60/s  48%days | dIN  -2,637 dOUT    -157
+   event days: only after the announcement                 n=156 win= 50% IN +27,384 OUT +20,997 tot +48,382 DD  3,649 0.61/s  49%days | dIN    +290 dOUT    -157
+
+== rbi+budget+fed: 20 dates, 8 with book trades
+   only those days                                         n= 11 win= 55% IN  +1,955 OUT    -540 tot  +1,415 DD  1,290 0.04/s   3%days
+   skip those days                                         n=148 win= 50% IN +25,139 OUT +21,695 tot +46,833 DD  4,204 0.58/s  46%days | dIN  -1,955 dOUT    +540
+   event days: only after the announcement                 n=156 win= 50% IN +27,384 OUT +20,997 tot +48,382 DD  3,649 0.61/s  49%days | dIN    +290 dOUT    -157

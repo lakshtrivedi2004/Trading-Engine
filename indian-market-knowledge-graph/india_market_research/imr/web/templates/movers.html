@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Stock movers{% endblock %}{% block heading %}Stock movers{% endblock %}
+{% block content %}
+{% if not scan or not scan.asof %}
+<div class="warnbox">No BSE stock data yet. It is downloaded by <code>imr update</code> (the first run fetches about a year of daily files and takes several minutes).</div>
+{% else %}
+<p class="lead">Every BSE stock that traded on {{ scan.asof.strftime('%A %d %B %Y') }}, ranked by how much it moved and how volatile it is — up or down.</p>
+<div class="cards">
+  <div class="card"><div class="label">Stocks traded</div><div class="value">{{ '{:,}'.format(scan.universe) }}</div><div class="sub">in the BSE bhavcopy</div></div>
+  <div class="card"><div class="label">Liquid stocks scanned</div><div class="value grad-text">{{ '{:,}'.format(scan.eligible) }}</div>
+    <div class="sub">groups {{ cfg.groups|join(', ') }} · price ≥ ₹{{ cfg.min_price|int }} · turnover ≥ ₹{{ cfg.min_avg_turnover_cr|int }} cr/day</div></div>
+  <div class="card"><div class="label">Unusual moves (≥ {{ cfg.unusual_z|int }}σ)</div><div class="value">{{ scan.lists.unusual|length }}</div><div class="sub">vs each stock's own normal volatility</div></div>
+  {% if sf and sf.n %}<div class="card"><div class="label">Move-size model</div><div class="value" style="font-size:1.05rem;margin-top:10px">
+    <span class="verdict-badge {{ 'good' if sf.verdict.startswith('Beats') else ('bad' if sf.verdict.startswith('WORSE') else 'meh') }}">{{ sf.verdict }}</span></div>
+    <div class="sub">{{ sf.days_scored }} unseen days scored</div></div>{% endif %}
+</div>
+
+<form class="bar" method="get"><input type="hidden" name="mode" value="{{ mode }}">
+{% for key, label in tabs %}<button name="tab" value="{{ key }}" class="{{ '' if key == tab else 'secondary' }}">{{ label }}</button>{% endfor %}
+</form>
+
+<div class="tablewrap"><table><thead><tr><th class="l">#</th><th class="l">Stock</th><th class="l">Group</th><th>Close ₹</th><th>Move</th><th>vs own normal</th>
+<th>Day range</th><th>Volatility (20d, /yr)</th><th>ATR</th><th>Expected next move</th><th>Volume vs avg</th><th>Turnover ₹ cr</th><th class="l">Flags</th></tr></thead><tbody>
+{% for r in rows.itertuples() %}
+<tr><td class="l muted">{{ loop.index }}</td>
+<td class="l stock"><b>{{ r.symbol }}</b><br><span class="muted" style="font-size:.8rem">{{ r.name }}</span></td>
+<td class="l"><span class="pill">{{ r.grp }}</span></td>
+<td>{{ r.close|num(2) }}</td>
+<td class="{{ r.ret|sign }}" style="font-weight:700">{{ r.ret|pct(2) }}</td>
+<td>{{ '%+.1f'|format(r.z) if r.z == r.z else '–' }}σ</td>
+<td>{{ ((r.high - r.low) / r.prev_close)|pct(1, False) }}</td>
+<td>{{ r.vol_ann|pct(0, False) }}</td>
+<td>{{ r.atr_pct|pct(1, False) }}</td>
+<td>{% if exp is not none and r.symbol in exp.index %}±{{ '%.1f'|format(exp[r.symbol] * 100) }}%{% else %}–{% endif %}</td>
+<td>{{ '%.1f'|format(r.volume_x) if r.volume_x == r.volume_x else '–' }}x</td>
+<td>{{ r.turnover_cr|num(1) }}</td>
+<td class="l">{% if r.circuit %}<span class="pill down">⛔ {{ r.circuit }}</span>{% endif %}{% if r.note %} <span class="pill warn">{{ r.note }}</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+<div class="warnbox">{{ note }}</div>
+<details><summary>How this is calculated</summary><ul>
+<li><b>Move</b>: close vs BSE's previous close (BSE adjusts it for splits and bonuses, so they don't show as fake crashes).</li>
+<li><b>vs own normal (σ)</b>: today's move divided by the stock's daily volatility over the previous 20 sessions (today excluded). ±3σ is rare for that stock.</li>
+<li><b>Volatility</b>: standard deviation of the last 20 daily moves, annualised. <b>ATR</b>: average true range over 14 days, % of price (Wilder 1978).</li>
+<li><b>Expected next move</b>: pooled HAR volatility forecast (Corsi 2009) — the typical size of the next session's move, not its direction. Its accuracy on unseen days is shown in the card above.</li>
+<li><b>Flags</b>: ⛔ circuit = locked or closing right at a 2/5/10/20% band, may not be tradable at that price; T/XT = trade-to-trade (no intraday); Z = compliance issues; M = SME.</li>
+<li>Excluded from the lists: {% for k, v in scan.excluded.items() %}{{ k }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}. Change the filters in config/settings.toml → [scanner].</li>
+</ul></details>
+{% endif %}
+{% endblock %}

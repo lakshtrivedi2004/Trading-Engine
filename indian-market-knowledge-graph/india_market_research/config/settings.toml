@@ -1,0 +1,169 @@
+# Settings for the India Index Research Platform.
+# Edit values, save, and re-run. Lines starting with # are comments.
+
+[general]
+start_date = "2010-01-01"        # how much history to download
+timezone = "Asia/Kolkata"
+
+# ---------------------------------------------------------------------------
+# Indices. Each has a list of Yahoo Finance tickers; the first that returns
+# enough data is used. "family" groups near-duplicates: results inside one
+# family are NOT independent evidence.
+# ---------------------------------------------------------------------------
+[indices."Nifty 50"]
+tickers = ["^NSEI"]
+exchange = "NSE"
+family = "Broad"
+
+[indices."Sensex"]
+tickers = ["^BSESN"]
+exchange = "BSE"
+family = "Broad"
+
+[indices."Bank Nifty"]
+tickers = ["^NSEBANK"]
+exchange = "NSE"
+family = "Financials"
+
+[indices."FinNifty"]
+# Yahoo has no FinNifty history, so it is downloaded from NSE's own website.
+source = "nse"
+nse_name = "NIFTY FINANCIAL SERVICES"
+tickers = []
+exchange = "NSE"
+family = "Financials"
+
+[indices."Bankex"]
+# BSE blocks automatic downloads of index history. Download Bankex history in your
+# browser from bseindia.com (Indices > Archives) and save the CSV(s) into
+# config/manual_prices/ with a name starting "Bankex" (e.g. Bankex_2015-2020.csv).
+# Yahoo's ticker is tried too, but it had only 1 row when checked (Oct 2026).
+tickers = ["BSE-BANK.BO"]
+exchange = "BSE"
+family = "Financials"
+
+# ---------------------------------------------------------------------------
+# Explanatory factors.
+#   kind:   "ret"  = percentage change of the level (prices, currencies)
+#           "diff" = change in points (yields, volatility indices)
+#   timing: "same_day"     = trades during Indian hours (explanation only)
+#           "prev_session" = closes AFTER India (US markets): for an Indian
+#                            date use the last session that finished BEFORE it.
+#   max_daily_jump: data-health warning threshold for one-day moves.
+# ---------------------------------------------------------------------------
+[factors."S&P 500"]
+tickers = ["^GSPC"]
+kind = "ret"
+timing = "prev_session"
+max_daily_jump = 0.12
+
+[factors."US 10Y yield"]
+tickers = ["^TNX"]
+kind = "diff"
+timing = "prev_session"
+max_daily_jump = 0.5          # points
+
+[factors."Brent crude"]
+tickers = ["BZ=F"]
+kind = "ret"
+timing = "prev_session"
+max_daily_jump = 0.25
+
+[factors."USD/INR"]
+tickers = ["INR=X"]
+kind = "ret"
+timing = "same_day"
+max_daily_jump = 0.03
+
+[factors."Nikkei 225"]
+tickers = ["^N225"]
+kind = "ret"
+timing = "same_day"
+max_daily_jump = 0.15
+
+[factors."Hang Seng"]
+tickers = ["^HSI"]
+kind = "ret"
+timing = "same_day"
+max_daily_jump = 0.15
+
+[factors."India VIX"]
+tickers = ["^INDIAVIX"]
+kind = "diff"
+timing = "same_day"
+max_daily_jump = 25.0         # points
+
+# Which factors explain each index. Bank indices: broad index first, then
+# rates and the rupee. India VIX is deliberately not an explainer (it moves
+# WITH prices), it is reported in the regime section instead.
+[decomposition]
+"Nifty 50" = ["S&P 500", "Nikkei 225", "Hang Seng", "USD/INR", "Brent crude", "US 10Y yield"]
+"Sensex" = ["S&P 500", "Nikkei 225", "Hang Seng", "USD/INR", "Brent crude", "US 10Y yield"]
+"Bank Nifty" = ["Nifty 50", "US 10Y yield", "USD/INR"]
+"Bankex" = ["Sensex", "US 10Y yield", "USD/INR"]
+"FinNifty" = ["Nifty 50", "US 10Y yield", "USD/INR"]
+rolling_window = 250          # trading days used to estimate sensitivities (~1 year)
+use_flows_factor = true       # add FII net flow once enough history exists
+min_flow_history = 250        # overlapping days required before flows are used
+
+[research]
+train_fraction = 0.70         # first 70% = in-sample, last 30% = out-of-sample
+split_gap_days = 1            # sessions dropped between in- and out-of-sample (prevents leakage)
+cost_per_side = 0.0003        # 0.03% per buy or sell; set to your brokerage + STT + slippage
+newey_west_lags = 5
+walk_forward = false          # true = walk-forward validation instead of one split
+walk_forward_test_days = 252  # size of each out-of-sample block
+stability_window_days = 504   # rolling window for the pattern-stability view (~2 years)
+min_rows_for_patterns = 800   # indices with less history are not pattern-tested
+
+[events]
+window_before = 5
+window_after = 10
+estimation_days = 250         # "normal day" = mean of the 250 sessions BEFORE each event
+dedupe_gap_days = 5
+big_us_move = 0.02
+vix_jump = 0.15
+big_move_sigma = 2.0
+
+[data_quality]
+max_index_jump = 0.15         # one-day index move that triggers a check
+stale_sessions = 2            # warn if more than this many expected sessions are missing
+flat_run_days = 5             # identical closes for this many days = possibly frozen feed
+revision_tolerance = 0.005    # re-downloaded value differs from stored by more than 0.5%
+min_rows_usable = 250         # fewer rows than this = series unusable
+
+[nse]
+enabled = true
+min_seconds_between_requests = 3.0
+retries = 3
+timeout_seconds = 15
+
+[report]
+recent_days = 10
+
+# ---------------------------------------------------------------------------
+# Stock scanner (BSE bhavcopy). A watchlist of big movers / volatile stocks,
+# never a buy/sell recommendation.
+# ---------------------------------------------------------------------------
+[scanner]
+enabled = true
+history_days = 250            # sessions of daily stock data kept (~1 year; the first download takes ~8 minutes)
+groups = ["A", "B"]           # BSE groups scanned (A = large caps, B = others; T/XT/Z are trade-to-trade)
+min_price = 20                # skip penny stocks (Rs)
+min_avg_turnover_cr = 5       # skip illiquid stocks: average daily turnover below this (Rs crore)
+min_history_days = 15
+top_n = 15
+unusual_z = 3.0               # "unusual" = move bigger than 3x the stock's own normal daily volatility
+seconds_between_downloads = 1.5
+
+# ---------------------------------------------------------------------------
+# Telegram bot. Run 'imr telegram setup' once; the token is stored in
+# config/telegram_secret.toml (never in this file).
+# ---------------------------------------------------------------------------
+[telegram]
+daily_summary = true
+unusual_alerts = true
+data_problem_alerts = true
+weekly_pattern_check = true
+weekly_day = "Friday"
+top_movers_in_summary = 5

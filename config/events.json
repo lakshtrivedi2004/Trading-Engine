@@ -1,0 +1,14 @@
+{
+  "_about": "Scheduled market events, as the IST trading day they hit. Data, not model output: every date is from the official schedule cited in 'sources'. rbi = MPC decision (third day of the meeting, ~10:00 IST); budget = Union Budget (11:00 IST); fed = the IST session after an FOMC decision (14:00 New York).",
+  "sources": {
+    "rbi": ["https://website.rbi.org.in/web/rbi/-/press-releases/meeting-schedule-of-the-monetary-policy-committee-for-2025-2026",
+            "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx?prid=62422"],
+    "budget": ["https://www.business-standard.com/budget/news/budget-2026-bse-nse-trading-session-sunday-february-1-time-126011601035_1.html"],
+    "fed": ["https://fedratecalc.com/fomc-meeting-schedule/"]
+  },
+  "rbi": ["2025-10-01", "2025-12-05", "2026-02-06", "2026-04-08", "2026-06-05", "2026-08-05",
+          "2026-10-07", "2026-12-04", "2027-02-05"],
+  "budget": ["2026-02-01"],
+  "fed": ["2025-10-30", "2025-12-11", "2026-01-29", "2026-03-19", "2026-04-30", "2026-06-18",
+          "2026-07-30", "2026-09-17", "2026-10-29", "2026-12-10"]
+}

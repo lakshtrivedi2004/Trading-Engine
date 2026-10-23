@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Knowledge Graph</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#ffffff;--ink:#1d1d1b;--muted:#6b6b66;--line:#d9d9d4;--accent:#2563eb;--edge:rgba(60,60,60,.18)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141414;--panel:#1d1d1d;--ink:#ececea;--muted:#9a9a94;--line:#333;--accent:#7aa2ff;--edge:rgba(220,220,220,.14)}}
+:root[data-theme="dark"]{--bg:#141414;--panel:#1d1d1d;--ink:#ececea;--muted:#9a9a94;--line:#333;--accent:#7aa2ff;--edge:rgba(220,220,220,.14)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 8px 0 0;font-weight:600}
+input,select,button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+input{flex:1;min-width:140px;max-width:340px}
+input[type=checkbox]{flex:none;min-width:0;padding:0;margin:0 4px 0 0;vertical-align:middle}
+#stats{color:var(--muted);font-size:12px;margin-left:auto}
+main{flex:1;display:flex;min-height:0}
+#graph{flex:1;min-width:0;position:relative}
+svg{width:100%;height:100%;display:block;cursor:grab}
+aside{width:400px;max-width:45vw;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px 16px}
+aside h2{font-size:16px;margin:0 0 4px}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;border:1px solid var(--line);color:var(--muted);margin-right:4px}
+.sec{margin-top:12px}.sec b{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+code{font-size:12px;background:var(--bg);padding:1px 4px;border-radius:4px;word-break:break-word}
+ul{padding-left:18px;margin:4px 0}
+a.nl{color:var(--accent);cursor:pointer;text-decoration:none}
+#results{position:absolute;top:8px;left:8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;max-height:50%;overflow:auto;display:none;z-index:2;min-width:260px}
+#results div{padding:5px 10px;cursor:pointer}#results div:hover{background:var(--bg)}
+text{fill:var(--ink);font-size:10px;pointer-events:none}
+@media (max-width:760px){main{flex-direction:column}aside{width:auto;max-width:none;height:45%;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Market Knowledge Graph</h1>
+  <input id="q" placeholder="Search concepts, indicators, strategies…" autocomplete="off">
+  <select id="type"><option value="">All types</option></select>
+  <select id="mod"><option value="">All modules</option></select>
+  <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="rulesOnly"> bot rules only</label>
+  <button id="reset">Reset</button>
+  <span id="stats"></span>
+</header>
+<main>
+  <div id="graph"><div id="results"></div><svg id="svg"></svg></div>
+  <aside id="detail"><p style="color:var(--muted)">Click a node to see its definition, formulas, machine-readable conditions and links. Search to jump to a node. Scroll to zoom, drag to pan.</p></aside>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const DATA = /*__GRAPH__*/null;
+const palette = ["#2563eb","#dc2626","#16a34a","#d97706","#7c3aed","#0891b2","#db2777","#65a30d","#ea580c","#4f46e5","#0d9488","#b45309","#9333ea","#e11d48","#0284c7","#15803d","#a16207","#6d28d9","#be123c","#475569"];
+const types = [...new Set(DATA.nodes.map(n=>n.type))].sort();
+const color = t => palette[types.indexOf(t)%palette.length];
+const byId = new Map(DATA.nodes.map(n=>[n.id,n]));
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = v => typeof v==="string"?v:JSON.stringify(v);
+types.forEach(t=>document.getElementById("type").append(new Option(t,t)));
+Object.entries(DATA.meta.modules).forEach(([k,v])=>document.getElementById("mod").append(new Option(k+" "+v,k)));
+
+const svg=d3.select("#svg"), g=svg.append("g");
+svg.call(d3.zoom().scaleExtent([.1,6]).on("zoom",e=>g.attr("transform",e.transform)));
+let sim, nodeSel, linkSel, labelSel, focus=null;
+
+function visible(){
+  const t=document.getElementById("type").value, m=document.getElementById("mod").value, r=document.getElementById("rulesOnly").checked;
+  const ns=DATA.nodes.filter(n=>n.type!=="Module"&&(!t||n.type===t)&&(!m||n.modules.includes(m))&&(!r||n.conditions||n.formula));
+  const ids=new Set(ns.map(n=>n.id));
+  const es=DATA.edges.filter(e=>e.rel!=="COVERED_IN"&&ids.has(e.source.id??e.source)&&ids.has(e.target.id??e.target));
+  return {ns,es};
+}
+function draw(){
+  const {ns,es}=visible();
+  const deg=new Map(); es.forEach(e=>{const s=e.source.id??e.source,t=e.target.id??e.target;deg.set(s,(deg.get(s)||0)+1);deg.set(t,(deg.get(t)||0)+1)});
+  document.getElementById("stats").textContent=`${ns.length} nodes · ${es.length} edges`;
+  g.selectAll("*").remove();
+  const links=es.map(e=>({source:e.source.id??e.source,target:e.target.id??e.target,rel:e.rel}));
+  linkSel=g.append("g").selectAll("line").data(links).join("line").attr("stroke","var(--edge)").attr("stroke-width",1);
+  nodeSel=g.append("g").selectAll("circle").data(ns,d=>d.id).join("circle")
+    .attr("r",d=>4+Math.sqrt(deg.get(d.id)||0)*1.8).attr("fill",d=>color(d.type)).attr("stroke","var(--panel)").attr("stroke-width",1)
+    .style("cursor","pointer").on("click",(e,d)=>select(d.id))
+    .call(d3.drag().on("start",(e,d)=>{if(!e.active)sim.alphaTarget(.2).restart();d.fx=d.x;d.fy=d.y})
+      .on("drag",(e,d)=>{d.fx=e.x;d.fy=e.y}).on("end",(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null}));
+  nodeSel.append("title").text(d=>`${d.name} [${d.type}]`);
+  labelSel=g.append("g").selectAll("text").data(ns.filter(d=>(deg.get(d.id)||0)>=8)).join("text").text(d=>d.name.length>28?d.name.slice(0,26)+"…":d.name).attr("dx",8).attr("dy",3);
+  const box=document.getElementById("graph").getBoundingClientRect();
+  sim=d3.forceSimulation(ns).force("link",d3.forceLink(links).id(d=>d.id).distance(40).strength(.4))
+    .force("charge",d3.forceManyBody().strength(-60)).force("center",d3.forceCenter(box.width/2,box.height/2))
+    .force("collide",d3.forceCollide(8)).on("tick",()=>{
+      linkSel.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y).attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+      nodeSel.attr("cx",d=>d.x).attr("cy",d=>d.y); labelSel.attr("x",d=>d.x).attr("y",d=>d.y);});
+  if(focus) highlight(focus);
+}
+function neighbours(id){const s=new Set([id]);DATA.edges.forEach(e=>{const a=e.source.id??e.source,b=e.target.id??e.target;if(e.rel==="COVERED_IN")return;if(a===id)s.add(b);if(b===id)s.add(a)});return s}
+function highlight(id){const s=neighbours(id);nodeSel.attr("opacity",d=>s.has(d.id)?1:.12).attr("stroke",d=>d.id===id?"var(--ink)":"var(--panel)").attr("stroke-width",d=>d.id===id?2.5:1);
+  linkSel.attr("stroke",d=>(d.source.id===id||d.target.id===id)?"var(--accent)":"var(--edge)").attr("opacity",d=>(d.source.id===id||d.target.id===id)?1:.15)}
+function select(id){
+  focus=id; const n=byId.get(id); if(!n)return;
+  if(nodeSel) highlight(id);
+  const out=[],inn=[];
+  DATA.edges.forEach(e=>{const a=e.source.id??e.source,b=e.target.id??e.target;if(e.rel==="COVERED_IN")return;if(a===id)out.push([e.rel,b]);if(b===id)inn.push([e.rel,a])});
+  const kv=(o)=>"<ul>"+Object.entries(o).map(([k,v])=>`<li><b style="display:inline;text-transform:none;color:var(--ink)">${esc(k)}</b>: <code>${esc(fmt(v))}</code></li>`).join("")+"</ul>";
+  const list=a=>"<ul>"+a.map(x=>`<li>${esc(fmt(x))}</li>`).join("")+"</ul>";
+  const lk=a=>"<ul>"+a.map(([r,o])=>`<li><span class="tag">${r}</span><a class="nl" data-id="${esc(o)}">${esc(byId.get(o)?.name??o)}</a></li>`).join("")+"</ul>";
+  let h=`<h2>${esc(n.name)}</h2><span class="tag" style="border-color:${color(n.type)};color:${color(n.type)}">${n.type}</span>${n.modules.map(m=>`<span class="tag">${m}</span>`).join("")}<code>${esc(n.id)}</code><p>${esc(n.summary)}</p>`;
+  if(n.aliases) h+=`<div class="sec"><b>Aliases</b>${esc(n.aliases.join(", "))}</div>`;
+  if(n.formula) h+=`<div class="sec"><b>Formula</b>${kv(n.formula)}</div>`;
+  if(n.conditions) h+=`<div class="sec"><b>Conditions (bot rules)</b>${kv(n.conditions)}</div>`;
+  if(n.params) h+=`<div class="sec"><b>Parameters</b>${kv(n.params)}</div>`;
+  if(n.bot_use) h+=`<div class="sec"><b>Bot use</b>${esc(n.bot_use)}</div>`;
+  if(n.facts) h+=`<div class="sec"><b>Facts</b>${list(n.facts)}</div>`;
+  if(n.example) h+=`<div class="sec"><b>Example</b>${esc(n.example)}</div>`;
+  if(n.caveats) h+=`<div class="sec"><b>Caveats</b>${list(n.caveats)}</div>`;
+  if(out.length) h+=`<div class="sec"><b>Links</b>${lk(out)}</div>`;
+  if(inn.length) h+=`<div class="sec"><b>Backlinks</b>${lk(inn)}</div>`;
+  const d=document.getElementById("detail"); d.innerHTML=h; d.scrollTop=0;
+  d.querySelectorAll("a.nl").forEach(a=>a.onclick=()=>select(a.dataset.id));
+}
+const q=document.getElementById("q"), res=document.getElementById("results");
+q.oninput=()=>{const t=q.value.toLowerCase().trim(); if(!t){res.style.display="none";return}
+  const hits=DATA.nodes.filter(n=>n.type!=="Module").map(n=>{const nm=n.name.toLowerCase(),al=(n.aliases||[]).join(" ").toLowerCase();
+    const s=(nm.includes(t)?3:0)+(n.id.includes(t.replace(/\s+/g,"_"))?2:0)+(al.includes(t)?2:0)+((n.summary||"").toLowerCase().includes(t)?1:0);return [s,n]})
+    .filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,15);
+  res.innerHTML=hits.map(([,n])=>`<div data-id="${esc(n.id)}"><span class="tag">${n.type}</span>${esc(n.name)}</div>`).join("")||"<div>No match</div>";
+  res.style.display="block"; res.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>{select(el.dataset.id);res.style.display="none"})};
+["type","mod","rulesOnly"].forEach(i=>document.getElementById(i).onchange=draw);
+document.getElementById("reset").onclick=()=>{focus=null;["type","mod"].forEach(i=>document.getElementById(i).value="");document.getElementById("rulesOnly").checked=false;q.value="";res.style.display="none";draw()};
+draw();
+</script>
+</body>
+</html>

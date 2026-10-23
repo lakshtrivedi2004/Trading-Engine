@@ -55,7 +55,8 @@ def cost(price, qty):
 
 
 def size(price, risk, capital):
-    cap = capital * L.max_risk_pct_per_trade / 100.0
+    from arb.config import stock_risk_pct
+    cap = capital * stock_risk_pct(L) / 100.0
     by_risk = int(cap // max(risk, 1e-9))
     by_cash = int(capital * float(getattr(L, "stocks_leverage", 5.0)) // price)
     return max(0, min(by_risk, by_cash))
@@ -71,7 +72,7 @@ def trades_for(name, rows, lo, hi, capital):
             i += 1; continue
         seg = rows[max(0, i - 399):i + 1]
         px = seg[-1][4]
-        if regime_gate(seg, L, now=datetime.fromisoformat(iso)):
+        if regime_gate(seg, L, now=datetime.fromisoformat(iso), name="STOCKS"):
             i += 1; continue
         v = evaluate(seg, px, L, strike_step=0.0)
         if not v.tradable:

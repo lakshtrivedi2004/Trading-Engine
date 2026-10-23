@@ -19,22 +19,36 @@ next trading day opens (`open_day`) or after the close. So:
     instead of starting from zero, so the daily loss halt cannot be reset by
     restarting the bot;
   * a crash loses nothing: the ledger is on disk after every trade.
+
+The ceiling (IntradayLimits.capital_ceiling, owner's request of 30 Sep 2026).
+The ledger keeps compounding - it is the account's real equity - but what is
+TRADED is min(ceiling, equity): a profit stays in the account untouched, a
+loss shrinks the purse until profits bring it back up to the ceiling.
+
+Live mode (owner, 11 Oct 2026): the account can hold less than the configured
+amount, so what is traded is never a figure fixed at the open. The engine
+re-reads the account's funds through the day (set_account_funds) and sizes on
+min(ceiling, funds right now). The daily loss halt and the daily target stay
+on the day's opening figure (opening_capital), so a re-read or a restart does
+not move them. Paper never sets account funds and trades the ledger as before.
 """
 import json
-import os
 import threading
 
 from arb.instruments import now_ist
+from arb.fileio import write_json
 
 
 class CapitalBook:
-    def __init__(self, starting, path="journal/capital.json", log=lambda *_: None):
+    def __init__(self, starting, path="journal/capital.json", log=lambda *_: None, ceiling=0.0):
         self.path = path
+        self.ceiling = float(ceiling or 0.0)
         self.log = log
         self.starting = float(starting)
         self._lock = threading.Lock()
         self._data = {"capital": float(starting), "opened": "", "history": [],
                       "day": "", "day_pnl": 0.0, "day_trades": 0}
+        self._account_funds = None      # live only: the account's money right now
         self._load()
 
     def _load(self):
@@ -48,26 +62,53 @@ class CapitalBook:
 
     def _save(self):
         try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w") as fh:
-                json.dump(self._data, fh, indent=2)
-            os.replace(tmp, self.path)
+            write_json(self.path, self._data, indent=2)
         except Exception as e:
             self.log(f"[capital] save failed: {e}")
 
+    def traded(self, equity):
+        """The traded figure for a given equity: min(ceiling, equity)."""
+        return min(equity, self.ceiling) if self.ceiling > 0 else equity
+
     @property
-    def capital(self):
+    def equity(self):
         with self._lock:
             return float(self._data.get("capital", self.starting))
+
+    @property
+    def capital(self):
+        """What is traded: the equity capped at the ceiling - in live mode,
+        once the account has been read, min(ceiling, the account's funds now)."""
+        f = self._account_funds
+        return self.traded(f if f is not None else self.equity)
+
+    @property
+    def opening_capital(self):
+        """The day's opening traded figure, min(ceiling, the ledger's equity).
+        The daily loss halt and the daily target use it: a re-read of the
+        account in the middle of the day must not move either."""
+        return self.traded(self.equity)
+
+    @property
+    def account_funds(self):
+        """Live: the account's funds as last read; None in paper mode."""
+        return self._account_funds
+
+    def set_account_funds(self, funds):
+        """Live: what the account holds right now. From here on what is traded
+        is min(ceiling, funds): the configured amount when the account holds at
+        least that much, else the account's own figure. A failed read (0 or
+        less) keeps the last figure. Returns the traded capital."""
+        funds = float(funds or 0.0)
+        if funds > 0:
+            with self._lock:
+                self._account_funds = funds
+        return self.capital
 
     def daily_target(self, pct):
         """The day's goal in rupees. A goal, not a gate - nothing stops trading
         when it is reached, because a day that runs further is a better day."""
-        return self.capital * pct / 100.0
-
-    def max_risk_per_trade(self, pct):
-        return self.capital * pct / 100.0
+        return self.opening_capital * pct / 100.0
 
     # ── the day ledger ──────────────────────────────────────────────────────
     @property
@@ -93,7 +134,7 @@ class CapitalBook:
                 self._data["day"] = today
                 self._data["day_pnl"] = 0.0
                 self._data["day_trades"] = 0
-            cap = float(self._data.get("capital", self.starting))
+            cap = self.traded(float(self._data.get("capital", self.starting)))
             self._save()
         return folded, cap
 
@@ -122,7 +163,7 @@ class CapitalBook:
                 self._data["synced"] = {"date": now_ist().strftime("%Y-%m-%d"),
                                         "funds": round(funds, 2), "note": note}
                 self._save()
-            return float(self._data.get("capital", funds))
+            return self.traded(float(self._data.get("capital", funds)))
 
     def close_day(self, note=""):
         """After the session: fold today's ledger into capital now. Safe to call
@@ -138,7 +179,7 @@ class CapitalBook:
             self._data["day"] = day
             self._data["day_pnl"] = 0.0
             self._save()
-            return before, before + folded
+            return self.traded(before), self.traded(before + folded)
 
     def _fold_locked(self, day, note):
         pnl = float(self._data.get("day_pnl", 0.0))
@@ -180,7 +221,9 @@ class CapitalBook:
         with self._lock:
             hist = self._data.get("history", [])
             return {
-                "capital": round(float(self._data.get("capital", self.starting)), 2),
+                "capital": round(self.traded(float(self._data.get("capital", self.starting))), 2),
+                "equity": round(float(self._data.get("capital", self.starting)), 2),
+                "ceiling": round(self.ceiling, 2),
                 "starting": round(self.starting, 2),
                 "days": len(hist),
                 "total_return_pct": round(

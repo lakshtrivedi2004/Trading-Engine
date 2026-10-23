@@ -1,0 +1,183 @@
+module: M13
+title: Integrated Financial Modelling
+summary: Building an integrated 3-statement Excel model (main model - Bajaj Auto; helper models - Bata etc.) from 5 years of annual-report data - workbook layout, assumption sheet (ratio/growth + rolling averages), revenue sub-model, asset/depreciation, debt and reserves schedules, P&L and balance-sheet projections, indirect cash flow that balances the balance sheet, then valuation (relative, option-based, absolute) via FCFF/FCFE, CAPM, tax shield, WACC, terminal value and DCF to a per-share fair value.
+nodes:
+  - id: financial_model
+    type: Model
+    name: Integrated Financial Model
+    chapter: [1, 12]
+    summary: A linked workbook that takes financial statements as input and outputs a valuation (fair share price); fully integrated, so changing any assumption flows through P&L, balance sheet, cash flow and DCF. Modelling is part art (assumptions) and part craft (structure).
+    facts:
+      - Steps - layout -> historical data (5 yrs, consolidated, from the annual report only) -> assumption sheet -> revenue model -> schedules (asset, debt, reserves) -> P&L/BS projections -> cash flow -> valuation.
+      - Projection horizon - 5 explicit years (Y6-Y10), then terminal value.
+      - Pick a simple manufacturing company with 1-2 products and consistent disclosure for a first model; avoid banks/NBFC/BFSI (the model doesn't fit them).
+      - Sensitivity example - materials consumed 65% -> 60% of sales moved Bajaj Auto fair value from Rs 300 to Rs 462.
+    bot_use: Generates a fair value per share and lets you run sensitivity scenarios; feeds margin-of-safety screens and long-horizon value bots. Recompute after every annual/quarterly report.
+    links: [{to: annual_report, rel: USES}, {to: model_assumptions, rel: USES}, {to: revenue_model, rel: USES}, {to: asset_schedule, rel: USES}, {to: debt_schedule, rel: USES}, {to: reserves_schedule, rel: USES}, {to: cash_flow_statement, rel: USES}, {to: dcf, rel: USES}, {to: fundamental_analysis, rel: PART_OF}]
+
+  - id: model_layout_hygiene
+    type: Rule
+    name: Model Layout and Format Hygiene
+    chapter: [2, 3]
+    summary: Same column = same year across every sheet; narrow index columns A, B and D; no gridlines; freeze panes; units stated (INR Cr); colour-code facts vs assumptions; break heavy line items into detail; do an annual-report recce first and use the latest year's format; never copy from third-party data vendors ('model suicide' = unstructured copy-paste).
+    links: [{to: financial_model, rel: PART_OF}]
+
+  - id: model_assumptions
+    type: Process
+    name: Assumption Sheet - Ratio/Growth Drivers with Rolling Averages
+    chapter: [4, 5]
+    summary: Express each line item historically as a ratio to a driver (BS items vs gross block; P&L items vs sales) or as a YoY growth rate; project with the rolling average of the last 4 years (Y6 = avg(Y2..Y5), Y7 = avg(Y3..Y6)) or an informed guess. Prefer drivers with a narrow, stable historical range.
+    formula:
+      ratio_driver: "item_t / driver_t (e.g. liabilities / gross_block)"
+      growth_driver: "item_t / item_{t-1} - 1"
+      projection: "item_{t+1} = rolling_mean(ratio, 4) * driver_{t+1}"
+      deferred_tax: "deferred_tax = avg(deferred_tax / depreciation) * depreciation (more stable than growth)"
+    links: [{to: financial_model, rel: PART_OF}, {to: working_capital_days, rel: USES}]
+
+  - id: working_capital_days
+    type: Formula
+    name: Inventory and Receivable Days
+    chapter: 5
+    summary: Convert inventory (and receivables) from rupees to days, average the days, then convert back for projections; the days figures also reveal operating efficiency (fewer days = faster conversion to sales).
+    formula:
+      inventory_days: "avg(inventory_{t-1}, inventory_t) / materials_consumed_t * 365"
+      receivable_days: "avg(receivables_{t-1}, receivables_t) / sales_t * 365"
+      back_to_value: "inventory_t = inventory_days * materials_consumed_t / 365 (adjusting for averaging)"
+    links: [{to: operating_ratios, rel: RELATED_TO}, {to: model_assumptions, rel: PART_OF}]
+
+  - id: revenue_model
+    type: Model
+    name: Revenue Sub-model
+    chapter: 6
+    summary: Build revenue bottom-up from common-sense questions answered in the annual report - what they make, where they sell (domestic vs export), units x realisation per unit, capacity and utilisation. It also yields capacity utilisation, capex cycles and market share.
+    formula: {revenue: "sum_segments(units_sold * avg_realisation)", utilisation: "units_produced / installed_capacity"}
+    example: "Bajaj Auto - motorcycles vs commercial vehicles, domestic vs export units; revenue ~Rs 29,111 Cr with exports ~Rs 12,216 Cr."
+    links: [{to: financial_model, rel: PART_OF}]
+
+  - id: base_rule
+    type: Rule
+    name: Base Rule (Roll-forward)
+    chapter: 7
+    summary: Every schedule rolls forward - this year's closing balance is next year's opening balance; closing = opening + additions - deletions.
+    formula: {closing: "opening + additions - deductions", next_opening: "closing_t"}
+    links: [{to: asset_schedule, rel: PART_OF}, {to: debt_schedule, rel: PART_OF}, {to: reserves_schedule, rel: PART_OF}]
+
+  - id: asset_schedule
+    type: Process
+    name: Asset Schedule (Gross Block, CAPEX, Depreciation, Net Block)
+    chapter: [7, 8]
+    summary: Back out historical capex from changes in gross block; project capex from management guidance (best), historical averages, or a variable method; project depreciation with the proportion method (depreciation/gross block); roll accumulated depreciation forward; the net block flows back to the balance sheet and the depreciation to the P&L.
+    formula:
+      capex: "gross_block_t - gross_block_{t-1} (+ disposals)"
+      depreciation_next: "(dep_t / gross_block_t) * gross_block_{t+1}"
+      accumulated_dep: "acc_dep_{t-1} + dep_t"
+      net_block: "gross_block - accumulated_depreciation"
+    example: "Dep 41.71 / GB 538.76 = 7.74%; projected GB 588.77 -> dep 45.58 Cr."
+    links: [{to: capex, rel: USES}, {to: base_rule, rel: USES}, {to: financial_model, rel: PART_OF}]
+
+  - id: debt_schedule
+    type: Process
+    name: Debt Schedule
+    chapter: 9
+    summary: Split debt into secured and unsecured using the notes, average the opening and closing balances to get the interest base, and project debt from management's capex/financing view; with no guidance, hold debt flat.
+    formula: {interest: "avg(opening_debt, closing_debt) * interest_rate"}
+    links: [{to: base_rule, rel: USES}, {to: debt_to_equity, rel: RELATED_TO}, {to: financial_model, rel: PART_OF}]
+
+  - id: reserves_schedule
+    type: Process
+    name: Equity / Reserves Schedule
+    chapter: [10, 11]
+    summary: Share capital (authorised >= issued >= subscribed/paid-up; shares = share capital / face value); reserves - securities premium (rises with fresh equity), general reserve, retained earnings (PAT flows in, dividends and DDT flow out). This is the main P&L-to-BS link.
+    formula:
+      shares_outstanding: "paid_up_share_capital / face_value"
+      retained_earnings: "opening + PAT - dividends - transfers_to_general_reserve"
+    links: [{to: base_rule, rel: USES}, {to: face_value, rel: USES}, {to: dividend, rel: RELATED_TO}, {to: financial_model, rel: PART_OF}]
+
+  - id: indirect_cash_flow
+    type: Process
+    name: Indirect Cash Flow and Balance Check
+    chapter: [12, 13]
+    summary: Derive cash flow from P&L and balance-sheet changes - CFO (PAT + depreciation from the asset schedule +/- working-capital changes), CFI (capex, investments), CFF (debt, equity, dividends). Net cash flow plus opening cash gives closing cash, which plugs into the balance sheet; if the model is integrated correctly the balance sheet balances.
+    formula:
+      closing_cash: "opening_cash + CFO + CFI + CFF"
+      check: "total_assets - total_liabilities_and_equity == 0"
+    links: [{to: cash_flow_statement, rel: RELATED_TO}, {to: financial_model, rel: PART_OF}]
+
+  - id: valuation_methods
+    type: Concept
+    name: Valuation Approaches (Relative, Option-based, Absolute)
+    chapter: 14
+    summary: Relative - value like identical peers via multiples (fails if the sector is mispriced or the companies differ). Option-based - the firm's value depends on an event (e.g. R&D success), valued like an option (niche, tech). Absolute - intrinsic value from discounted cash flow (enterprise or equity). Decision - market price > fair price means overvalued, < means undervalued.
+    example: "Peers at ~10x PAT -> a new peer with PAT 300 should trade ~Rs 3,000."
+    conditions:
+      overvalued: "market_price > fair_price"
+      undervalued: "market_price < fair_price (buy only with margin_of_safety)"
+    links: [{to: pe_ratio, rel: USES}, {to: dcf, rel: USES}, {to: call_option, rel: RELATED_TO}, {to: margin_of_safety, rel: RELATED_TO}]
+
+  - id: enterprise_value
+    type: Formula
+    name: Enterprise Value and Equity Value
+    chapter: [14, 18]
+    summary: Rearranging the balance sheet - fixed assets = net debt + equity. Valuing the whole firm gives EV (discount FCFF at WACC); EV - debt + cash = equity value; divide by shares outstanding for fair value per share.
+    formula:
+      net_debt: "debt - cash"
+      equity_value: "EV - debt + cash"
+      fair_price: "equity_value / shares_outstanding"
+    links: [{to: dcf, rel: PART_OF}]
+
+  - id: fcff_fcfe
+    type: Formula
+    name: Free Cash Flow to Firm (FCFF) and to Equity (FCFE)
+    chapter: [15, 16]
+    summary: The firm is financed by debt and equity holders; FCFF is the cash available to both, and FCFE is what remains for equity after debt service. Discount FCFF at WACC and FCFE at the cost of equity.
+    formula:
+      fcff_from_pat: "PAT + D&A + interest*(1-tax) + deferred_tax - delta_working_capital - capex"
+      fcff_from_ebit: "EBIT*(1-tax) + D&A + deferred_tax - delta_working_capital - capex"
+      fcfe: "FCFF - interest*(1-tax) - principal_repayment + net_new_borrowing"
+      working_capital: "current_assets - current_liabilities"
+    links: [{to: free_cash_flow, rel: VARIANT_OF}, {to: tax_shield, rel: USES}, {to: dcf, rel: PART_OF}]
+
+  - id: tax_shield
+    type: Concept
+    name: Interest Tax Shield / Effective Cost of Debt
+    chapter: [16, 17]
+    summary: Interest is tax-deductible, so its after-tax cost is lower; add back interest*(1-t) in FCFF and use the after-tax cost of debt in WACC.
+    formula: {effective_cost_of_debt: "kd * (1 - tax_rate)"}
+    example: "Interest 70 at 25% tax -> add back 52.5; kd 8% at 30% tax -> 5.6%."
+    links: [{to: wacc, rel: PART_OF}]
+
+  - id: capm
+    type: Formula
+    name: CAPM - Cost of Equity
+    chapter: 16
+    summary: The return equity holders expect is the risk-free rate plus beta times the market risk premium. Proxy Rf with the 10-year G-sec yield (CCIL/RBI); the long-term market return Rm is ~8-12%.
+    formula: {re: "Rf + beta * (Rm - Rf)", risk_premium: "beta * (Rm - Rf)"}
+    example: "Rf 7.4586%, beta 1.3, Rm 8.5% -> Re 8.81%."
+    links: [{to: beta, rel: USES}, {to: wacc, rel: PART_OF}, {to: interest_rates, rel: USES}]
+
+  - id: wacc
+    type: Formula
+    name: Weighted Average Cost of Capital (WACC)
+    chapter: [15, 17]
+    summary: A blended discount rate for the whole firm; the cost of equity is always above WACC.
+    formula: {wacc: "wd * kd*(1-t) + we * ke", wd: "D/(D+E)", we: "E/(D+E)"}
+    example: "D 300, E 200, kd 8%, ke 12% -> 9.6% pre-tax; with a 30% tax shield -> 8.16%."
+    params: {target_debt_to_equity: "<= 50% (model default)", tax_rate: "25% (model default)"}
+    links: [{to: capm, rel: USES}, {to: tax_shield, rel: USES}, {to: dcf, rel: PART_OF}, {to: discount_rate_opportunity_cost, rel: RELATED_TO}]
+
+  - id: terminal_value
+    type: Formula
+    name: Terminal Value (Gordon Growth)
+    chapter: [17, 18]
+    summary: Beyond the 5 explicit years, assume cash flows grow forever at roughly long-term inflation; DCF is extremely sensitive to this number, and it requires stable positive cash flows (DCF fails with negative ones).
+    formula: {tv: "CF_final * (1 + g) / (r - g)", pv_factor: "1 / (1 + r)^t", constraint: "r > g; g ~ long-term inflation"}
+    links: [{to: dcf, rel: PART_OF}, {to: inflation, rel: USES}]
+
+  - id: dcf_model_implementation
+    type: Process
+    name: DCF Implementation in the Model
+    chapter: 18
+    summary: Inputs are Rf (10Y G-sec, ~7%), Rm (10-12%), beta, kd (~10%), tax (25%), target D/E (50%) and terminal g (~inflation). Steps - project FCFF Y6-Y10, compute TV at Y10, discount everything at WACC, sum to EV, subtract debt and add cash to get equity value, divide by shares for the fair price, then compare with the market price and run sensitivities on key assumptions.
+    example: "Year-3 FCFF 294.14 at WACC 10.25% -> PV 294.14/1.1025^3 = 219.49 Cr; Bajaj Auto fair value ~Rs 300 in the base case."
+    bot_use: "fair_value(inputs) -> upside = fair/price - 1; screen for upside > margin_of_safety; run grid sensitivity on g and WACC."
+    links: [{to: dcf, rel: VARIANT_OF}, {to: wacc, rel: USES}, {to: terminal_value, rel: USES}, {to: fcff_fcfe, rel: USES}, {to: enterprise_value, rel: USES}, {to: margin_of_safety, rel: RELATED_TO}]

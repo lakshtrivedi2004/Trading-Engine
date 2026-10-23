@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}Flows{% endblock %}{% block heading %}Flows{% endblock %}
+{% block content %}
+<p>Daily net buying (+) or selling (−) in the cash market by foreign (FII/FPI) and domestic (DII) institutions, in Rs
+crore, as published by NSE each evening. Flows move prices in inelastic markets (Gabaix &amp; Koijen 2021), but
+same-day flows and returns influence each other: correlation is association, not cause.</p>
+<ul>{% for l in lines %}<li>{{ l }}</li>{% endfor %}</ul>
+{{ chart(daily, 280) }}
+{{ chart(cum, 320) }}
+{% if table %}
+<div class="tablewrap"><table><thead><tr><th class="l">Date</th><th>FII net</th><th>DII net</th><th>FII 20-day sum</th>
+<th>DII 20-day sum</th><th class="l">Source</th></tr></thead><tbody>
+{% for r in table %}<tr><td class="l">{{ r.date.strftime('%a %d %b %Y') }}</td><td class="{{ r.fii_net|sign }}">{{ r.fii_net|num(0) }}</td>
+<td class="{{ r.dii_net|sign }}">{{ r.dii_net|num(0) }}</td><td>{{ r.fii_20d|num(0) }}</td><td>{{ r.dii_20d|num(0) }}</td>
+<td class="l">{{ r.source }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="note">Source: nse_api = downloaded by <code>imr update</code>; manual_csv = from config/fii_dii_manual.csv. The
+flow factor is added to the decomposition once {{ min_hist }}+ days are stored.</p>
+{% endif %}
+{% endblock %}

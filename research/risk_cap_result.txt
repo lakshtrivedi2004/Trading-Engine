@@ -1,0 +1,25 @@
+raw candidates (pace gate off, 10% superset): 2374
+
+=== capital Rs 10,673 ===
+risk cap 1% (Rs 107)               n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0 | priced 0 gated 0 | median risk Rs 0
+risk cap 2% (Rs 213)               n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0 | priced 0 gated 0 | median risk Rs 0
+risk cap 3% (Rs 320)               n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0 | priced 0 gated 0 | median risk Rs 0
+risk cap 4% (Rs 427)               n= 23 win= 57% year Rs  +2,112 (IN    +882 / OUT  +1,230) avg   +92 worst   -409 maxDD    897  BETTER BOTH | priced 104 gated 27 | median risk Rs 520
+risk cap 5% (Rs 534)               n= 51 win= 51% year Rs  +4,578 (IN    +626 / OUT  +3,952) avg   +90 worst   -537 maxDD  1,403 | priced 418 gated 77 | median risk Rs 513
+risk cap 6% (Rs 640)  <- live      n= 76 win= 51% year Rs  +6,760 (IN    -855 / OUT  +7,615) avg   +89 worst   -633 maxDD  2,950 | priced 660 gated 113 | median risk Rs 559
+risk cap 7% (Rs 747)               n= 85 win= 53% year Rs  +9,572 (IN  +1,759 / OUT  +7,813) avg  +113 worst   -737 maxDD  3,271  BETTER BOTH | priced 699 gated 126 | median risk Rs 567
+risk cap 8% (Rs 854)               n= 87 win= 54% year Rs +10,680 (IN  +3,182 / OUT  +7,499) avg  +123 worst   -845 maxDD  3,688  BETTER BOTH | priced 714 gated 129 | median risk Rs 571
+risk cap 9% (Rs 961)               n= 88 win= 53% year Rs +10,792 (IN  +3,273 / OUT  +7,519) avg  +123 worst   -868 maxDD  4,522  BETTER BOTH | priced 715 gated 130 | median risk Rs 573
+risk cap 10% (Rs 1,067)            n= 89 win= 54% year Rs +11,986 (IN  +4,467 / OUT  +7,519) avg  +135 worst   -958 maxDD  3,786  BETTER BOTH | priced 720 gated 132 | median risk Rs 573
+
+=== capital Rs 13,467 ===
+risk cap 1% (Rs 135)               n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0 | priced 0 gated 0 | median risk Rs 0
+risk cap 2% (Rs 269)               n=  0 win=  0% year Rs      +0 (IN      +0 / OUT      +0) avg    +0 worst      0 maxDD      0 | priced 0 gated 0 | median risk Rs 0
+risk cap 3% (Rs 404)               n= 10 win= 70% year Rs  +2,760 (IN  +1,470 / OUT  +1,290) avg  +276 worst   -361 maxDD    361  BETTER BOTH | priced 31 gated 10 | median risk Rs 559
+risk cap 4% (Rs 539)               n= 54 win= 52% year Rs  +4,888 (IN    +858 / OUT  +4,030) avg   +91 worst   -537 maxDD  1,527 | priced 439 gated 81 | median risk Rs 523
+risk cap 5% (Rs 673)               n= 82 win= 51% year Rs  +6,736 (IN    -926 / OUT  +7,662) avg   +82 worst   -633 maxDD  3,550 | priced 746 gated 121 | median risk Rs 566
+risk cap 6% (Rs 808)  <- live      n= 91 win= 54% year Rs +11,054 (IN  +3,015 / OUT  +8,039) avg  +121 worst   -742 maxDD  3,341  BETTER BOTH | priced 798 gated 135 | median risk Rs 573
+risk cap 7% (Rs 943)               n= 93 win= 52% year Rs +10,154 (IN  +1,421 / OUT  +8,733) avg  +109 worst   -845 maxDD  6,390 | priced 807 gated 138 | median risk Rs 574
+risk cap 8% (Rs 1,077)             n= 94 win= 52% year Rs +11,682 (IN  +2,933 / OUT  +8,749) avg  +124 worst   -958 maxDD  5,764  BETTER BOTH | priced 813 gated 140 | median risk Rs 576
+risk cap 9% (Rs 1,212)             n= 94 win= 52% year Rs +12,001 (IN  +3,241 / OUT  +8,759) avg  +128 worst -1,165 maxDD  5,815  BETTER BOTH | priced 815 gated 140 | median risk Rs 576
+risk cap 10% (Rs 1,347)            n= 94 win= 52% year Rs +12,514 (IN  +3,754 / OUT  +8,759) avg  +133 worst -1,261 maxDD  5,870  BETTER BOTH | priced 815 gated 140 | median risk Rs 576

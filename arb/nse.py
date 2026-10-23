@@ -74,17 +74,6 @@ class NseClient:
         d = self._json(f"live-analysis-variations?index={key}")
         return list((d.get(group) or {}).get("data") or [])
 
-    def volume_gainers(self):
-        """Stocks trading far above their 1- and 2-week average volume."""
-        return list(self._json("live-analysis-volume-gainers").get("data") or [])
-
-    def most_active(self, by="value"):
-        return list(self._json(f"live-analysis-most-active-securities?index={by}").get("data") or [])
-
-    def preopen(self, key="FO"):
-        """Pre-open (09:00-09:08) indicative prices and buy/sell quantities."""
-        return list(self._json(f"market-data-pre-open?key={key}").get("data") or [])
-
     def ban_list(self):
         """F&O securities in the ban period today (open interest past 95% of the
         market-wide limit): no new positions may be built in their derivatives,
@@ -145,3 +134,64 @@ class NseClient:
                     continue
             t = e + timedelta(days=1)
         return [rows[k] for k in sorted(rows)]
+
+    # ── option chains (cookie session) ─────────────────────────────────────
+    # The option-chain API answers only a client holding the cookies NSE sets
+    # on its own page, so it has its own opener, warmed on that page, kept
+    # apart from the plain calls above (which work without cookies).
+    OC_PAGE = "https://www.nseindia.com/option-chain"
+
+    def _oc_get(self, url, warm_if_empty=True):
+        import http.cookiejar
+        if getattr(self, "_oc_opener", None) is None:
+            self._oc_jar = http.cookiejar.CookieJar()
+            self._oc_opener = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(self._oc_jar))
+            self._oc_warm()
+        for attempt in (0, 1):
+            with self._lock:
+                wait = self.min_gap - (time.time() - self._last)
+                if wait > 0:
+                    time.sleep(wait)
+                self._last = time.time()
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": UA, "Accept": "application/json", "Referer": self.OC_PAGE})
+                with self._oc_opener.open(req, timeout=self.timeout) as r:
+                    body = r.read().decode("utf-8", "replace")
+                d = json.loads(body) if body.strip() else {}
+                if d or not warm_if_empty or attempt:
+                    self.last_error = "" if d else "empty answer (cookies refused?)"
+                    return d
+            except Exception as e:
+                self.last_error = f"{type(e).__name__}: {str(e)[:120]}"
+                if attempt:
+                    return {}
+            self._oc_warm()                     # stale or missing cookies: once more
+        return {}
+
+    def _oc_warm(self):
+        try:
+            req = urllib.request.Request(self.OC_PAGE, headers={"User-Agent": UA, "Accept": "text/html"})
+            with self._oc_opener.open(req, timeout=self.timeout) as r:
+                r.read()
+        except Exception as e:
+            self.last_error = f"warm: {type(e).__name__}: {str(e)[:100]}"
+
+    def option_chain(self, symbol, expiry=None):
+        """A stock's option chain from NSE: {"underlying", "expiry", "expiries",
+        "rows"} where rows are NSE's per-strike dicts ({"strikePrice", "CE":
+        {...}, "PE": {...}} with lastPrice, buyPrice1, sellPrice1,
+        impliedVolatility, totalTradedVolume). {} when NSE does not answer."""
+        info = self._oc_get(BASE + "option-chain-contract-info?" + urllib.parse.urlencode({"symbol": symbol}))
+        exps = list(info.get("expiryDates") or [])
+        if not exps:
+            return {}
+        exp = expiry if expiry in exps else exps[0]
+        d = self._oc_get(BASE + "option-chain-v3?" + urllib.parse.urlencode(
+            {"type": "Equity", "symbol": symbol, "expiry": exp}))
+        rec = d.get("records") or {}
+        rows = rec.get("data") or (d.get("filtered") or {}).get("data") or []
+        if not rows or not rec.get("underlyingValue"):
+            return {}
+        return {"underlying": float(rec["underlyingValue"]), "expiry": exp, "expiries": exps, "rows": rows}

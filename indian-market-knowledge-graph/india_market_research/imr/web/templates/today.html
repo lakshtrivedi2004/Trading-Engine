@@ -1,0 +1,72 @@
+{% extends "base.html" %}{% from "macros.html" import health_table %}
+{% block title %}Today{% endblock %}{% block heading %}Market pulse{% endblock %}
+{% block actions %}<form method="post" action="{{ url_for('report', mode=mode) }}"><button class="secondary">⤓ Export HTML snapshot</button></form>{% endblock %}
+{% block content %}
+<p class="lead">Why India's indices moved, what condition the market is in, and what the stock market's biggest movers were — from data stored on this computer.</p>
+
+{% if scan and scan.asof %}
+<div class="ticker"><div class="track">
+{% for _ in range(2) %}
+  {% for r in scan.lists.gainers.head(10).itertuples() %}<span class="t"><b>{{ r.symbol }}</b><span class="up">{{ r.ret|pct(1) }}</span></span>{% endfor %}
+  {% for r in scan.lists.losers.head(10).itertuples() %}<span class="t"><b>{{ r.symbol }}</b><span class="down">{{ r.ret|pct(1) }}</span></span>{% endfor %}
+{% endfor %}
+</div></div>
+{% endif %}
+
+<div class="cards">
+{% for name, r in reg.iterrows() %}
+  {% set f = fc.get(name) %}
+  <div class="card {{ r['ret_1d']|sign }}">
+    <div class="label">{{ name }}</div>
+    <div class="value">{{ r['close']|num(0) }}</div>
+    <div class="{{ r['ret_1d']|sign }}" style="font-weight:700">{{ r['ret_1d']|pct }} <span class="muted" style="font-weight:400">on {{ r['date'].strftime('%d %b') }}</span></div>
+    <div class="sub" style="margin-top:8px">{{ r['trend'] }} · vol {{ r['vol_regime']|lower }}</div>
+    {% if f and f.size.tomorrow is defined %}
+    <div class="sub">Next session: typical move <b class="grad-text">±{{ '%.2f'|format(f.size.tomorrow * 100) }}%</b></div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<h2>Why the indices moved</h2>
+<div class="glass" style="padding:6px 18px">
+{% for name, text, with_flows in explanations %}
+<p>{{ text }}</p>
+{% if with_flows %}<p class="note">With FII flows as an extra factor: {{ with_flows }}</p>{% endif %}
+{% endfor %}
+</div>
+{% if missing %}<div class="warnbox">Not analysed (no usable data): {{ missing|join(', ') }}. See Data health below.</div>{% endif %}
+
+<h2>Market regime</h2>
+<div class="glass" style="padding:4px 18px"><ul>{% for l in regime_lines %}<li>{{ l }}</li>{% endfor %}<li>{{ vix }}</li></ul></div>
+
+{% if scan and scan.asof %}
+<h2>Stock movers · {{ scan.asof.strftime('%d %b') }}</h2>
+<div class="grid2">
+  <div class="tablewrap"><table><thead><tr><th class="l">Top gainers</th><th>Move</th><th>Price</th></tr></thead><tbody>
+  {% for r in scan.lists.gainers.head(5).itertuples() %}<tr><td class="l"><b>{{ r.symbol }}</b> <span class="muted">{{ r.name[:22] }}</span></td><td class="up">{{ r.ret|pct(1) }}</td><td>{{ r.close|num(1) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th class="l">Top losers</th><th>Move</th><th>Price</th></tr></thead><tbody>
+  {% for r in scan.lists.losers.head(5).itertuples() %}<tr><td class="l"><b>{{ r.symbol }}</b> <span class="muted">{{ r.name[:22] }}</span></td><td class="down">{{ r.ret|pct(1) }}</td><td>{{ r.close|num(1) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+<p class="note">Full scanner with volatility, unusual moves and liquidity: <a href="{{ url_for('movers', mode=mode) }}">Stock movers →</a> · Watchlist, not advice.</p>
+{% endif %}
+
+<h2>Data health</h2>
+{% if health|length %}
+<p class="note">Checked {{ health['check_time'].iloc[0][:16].replace('T', ' ') }} UTC: {{ health|length }} checks,
+  {{ (health['status'] == 'warn').sum() }} warning(s), {{ (health['status'] == 'fail').sum() }} failure(s). Nothing is filled in or hidden.</p>
+{{ health_table(problems) }}
+<details><summary>All checks, including those that passed</summary>{{ health_table(health) }}</details>
+{% else %}<p>No data-health results yet. Run <code>imr update</code>.</p>{% endif %}
+{% if excluded|length %}
+<details><summary>Factor days excluded as data errors ({{ excluded|length }})</summary>
+<p class="note">A one-day jump beyond the factor's threshold that reverses by 70%+ the next day is treated as a bad print and
+left out of that factor (nothing is substituted). Index prices are never altered.</p>
+<div class="tablewrap"><table><thead><tr><th class="l">Series</th><th class="l">Date</th><th>Value</th><th>Move</th></tr></thead><tbody>
+{% for r in excluded.itertuples() %}<tr><td class="l">{{ r.series }}</td><td class="l">{{ r.date.strftime('%Y-%m-%d') }}</td>
+<td>{{ r.close|num }}</td><td>{{ (r.move|pct) if r.kind == 'ret' else (r.move|num) }}</td></tr>{% endfor %}
+</tbody></table></div></details>
+{% endif %}
+{% endblock %}

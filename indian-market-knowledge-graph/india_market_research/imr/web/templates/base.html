@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} · IndexLab</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+  <div class="brand"><div class="logo"></div><span>IndexLab</span></div>
+  {% for ep, label, icon in pages %}
+  <a class="item {% if endpoint == ep %}on{% endif %}" href="{{ url_for(ep, mode=mode) }}"><span class="ic">{{ icon }}</span>{{ label }}</a>
+  {% endfor %}
+  {% if modes %}
+  <div class="section">Data</div>
+  <div class="modes">
+    {% for m in modes %}
+    <a class="{% if m == mode %}on{% endif %}" href="{{ url_for(endpoint or 'today', mode=m) }}">{{ 'Real' if m == 'real' else 'Demo' }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="disc">{{ disclaimer }}</div>
+</nav>
+<main>
+  {% if mode == 'demo' %}
+  <div class="demo">⚠ SIMULATED DEMO DATA: every number on this page is made up and says nothing about real markets.</div>
+  {% endif %}
+  <div class="topbar">
+    <div class="status-pill"><span class="live"></span>{% if asof %}Data to {{ asof.strftime('%a %d %b %Y') }}{% else %}No data{% endif %} · {{ (mode or '')|upper }}</div>
+    {% block actions %}{% endblock %}
+  </div>
+  {% with msgs = get_flashed_messages() %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endwith %}
+  <h1>{% block heading %}{% endblock %}</h1>
+  {% block content %}{% endblock %}
+  <footer>{{ disclaimer }} Sources: Yahoo Finance and NSE (indices, FII/DII, holidays), BSE bhavcopy (stocks), your files in
+    config/. Every number is computed from rows stored in the local database by the methods documented in the README.</footer>
+</main>
+</div>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

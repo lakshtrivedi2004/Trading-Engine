@@ -1,0 +1,4 @@
+# Optional exchange trading holidays (weekdays the exchange was closed).
+# NSE's list for the current year is downloaded automatically by 'imr update'.
+# Add older years here only from the official NSE/BSE circulars.
+exchange,date,description

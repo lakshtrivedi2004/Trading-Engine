@@ -1,0 +1,2828 @@
+
+
+## Currency & Commodity Futures
+
+ZERODHA
+ZERODHA.COM/VARSITY
+
+**of Contents**
+
+| 1 | Currency Basics | 1 |
+|---|---|---|
+| 2 | Reference Rates & Impact of events | 9 |
+| 3 | Impact of events (Brexit) & Interest Rate Parity | 20 |
+| 4 | The USD INR Pair (Part 1) | 28 |
+| 5 | The USD INR Pair (Part 2) | 39 |
+| 6 | EUR, GBP, and JPY | 50 |
+| 7 | Gold (Part 1) | 63 |
+| 8 | Gold (Part 2) | 72 |
+| 9 | Silver | 84 |
+| 10 | Crude Oil (Part 1), digging the past | 95 |
+| 11 | Crude Oil (Part 2), the crude oil eco system | 102 |
+| 12 | Crude Oil (Part 3), the crude oil contract | 111 |
+| 13 | Copper & Aluminium | 120 |
+| 14 | Lead & Nickel | 132 |
+| 15 | Cardamom & Mentha Oil | 144 |
+| 16 | Natural Gas | 155 |
+| 17 | Commodity Options | 164 |
+
+## Currency Basics
+
+## ### 1.1 – Module Orientation
+
+At the onset, let me give you a quick orientation, so you can set your expectations for this module. The focus of this module will be on three main topics –
+1. Currencies and currency trading
+2. Understanding Commodities
+3. Interest Rate Futures
+I agree that each of these topics is vast, and commands an entire module on its own. However, these assets are not as liquid as equities. We are still at a very nascent stage when it comes to trading these alternate assets in India. Given this, the idea here would be introducing these assets, familiarize you with what drives these assets, and what you need to watch out for before placing your trades. So, in a sense, you could consider this module as a ‘thought starter’ of sorts for trading these alternative assets. Needless to say, we will try and discuss these topics to a reasonable depth, ensuring you have more than just the bare basics on these topics.
+We’ll begin the module by discussing Currencies. We’ll discuss some of the popular currency pairs traded in India such as USD-INR, GBP-INR, and INR-JPY. We also discuss other (non INR) currency pairs such as EUR-USD, GBP-USD, and USD-JPY. The discussion on currencies would be spread across a few chapters. The objective here would be to introduce these currency pairs, and familiarize with not just the contract specification but also with a few fundamental factors that affect these currencies.
+Once this is done, we’ll move on to the next part of the module. This’d deal with Commodities. We’ll follow a similar template here – i.e. introduce the commodities (both agri and non-agri) and get familiarize you with not just the contract specifications but also a few fundamental factors which would influence the movement of these commodities. Some of the commodities we’ll be discussing would be – Gold, Silver, Zinc, Aluminium, Crude oil, Natural Gas, Turmeric, Cardamom, Pepper, Cotton, etc. Of
+
+course, the formula to calculate the price of commodities such as Gold, based on the price of Gold in International markets will also be discussed.
+Lastly, this module will discuss ‘Interest Rate Futures (IFR)’, which I think is a very exciting space. The discussion would deal with topics related to RBI’s borrowing pattern, issuance of sovereign bonds, listing on NSE, and eventually trading them. Based on how we progress, we can even touch topics related to bond trading and bond trading strategies.
+As you see, we have some really interesting stuff lined up. I believe this’ll be a great learning experience for you, and me!
+Please note, the prerequisites for this course -
+1. Futures Trading
+2. Options Theory
+3. Technical Analysis
+The above mentioned topics are absolutely essential before learning about currencies. I’d suggest you brush up these topics before proceeding.
+Let’s now begin this module by discussing few basics about currencies.
+
+## ## 1.2 – Currency (in)equality
+
+Before we get started on currencies, let me share with you an interesting conversation I had with my 6-year-old daughter. Perhaps this could set a good starting point for our discussion on currencies.
+I had recently been to Austria with my family on vacation. As you can imagine, the country is extremely beautiful. It was my daughter’s first visit to Europe and she was in complete awe. Needless to say, she was attracted to all the small little stores selling pretty little things. On one of the days while we were there, she forcibly took me to this toy store she spotted off the street, and I knew I was in for trouble. After spending about 5-10 minutes scanning through the shop, she finally picked up a colourful wooden caterpillar, and she wanted me to buy her that. It looked really nice, and I was willing to buy her that, until I saw the price! The wooden caterpillar had a 25 Euro price tag. I thought I’d negotiate with her and buy her something else.
+
+I tried telling her that it was 25 Euros, and 25 Euros was quite steep especially for a tiny wooden caterpillar! She obviously didn’t understand my point, and refused to bulge from her stance. In fact, she said ‘it’s just 25 Euros’, and I realised that she equated 25 Euros to 25 Rupees, completely oblivious to the fact that she needs to multiply each Euro with 78 to get the exact Rupee equivalent.
+However, this got me thinking – why isn’t one Euro or for that matter one Dollar equal to one Rupee? More generally why isn’t one unit of currency belonging to country A equivalent to another unit of currency belonging to country B? I understand this may sound very basic and some of you may already know the answer, but I think it is very important to discuss this and understand why the inequality between currencies exists. After all, it is this inequality which allows us to trade the currency pairs.
+To understand this, we need to brush up a bit on the history of currencies and how currency trading evolved. Don’t worry, I won’t get into history lessons here; will restrict this to a quick recap. For the sake of simplicity, let me break this down into different stages for you based on my own understanding of the evolution of currency.
+
+## Stage 1 – The Barter era
+
+Before the advent of currencies, transactions occurred through something called the ‘barter system’. Barter system is a ‘method of exchange’ which has existed for many centuries. In a typical barter, people exchange goods for other goods (or services). A classic example would be – say a farmer has harvested cotton, he could exchange (or barter) cotton with another farmer giving him wheat. Similarly, a farmer who has
+
+oranges could exchange the oranges he has harvested with someone who agrees to wash his cows and sheep.
+The problem with the barter system was the scale and divisibility of the system. For example, assume a farmer had 5 bales of cotton and he wants to barter cotton with someone selling cattle, assuming 2 bales for 1 cow, after the barter he’d be left with 2 cows and a bale of cotton. He would certainly not get half a cow for 1 bale of cotton. This caused a divisibility issue within the system.
+The scalability was also an issue with the barter system – it required our farmer to travel from one part of the country (with all his produce) to another part of the country to barter for goods of his choice.
+Both these issues were eventually overcome with an improved system – Goods for metal.
+
+## ## Stage 2 – Goods for Metal era
+
+The problems that plagued the barter system eventually paved way to the next transaction methodology. People tried to invent a common denominator for the ‘exchange’. The common denominator ranged from food grains to metals. But eventually metals thrived for obvious reasons. Metal was divisible, easily movable, and metal had no issue with shelf life. Further, of all the metals, Gold and Silver were the most popular; therefore, eventually these metals became the standard for transactions. The direct exchange between gold/silver and goods lasted for many centuries; however, things started to change when people deposited gold and silver
+
+coins in safe havens and issued a ‘paper’ against the value of gold. This paper derived its value based on the gold/silver coins deposited in safe haven.
+With time, safe havens evolved to banks and the paper transformed to different currencies. Perhaps this was the start of the book entry of the currency system.
+
+## ### Stage 3 – The Gold Standard era
+
+Over time, as domestic trade flourished, trading across borders also flourished. Economic sense prevailed and merchants realized producing everything locally did not make sense. Merchants started exploring cross border trade – simple import and export of goods thrived. This also meant merchants transacting across border also required to pay for it in a currency that was acceptable across borders. Banking systems also evolved, and somewhere around the late 19<sup>th</sup> Century exchanging goods for Gold (not silver) became the norm. Valuing the local currency against the value of gold was called the ‘Gold Standard’.
+As things progressed, geo political situation changed (world wars, civil wars, cold wars etc.) and so did the economic situation across the world. When it came to cross border transactions, there was an urgent need for merchants to trust one currency and value their own currency against that currency. This is when ‘Bretton Woods System’ came to the picture. You can read more on the <u>**Bretton Woods System**</u>.
+However, here is a simplified version of the Bretton Woods System (BWS). The BWS was a way of defining the monetary relationship between countries, where the currencies were pegged to USD at a fixed rate while the value of the USD itself was marked against the value of Gold. Countries accepted this system with a room for 1% variation either
+
+side (against the pegged value). Needless to say, with BWS in place the USD became the currency the world transacted in, as USD was backed by Gold!
+Developed countries slowly withdrew from the BWS system and eventually BWS became history. Countries adopted a more market driven approach, where the market decided the value of one currency against the other. The market drives the value of currencies based on the political and economic landscape of a country versus the other.
+This brings us to where we are now.
+
+## ## 1.3 – International Currency market (Forex)
+
+Internationally, the notional currency trading volume is massive and needs a moment to digest the figure. As per the April 2013 survey conducted by ‘Bank of International Settlement’ (BIS) the size of International Markets stands at §5.4 Trillion! Here is the <u>link</u> for the detailed report. My guess is we could be close to §5.8 - 6 Trillion as of April 2016. If you can imagine, this is roughly 20% higher than the entire Indian annual GDP that gets traded on a daily basis!
+Probably what really contributes to such massive trading is the fact that currency markets chase the Sun. Currencies are traded across all the major markets, and information flows seamlessly.
+To understand what I mean, keep the Indian markets as reference and think about it – before Indian markets are open, the Australian, Japanese, Hong Kong, and Singapore markets are open. In fact, we get some overlap with these markets. While the Southeast market closes, Indian markets would have just warmed up with Middle Eastern markets opening up. This leads to the European markets opening up – London, Frankfurt, and Paris being the financial nerve center of the Europe. In fact, Indian markets are situated in a sweet spot as our time zone overlaps with major Southeast Asian markets and the European markets. Finally, the US markets open, followed by the Japanese markets and the cycle continues 24 hours a day, 6 days a week!
+Having said that, the most active time for currencies is when the US, UK, Japanese, and Australian markets are open. This is when the order flow gets brim-full.
+This leads us to an interesting question - who are these people trading currencies and why are the notional values so crazy? More importantly how are currencies traded?
+
+Unlike Equity markets, the participation in Forex is not just restricted to investors and traders. The participants in the Foreign Exchange (Forex) markets are many - Central Banks, Corporate, Banks, Travelers, and of course traders. Each of these participants have their own agenda while participating in the Forex markets. For example, the corporate maybe buying/selling USD to hedge their order book, and a traveller maybe buying USD for his travel expense. While the trader maybe just speculating on the movement of the currency. Obviously since participation comes in from many quarters, the volumes are driven up. More so, Forex trading is highly leveraged, hence the notional value appears large.
+There is no centralized International exchange where the Forex transactions take place. Transactions occur at different financial institutions (like NSE in India) and information flows from one platform to another making it borderless.
+
+## ## 1.4 – Currency Pairs and quotes
+
+The standard practice while trading currencies is to trade the currency as a ‘pair’. The value of the pair keeps fluctuating as the trades flow through. An example of the pair could be USD INR or GBP INR. The currency pair has a standard format, as shown below
+
+## ### Base Currency / Quotation Currency = value
+
+There are three parts here, lets figure out each one of them -
+### Base Currency – Biname Currency is always fixed to 1 unit of a currency (like 1 US Dollar, 1 Indian Rupee, 1 Euro etc.)
+### Quotation Currency -Refers to another currency which equates to the base currency (obviously it can be any currency apart from the base currency)
+#### Value – Indicates the value of the Quotation Currency against the Base Currency.
+Confusing? Let take an example to make it clearer. Assume `USD/INR = 67`.
+The Base Currency here is USD, and as I mentioned earlier the Base Currency is always fixed to 1 unit, hence this is fixed to 1 US Dollar.
+Quotation Currency is in Indian Rupees (INR)
+Value is 67, which means for 1 unit of Base Currency i.e. 1 USD the equivalent quotation currency is 67. In simpler terms §1 = Rs.67.
+
+The most active currency pairs that get traded across the world and its current value as on 3<sup>rd</sup> June 3, 2016 are as follows -
+Now here is the big question - what makes the pairs move? Why do they move? Are there events that influence the pairs?
+We will explore this in the next chapter.
+
+## ## Key takeaways from this chapter
+
+1. The Gold Standard system of evaluating currencies existed for a long time, but eventually got phased out
+2. The currency inequality between currencies exist because of political and economic differences between two countries
+3. By volumes, the currency markets are easily one of the largest
+4. The currency markets are open 24 hours, 6 days a week
+5. Currency is traded as pairs
+6. Currency Pairs have a standard format to include Base Currency and Quotation Currency
+7. The Base Currency is always fixed to 1 unit
+
+| **SL No** | **Base Currency** | **Quotation Currency** | **Pair** | **Pair Value** |
+|---|---|---|---|---|
+| 1 | Euro | US Dollar | EUR/USD | 1.11 |
+| 2 | US Dollar | Japanese Yen | USD/JPY | 108.94 |
+| 3 | Great Britain Pound | US Dollar | GBP/USD | 1.44 |
+| 4 | Australian Dollar | US Dollar | AUD/USD | 0.72 |
+| 5 | UD Dollar | Canadian Dollar | USD/CAD | 1.31 |
+| 6 | US Dollar | Swiss Franc | USD/CHF | 0.99 |
+
+# Reference Rates & Impact of events
+
+## ### 2.1 - Dual View
+
+Think about a stock, Infosys for example, when you buy or sell Infosys - your view on the stock is straightforward - you are either bullish or bearish on Infosys therefore you buy or sell Infosys. Now think about a currency pair - say USD INR, when you buy or sell USD INR, whether you know or not, you have a dual view on the pair. For instance, when you buy USD INR; it implies you are bullish on the US Dollar and bearish on the Indian currency.
+Why is it this way you may ask?
+Well, the value of a currency is always quoted against another. Recall from the previous chapter - the currency pair is quoted as -
+**Base Currency / Quotation Currency = Value**
+In other words, this format tells us, how many units of quotation currency one can buy for 1 unit of base currency .
+If you buy a currency pair, clearly it implies that you expect the value of the pair to go up. Consider this example - USD INR = 65, one would buy the pair, hoping for the price of the pair to hit 68.
+Now if the price of the pair is expected to increase, then it implies that going forward 1 unit of base currency can buy more units of quotation currency i.e. 1 USD to buy more INR.
+
+In other words, if the value of the pair goes up then the power of the Base currency goes up while at the same time the quotation currency weakens. This translates to you being bullish on the Base currency and bearish on the quotation currency at the same time.
+Similarly, if you sell the USD INR pair, it implies that you anticipate the Base Currency to buy lesser amount of quotation currency. This translates to you being bearish on base currency and bullish on the quotation currency.
+Given this, "strengthening/weakening of a currency" refers to the following situations-
+1. Base currency strengthens when it can **buy more units of quotation currency**. For example, USD INR moves from 67 to 68 it means the base currency (USD) strengths and the quotation currency (INR) weakens.
+2. Quotation currency strengths when the base currency **buys lesser units of quotation currency.** For example, USD INR moves from 66 to 65 it means the base currency (USD) weakens and the quotation currency (INR) strengthens. Note that strengthening and weakening of a currency is equivalent to a currency appreciating and depreciating. These terminologies are often used interchangeably.
+Before we proceed, here is something you need to know. Just like a stock, the currency (and the currency pair) has a ‘two-way quote’. The two-way quote enables one to identify the rate at which one can buy and sell the currency (and currency pair).
+Don’t get thinking on the ‘two-way quote’, it simply refers to ‘Bid and Ask’ rates J, but we do need to touch upon this as its vital to know how the two-way quote works.
+
+This is a snap shot of the currency spot rates, as quoted on a Forex trading site. For the sake of this discussion, I’ve highlighted the two-way quote for EUR USD and GBP USD. The quote gives you the rate at which you can buy and sell the currency pair.
+For example, if you want to buy the EUR/USD - you will have to buy the pair at the ‘Ask’ price i.e. 1.1270. When you buy the pair, technically you are long EUR and short USD. Likewise, if you want to sell the EUR/USD, then you would do so at 1.1269 (Bid price), and here you would be short EUR and long USD (remember the dual view concept).
+The pairs are sometimes quoted in a short form, which is actually quite a popular way to quote currencies internationally. The shortened two-way quote would be something like this for the EUR/USD pair –
+
+## EUR/USD - 1.1269/70.
+
+If you notice in the shortened version, the ‘bid’ price is stated in full, but only the last two digits of ‘ask’ is stated.
+Further, in the Forex lingo, digits are referred to as ‘**pips**’. Therefore, if the EURUSD moves from 1.1270 to 1.1272, then it means that the pair has moved 2 pips.
+
+| **Major Rates** | **Bid** | **Ask** | **Cross Rates*** | **Bid** | **Ask** |
+|---|---|---|---|---|---|
+| AUD/USD | 0.7402 | 0.7405 | USD/AUD | 1.3504 | 1.3510 |
+| USD/CAD | 1.2771 | 1.2775 | USD/CAD | 1.2771 | 1.2775 |
+| USD/CHF | 0.9659 | 0.9660 | USD/CHF | 0.9659 | 0.9660 |
+| USD/DKK | 6.5967 | 6.5990 | USD/DKK | 6.5967 | 6.5990 |
+| EUR/USD | 1.1269 | 1.1270 | USD/EUR | 0.8873 | 0.8874 |
+| GBP/USD | 1.4176 | 1.4180 | USD/GBP | 0.7052 | 0.7054 |
+| USD/HKD | 7.7626 | 7.7631 | USD/HKD | 7.7626 | 7.7631 |
+| USD/IPY | 106.0400 | 106.0700 | USD/PIY | 106.0400 | 106.0700 |
+| USD/NOK | 8.2720 | 8.2746 | USD/NOK | 8.2720 | 8.2746 |
+| NZD/USD | 0.7072 | 0.7075 | USD/NZD | 1.4134 | 1.4140 |
+| USD/SEK | 8.2777 | 8.2798 | USD/SEK | 8.2777 | 8.2798 |
+| USD/SGD | 1.3560 | 1.3562 | USD/SGD | 1.3560 | 1.3562 |
+| USD/ZAR | 15.1929 | 15.2011 | USD/ZAR | 15.1929 | 15.2011 |
+
+## ## 2.2 – Rate fixing and conversion path
+
+As of today, the USD/INR rate stands at 67.0737. This rate is fixed by the RBI on a daily basis, and is called RBI’s ‘**Reference Rate**’; in fact, RBI publishes these rates on a daily basis on their website. The Reference rate acts as crucial input for the currency futures trading as all settlements are based on this Reference rate.
+Have a look at this –
+The above is a snapshot from the RBI’s site showing the reference rate for 14th June 2016. Do note, these are **spot rates,** and not future rates. Future rates are as seen on NSE’s website.
+Anyway, the obvious question is – how does the RBI arrive at this rate?
+Well, nothing hi tech here, RBI follows the age-old method of polling to arrive at the spot rate! <u>Click here</u> to see the RBI circular that explains the rate fixing procedure, but
+
+|  | **Home** | **About Us** | **Notifications** | **Pre** |
+|---|---|---|---|---|
+
+| **Policy Rates** |  |
+|---|---|
+| Reserve Ratios |  |
+| Exchange Rates |  |
+
+| RBI Reference Rate |  |
+|---|---|
+| INR / 1 USD | : 67.0737 |
+| INR / 1 Euro | : 75.5116 |
+| INR / 100 Jap. YEN | : 63.3200 |
+
+Reserve Bank of India India's Central Bank
+CURRENT RATES
+
+if you are in no mood to read the circular, you could read the following points that
+summarize the procedure.
+1. RBI has identified a list of banks based on their market share in the foreign exchange
+market. RBI calls them the ‘contributing banks’
+2. Every day between 11:30AM and 12:30PM RBI calls a set of banks (randomly selected) listed under the contributing banks and ask them to give a two-way quote on USD INR
+3. RBI collates these rates and averages out the rate based on the bid and ask
+4. The average rate is set as the USD INR rate for the day
+5. The same process is repeated every day except for weekends and bank holidays It’s as simple as that!
+The procedure is quite simple; however, RBI polls only for the USD INR rates. For the other major rates i.e. EUR INR, GBP INR, JPY INR RBI adopts a technique called ‘Crossing’ also referred to as the cross rate mechanism.
+While crossing, the direct rate of one currency is not available with respect to another. For example, the direct rate of Euro with respect to INR is not readily available; one needs to cross these rates with a common denominator to arrive at the rates.
+Let me take the example of deriving the EUR INR rate by crossing, keeping USD as the common denominator, hopefully this will give you a better clarity on the crossing technique.
+Let us begin with getting the spot rate for USD INR, as we can see from snap shot above, the USD INR spot is –
+USD INR – 67.0737
+This is the spot rate; the two-way quote for this would be something like this –
+USD INR – 67.0730 / 67.0740
+This means if I have to buy 1 USD, I need to pay INR 67.0740 and if I have to sell 1 USD, I’d receive INR 67.0730.
+
+Let’s keep this information aside. We now focus on EUR USD spot rates from the international markets.
+The two-way quote from Bloomberg suggests -
+EUR USD - 1.1134/40
+This means I need USD 1.1140 (Ask price) to buy 1 Euro. In other words, the cost of 1 Euro in terms of the US Dollar is 1.1140. Hence if I convert the price of 1.1140 USD to INR, then I will have enough INR to buy 1 Euro and by doing so, I will also get the EUR/INR rate.
+Now going back to the USD INR rate -
+1 USD = Rs.67.0740
+1.1140 USD = How many Rupees?
+= 67.0740 \* 1.1140
+= 74.72044
+Hence to buy 1 Euro I need 74.72400 INR, or **EUR INR = 74.72400**
+Notice how the USD acts as a pivot in the crossing technique.
+Now here is a simple task for you - using the crossing technique, we have calculated the ASK price of the EUR INR pair, can you extend this logic to calculate the Bid price for the EUR INR pair? Feel free to post your answers in the comments section below.
+If you think about this, it’s now clear that the reference rates and the cross rates change every day based the sentiments of the contributing banks. This leads us to a bigger question - what influences the sentiment of the contributing banks?
+The answer is quite simple - domestic and international events.
+
+## ## 2.3 - Events that matter
+
+Think about an event that can potentially change the sentiment on a stock. Quarterly result of company is one such event. Estimating the change in sentiment based on this
+
+<tbc>event is quite straightforward. If the quarterly result is good, the sentiment is positive; therefore, the stock price is expected to go up. Alternatively, if the quarterly result is not great, sentiment is hurt and therefore the stock price is expected to go down. The point here is, there is some sort of linearity between the event and the expected outcome.
+However, when it comes to currency pairs, there is no such linearity, which makes it a herculean task to assess the impact of events, a.k.a. fundamentals on currencies. The complexity mainly stems from the fact that currencies are quoted as pairs. While some factors lead to strengthening of a pair, an event could occur at the exact same time that weakens the pair.
+Let me give you an example to illustrate this – imagine two economic events running in parallel.
+**Event 1 -** India receives a continuous inflows of Foreign Direct Investments (FDI) geared towards long term investments, clearly this is a big positive for the economy and therefore it tends to strengthen the INR.
+**Event 2 -** There is an uptick in the US economy (or a fear of a crash in commodities)leading to an appreciation in the US Dollar.
+Given these two events occur in parallel – which direction will the USD INR currency pair move? Well, the answer to this is not straightforward. Eventually the currency pair will take cues from the more dominant of the two factors and head in that direction, but until this happens the pair invariably exhibits volatile behaviour. Hence, to successfully trade currencies, it becomes extremely important to track world events and assess their impact on the currency pair in question.
+Here are few such events and data that you should track -
+`Import/Export Data –` These numbers are highly significant, especially for a country like India, whose economy is highly sensitive to trade deficits. India exports goods and services such as rice and software and imports commodities such as crude oil and bullion. In general, increase in exports tends to strength domestic currency and increase in imports tends to weaken the domestic currency. Why so you may ask?
+
+When imports are made (crude oil for example), the purchase has to be made in the International market which requires one to pay in USD. Therefore, one has to sell INR and buy USD to facilitate this purchase, which in turn causes a demand for USD and hence USD strengths.
+We can extend the same logic to exports. When we export goods, we receive USD; we sell the USD received and convert to INR. This causes the INR to strength.
+**The Trade Deficit -** the excess of imports over exports is a key factor to track as it influences the direction in which the currency trades. In general, narrowing the trade deficit is a positive for the domestic currency. The trade deficit is also referred to as the ‘Current account deficit’. I’d suggest you read this <u>newspiece</u>, just to reinforce your understanding on this topic.
+**Interest Rates –** Typically investors borrow money from countries where the interest rate is low and invest in countries where the interest rates are high and profit from the interest rate difference. This is called the ‘**carry trade’**. Clearly the country offering higher interest attracts a lot more foreign investment into the country, naturally this leads to the strengthening of the domestic currency. This clearly implies that the ‘Interest rate’ is one big number currency traders watch out for.
+The monetary policy review conducted by the central banks (RBI in India, Federal Reserves in US, and ECB in Euro region) reviews the interest rates of the country. This is the reason why there is so much attention paid for the policy review. Besides tracking the actual change in numbers in the on-going review, the market participants look for cues regarding the policy stance. The monetary stance helps the participants understand the future course of action concerning the interest rate.
+**Dovish –** Dovish is a term used to describe the central bank’s stance wherein they are likely to lower the interest rate in the future. Remember, lower interest rate weakens the domestic currency. Here is a new headline talking about the relationship between a dovish stance and the currency.
+Dollar retreats as dovish Fed holds rates
+Late sell-off leaves S&P 500 nursing loss
+
+Click here to see the article.
+Hawkish - Hawkish is a term used to describe the central bank’s stance wherein they are likely to increase the interest rate in the future. Remember, higher interest rates attract foreign investments to the country and therefore strengthens the domestic currency.
+And here is another new headline which talks about hawkish stance.
+
+## Get Ready for a Hawkish Federal Reserve Statement
+
+ The Federal Reserve is set to issue a hawkish statement, says David Nelson, chief strategist at Belpointe Asset Management.
+Inflation - Inflation, as you may know, is the rate at which the prices of basic goods and services increase over time. If inflation increases, then it means the cost of basic necessities is increasing, therefore this affects the day to day living of the common man. Given this, the central bank strives hard to keep inflation in control. The link between inflation and currency movement is a bit tricky.
+One of the direct mechanisms to curb inflation is by tweaking the interest rates. If the inflation is perceived as high, then the central bank is likely to take a hawkish stance and increase the interest rates.
+What do you think is the logic here?
+Well, easy money in the hands on consumers and corporates increases spending; when spending increase merchants smell an opportunity to make higher margins and therefore this leads to rapid increase in prices, and thus the inflation increases. When inflation increases, the central banks tend to curb the spending by cutting the access to easy money. And how do they do that? Well, they increase the interest rates!
+Therefore, when inflation is on the rise, expect the central banks to take a hawkish stance and increase the interest rates. When interest rates increase, the domestic currency strengths!
+Therefore, as I mentioned earlier, the relationship between interest rates and currencies is a little tricky. So traders eagerly track inflation data to figure out what the central banks are likely to do, and accordingly take positions on the currency pair.
+
+Remember this - if the inflation is high, expect a hawkish stance by the central government and therefore expect the domestic currency to strengthen. Likewise, if inflation is low, expect a dovish stance (as the central bankers wants to encourage spending), therefore the interest rates are likely to come down. This leads to the domestic currency weakening.
+Consumer Price Index (CPI) - The CPI is a time series data, averaged out to capture the prices of basic goods and services. Hence the CPI is a measure for inflation. A rising CPI means inflation is increasing, and vice versa. For the most accurate Indian CPI data and information check this website
+Gross Domestic Product (GDP) - The GDP of a country represents the total Rupee value (for Indian GDP of course) of all the goods and services produced in the country for a given year. As you can imagine the GDP would be a massive number and it does not make sense to repeat the GDP number while making estimates or during conversations. Therefore, one always refers to the GDP as a growth rate. For example, if the GDP of a country is 7.1%, it means that the GPD number is growing at a rate of 7.1%.
+Higher the GDP growth rate, higher is the investor confidence in that country, and therefore the stronger the countries domestic currency.
+The list of events that matter while trading currencies is virtually endless, and at some point you will realize that every piece of data you can possibly look at is interconnected with one another. Honestly, you need not know the details of each event the way an economist would. Understanding the cause and effect relationship is good enough. I’ve listed some of the key events/data points that matter while trading currencies. I guess this would serve as a good start, if nothing more.
+
+## Key takeaways form this chapter
+
+1. The base currency is said to strengthen/appreciate against the quotation currency when it can buy more units of quotation currency.
+
+2. The base currency is said to weaken/depreciate against the quotation currency when it buys lesser units of the quotation currency.
+3. When you go long on a currency pair, you are essentially going long on the base currency and short on the quotation currency.
+4. When you go short on a currency pair, you are essentially going short on the base currency and long on the quotation currency.
+5. The RBI sets the reference rate of USD INR on a daily basis by conducting a poll, the ‘contributing banks’ participate in this poll.
+6. The reference rates for other currency pairs are derived by crossing technique.
+7. Understanding events and its impact on currencies is complicated, simply because of the currency is quoted in pairs and impact on the pair could be similar.
+8. Eventually the more dominating event will set the direction for the pair.
+9. Countries with higher interest rates tend to have stringer currencies and vice versa.
+10. Lower the trade deficit of the country, stronger is the country’s currency.
+11. Higher inflation leads to strengthening of currency and vice versa.
+12. Knowing the cause and effect of events on currencies helps while trading currencies.
+
+Impact of events (Brexit) & Interest Rate <br>
+Parity
+
+## 3.1 – Brexit, the event extraordinaire!
+
+I originally planned to dedicate this entire chapter to the USD INR pair, which as you may know is the largest traded currency contract in India. But then, the BREXIT issue happened today and I can’t help writing about it as it has a huge relevance to what we just discussed in the previous chapter – events and their impact on currency pairs.
+To give you a sense of what happened, have a look at how the Great Britain Pound (GBP) reacted to the event. It was down a massive 8.64%, which you will eventually realize is a big deal in currencies.
+
+The Guardian UK, had this to say about the event –
+
+## **Brexit vote wipes $2 trillion off global stocks and knocks pound to 31-year low**
+
+Here is the <u>article.</u>
+My objective here is to simplify Brexit to the best of my knowledge and help you understand why the pound reacted the way it did. Obviously, the bigger agenda here is to help you understand the potential impact of such events on currencies. By doing so, you’ll get a grip on how to summarize global events such as Brexit and understand what kind of impact they could have on currencies.
+For the sake of simplicity and brevity, let me bullet point Brexit for you. We start with a bit of history -
+1. After the World War 2, Germany and France debated the idea of forming a union of sorts. The thought process was that if countries traded and did business together, then they are less likely to wage war against each other.
+2. This laid the foundation for forming a bigger union called the ‘European Union’ (EU) with more European countries agreeing to join the EU.
+
+|  | **Buy Qty.** | **Buy Price** | **Sell Price** | **Sell Qty.** |
+|---|---|---|---|---|
+| 5 |  | 91.4425 | 91.4600 | 9 |
+| 45 |  | 91.4400 | 91.4900 | 40 |
+| 4 |  | 91.4275 | 91.4925 | 21 |
+| 10 |  | 91.4250 | 91.4950 | 10 |
+| 13 |  | 91.4225 | 91.4975 | 2 |
+| 5,077 |  | Total Quantity |  | 6,435 |
+
+| **91.4600** |  | **Prev. Close** | **Open** | **High** | **Low** |
+|---|---|---|---|---|---|
+| -8.65 | -8.4fs | 100.1100 | 91.1000 | 93.7000 | 90.5000 |
+
+| **PDF** | ****Order Book** |
+|---|---|
+| RBI Reference Rates | 99.4721 |
+| No. of Trades | 28,142 |
+| Traded Volume (contracts) | 2,64,235 |
+| Traded Value * (laco) | 2,41,301.55 |
+| WWAP | 91.8621 |
+| Open Interest | 27,717 |
+| Change in Open Interest | -6,237 |
+| % Change in Open Interest | -18.37 |
+
+| **Buy Qty.** | **Buy Price** |
+|---|---|
+| 5 | 91.4425 |
+| 45 | 91.4400 |
+| 4 | 91.4275 |
+| 13 | 91.4250 |
+
+| **Option Type: Strike Price : Select** | **Select \ Remove: Get Data** |
+|---|---|
+|  |  |
+|  |  |
+
+3. The EU formed a single market of sorts where goods, service, and people moved easily across countries. So much so that the EU decided to have its own currency called the ‘Euro’.
+4. UK, although was a part of the EU, never accepted Euro as their currency. Note there are many other countries in the EU which still have their own currency, example – Switzerland, Chez Republic, Denmark etc.
+5. There was a growing debate in UK in the recent times on whether the UK should remain in the EU. Many of UK’s citizens believed that UK was better off outside the union as the rules laid out by the EU commission was more taxing on UK’s citizen than actually benefiting them. In simpler words – they believe they would progress faster and better economically and as a society being outside the EU.
+6. Britain option to exit from the EU was called ‘Brexit’.
+7. The UK decided to formally seek its citizens’ vote on 23rd June 2016, where in the citizen would vote for being in or leaving the EU. This is called a ‘ referendum’
+8. The outcome of the referendum was a bit of shocker with the UK actually deciding to opt out of the EU. In fact, many in the UK and the world believed that UK would vote to stay in the EU.
+The referendum’s outcome sent a shiver down the spine for traders and investors round the globe. The GBP crashed to a 31-year low, the major European indices dove close to 8-10%.
+Now why did this happen? Why did the markets fall? What is the connection between Brexit and the currency markets and the work markets?
+Now here is where I’m hoping the previous chapter comes to help us J
+Recall in the previous chapter we discussed how a strong economy (defied by inflation, interest rates, trade deficit etc.) leads to a strong currency.
+Given this, think about the UK – clearly UK is one of the strongest economies in the world and contributes significantly the EU. Now with UK opting out of the EU, things are set to change both economically and politically.
+
+While UK has a trade deficit with the rest of the world, it maintains a trade surplus with EU. This should give you a sense of how strongly the UK’s economy is coupled with EU. With UK opting out of the EU, its finances are certainly going to take a hit.
+Further the problem is with clarity. Everyone knows that the economic situation is bound to change, but to what extent is something no one really knows. How will the Bank of England react? Will they cut the rates to near zero?
+Uncertainty is one thing that the market despises, and given its nature, Brexit has many. Therefore, as a result, the markets cracked.
+You as a currency trader should be in a position to study the event and understand some basics. From my experience, sometimes the best trades are set up backed by simple common sense and basic knowledge.
+Remember if you had studied the event and arrived at a conclusion to not take on a trade, then that in itself would have been a good trade, as the rule of thumb says "when in confusion, do nothing".
+The point is - when you have events of this magnitude around the corner, it is mandatory for you to know what is happening. Taking on a trade without the perquisite knowledge is equivalent to a blind speculative bet!
+So, that’s about Brexit and how events like this can impact the currencies.
+Let us move ahead to figure out few other currency concepts.
+
+## ## 3.2 – Fairy Trade
+
+Imagine a perfect world, where in you can borrow money at a certain interest rate, invest the borrowed money at a higher rate, and earn the differential in the rates. Confusing? Let me give you an example to simplify this.
+The interest rate in the United Sates is about 0.5%, arguably one of the lowest in the world. Assume you borrow $10,000 from a bank in United Sates at 0.5%; invest this borrowed money in a country like India where the interest rate is about 6-7%.
+
+To do this, you will have to convert the borrowed money (which is in USD), to INR. At today’s conversion rate, a US dollar gets you 67 INR. Therefore $10,000 fetches Rest. 670,000/-. We invest the converted money in India at say 7%.
+At the end of the invested year, we get back 7% interest plus the initial capital. This would be –
+670000 + 670000*(7%)
+= 670000 + 46900
+= Rest. 716,900/-
+We convert this money to USD, assume the conversion rate is 67, we get back $10,700. We now have to repay the principle amount plus 0.5% in interest. This would be $10000 plus $50.
+So after repaying back $10,050 we get to retain $650, which if you realize is a risk free gain!
+If you realize, $650 is the interest rate differential times the borrowed money –
+10000*(7%-0.5%)
+10000*(6.5%)
+650
+This is a simple case of arbitrage, quite easy to implement, don’t you think so?
+Given this, imagine a situation where you could borrow large amounts of money from US and invest this large amount in India and make pot loads of money year on year right?
+Well, sorry to burst the bubble, such trades happen only in fairy tales J. In the world we live in, such easy risk free profits do not exist. Even if it did, it would vanish before even you realize.
+However, the bigger question we need to answer is – why is this ‘fairy trade’ not possible?
+
+## ## 3.3 - Forward Premia & Interest Rate parity
+
+The problem with the above trade is that there are one too many assumptions, we assumed-
+1. We could borrow unlimited amounts of money in US
+2. We could deposit unlimited amounts of money in India
+3. There is no cost of transaction, no taxes
+4. Easy movement of currency between countries
+5. Most importantly we assumed the conversion rate stayed flat at 67 after 1 year
+Given that such arbitrage cannot exist for long, the currency rate a year later should be such that it would prohibit the arbitrage to exist. In other words,
+The money we receive from India a year later = Money we repay to banks in US a year later
+From the example we discussed above, we borrowed §10,000 from US, invested the same in India and a year later we received Rest. 716,900/-.
+For the arbitrage NOT exist, at the end of 1 year, Rest. 716,900/- should be equal to ℮10,050.
+This means the conversion rate should be -
+716900/10050
+= 71.33
+This is called the ‘**Forward Premia**’ in the currency world. The approximate formula to calculate the Forward Premia is –
+F = S \* (1+ R<sub>oc</sub> \* N) / (1 + R<sub>bc</sub> \* N)
+Where,
+F = Future Rate
+S = Today’s spot rate
+N = Period in years
+
+R<sub>oc</sub> = Interest rate in quotation currency
+R<sub>bc</sub> = Interest rate in base currency
+Let’s apply this formula to check if we get the forward rate right for the above situation. Remember the spot rate is 67,
+F = 67<sup>∗</sup>(1+7%∗1) / (1+0.5%*1)
+= 71.33
+Further, note that the forward premia rate is approximately equal to the spot rate plus spot times the difference in interest rate i.e. –
+F = S<sup>∗</sup>(1+difference in interest rates)
+= 67<sup>∗</sup>(1+ 7% – 0.5%)
+= 67<sup>∗</sup>(1+6.5%)
+= 71.35
+This is called the ‘Interest rate parity’.
+Think about this - Indian Rupees is trading at 67 today compared to 71.35 in the future, therefore the Rupee is considered to be at a discount **now**. Generally speaking, the future value of any currency which has a higher interest rate is at a discount to a currency which has a lower interest rate.
+So why are we discussing all this and what is the relevance to currency trading? Well, the forward premia plays an important role in determining the futures price!
+We will discuss more on this going forward.
+
+## **Key takeaways from this chapter**
+
+1. Events like Brexit tend to have extra ordinary influence on currencies
+2. A country whose economy is expected to suffer tends to have a weaker currency
+3. Forward premia is the expected spot rate over a given period
+4. Forward premia = S <sup>∗</sup> (1+ R<sub>oc</sub> <sup>∗</sup> N) / (1 + R<sub>bc</sub> <sup>∗</sup> N)
+
+5. Interest Rate parity indicated that the forward premia is approximately equal to the spot rate plus spot times the difference in interest rate
+6. Future value of any currency which has a higher interest rate is at a discount to a currency which has a lower interest rate
+
+The USD INR Pair (Part 1)
+
+## ## 4.1 - The contract
+
+We make an extremely critical assumption at this stage - we will assume you are familiar with how **Future** and **Option contracts** work.
+Technical Analysis plays an important role in setting up short term currency trades, so we’ll assume you know **Technical Analysis** as well.
+If you are not familiar with these topics, then I’d strongly suggest you to read through these modules before proceeding further. The currency and commodities market is largely a Futures market; hence a working knowledge of these derivative instruments is the key.
+Now, assuming you understand these concepts fairly well, let us begin by slicing and dicing the USD INR futures contract. The contract specification of the USD INR futures gives us insights on the trade logistics.
+Here are the salient features of the USD INR pair -
+
+To give you a sense of how this works, let’s take an example –
+
+| Particular | Details | Remark |
+|---|---|---|
+| Lot Size | $1,000 | In equity derivatives, lot is number of shares, but here it's a dollar amount |
+| Underlying | The rate of Indian Rupee against 1 USD |  |
+| Tick Size | 0.25 Paise or in Rupee terms INR 0.0025 |  |
+| Trading Hours | Monday to Friday between 9:00 AM to 5:00 PM |  |
+| Expiry Cycle | Upto 12 month contracts | Note, equity derivatives have an expiry upto 3 months |
+| Last trading day | Contracts trades till 12:30 PM, 2 days prior to the last working day | Equity derivatives continue to trade till 3:30 PM of the expiry day |
+| Final Settlement day | Last working day of the month |  |
+| Margin | SPAN + Exposure | Usually SAPN is about 1.5%, and exposure is around 1%, hence roughly about 2.5% is the overall margin requirement |
+| Settlement Price | RBI Reference rate on the day of Final settlement | Closing price of spot |
+
+This is the 15-minute chart of the USD INR pair, as you can see the encircled candle has formed a bearish Marubuzo. One can initiate a short trade based on this, keeping the high of the Marubuzo as the stop loss.
+Note that I’m not trying to justify a trade here, my objective is to showcase how the USD INR contract works.
+The trade details are as below –
+Date: 1st July 2016
+Position – Short
+Entry – 67.6900
+SL – 67.7500
+Number of lots to short – 10
+1 lot of USD INR = $ 1000
+Contract value of 1 lot of USD INR = Lot size * price
+=1000 * 67.7000
+=67,700
+The margin required for this can be fetched from Zerodha’s margin calculator; here is the snapshot of the same.
+As you can see, the margin required to initiate a fresh position in USD INR is about Rs. 1,524/-. Therefore, on a contract size of 67700, this works out to –
+1525/67700
+= 2.251%
+
+| Last updated 01 Jul 2016 |  |  |  |  |  |  |  |  | Currency margin (PDF) |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| # | Contract | 4 | Expiry | 6 | Lot size | 7 | Price | Mr ML Margin | 8 | MIS Margin | 8 |
+| 16 | USININR |  | Jul 2016 |  | 1000 | 67.77 |  | 1524 | 762 | CALCULATE |  |
+| 17 | USININR |  | Aug 2016 |  | 1000 | 68.15 |  | 1533 | 766 | CALCULATE |  |
+
+Out of this, I’m guessing about 1.5% would be SAPN margin requirement (read as minimum margin required as per exchange) and the rest as exposure margin.
+Further, the idea is to short 10 lots, hence total margin required is -
+10 \* 1525
+= 15,250/-
+A point to note here - when trading equity futures, one has to earmark anywhere between 15% and 65% of the contract value as margins, this obviously varies from stock to stock. In contrast to equities, the margin charged in currencies is way lower. This should give you a sense of how leveraged currency trading really is.
+On the other hand, currency sticks to a tight trading range compared to equities. Hence higher leverage.
+
+## ## 4.2 – The contract logistics
+
+Notice how the currency futures are quoted - they go up to the 4<sup>th</sup> decimal digit. There is a reason for this - when it comes to currency futures, a number as small as this - 0.0025 is considered big.
+When RBI states the reference rate, they quote up to the 4<sup>th</sup> decimal. Even a minor difference at the 4<sup>th</sup>decimal can alter the foreign reserves by a large degree. In fact, it is a norm world over to quote the currency to 4<sup>th</sup> decimal - in case of USD INR this is 0.0025. This is called the tick size or in currency parlance, a ‘pip’. A pip/tick is the minimum number of points by which a currency can move.
+So when the USD INR moved from 67.9000 to 67.9025, it is said that the currency has moved up by a pip.
+How much money would you make per pip in the USD INR pair? Well, this should be easy to figure out -
+Lot Size \* pip (tick size)
+= 1000 \* 0.0025
+zerodha.com/varsity
+
+= 2.5
+This means to say, for every pip or every tick movement you make Rs.2.5/-.
+Going back to the short trade, here is how the Marubuzo panned out –
+After initiating the short, the currency pair declined 67.6000. If I choose to close this position, he is how much I would make –
+Entry = 67.6900
+CMP = 67.6000
+Total number of points = 67.6900 – 67.6000 = 0.0900
+Position - Short
+This could be a bit tricky, do pay attention. A pip as you know is the minimum number of points the currency can move. To know how many pips a currency has moved when it moved by 0.09 paise, we divide the total number of points moved by the pip size.
+Number of pips = 0.0900/0.0025
+= 36
+
+As you can see the trade managed to capture 36 pigs, let us now calculate how much money one would make –
+Lot size * number of lots * number of pips * tick size
+We know, Number of pips * tick size is as good as the total number of points caught with this trade, therefore we can restate the above formula –
+Lot Size * Number of lots * total number of points
+= 1000 * 10 * 0.0900
+= 900
+Remember this is an intraday trade. What if you were to carry this forward to expiry? Well, we can carry this forward as long as we maintain the adequate margin requirements. The July contract will stay in series 2 days prior to the last working day of the month.
+Here is the calendar –
+So 29th July happens to be the last working day of the month, hence 27th July will be the expiry of this series. In fact, you can hold the contract only till 12:30 PM on 27th July.
+Of course you can always look at the contract to see the exact date of the expiry.
+Another question at this stage – at what price will the settlement happen?
+The settlement will happen at the RBI reference rate set for 27th July, and it is important to note that the P&L will be settled in INR.
+
+|  |  |  |  |  |  |  |  |  |
+|---|---|---|---|---|---|---|---|---|
+|  |  |  |  |  |  |  |  |  |
+| Su | Mo | Tu | We | Th | Fr | Sa |  |  |
+| 26 | 27 | 28 | 29 | 30 | 1 | 2 |  |  |
+| 3 | 4 | 5 | 6 | 7 | 8 | 9 |  |  |
+| 10 | 11 | 12 | 13 | 14 | 15 | 16 |  |  |
+| 17 | 18 | 19 | 20 | 21 | 22 | 23 |  |  |
+| 24 | 25 | 26 | 27 | 28 | 29 | 30 |  |  |
+| 31 | 1 | 2 | 3 | 4 | 5 | 6 | 2:29:44 PM |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |  |
+| \multicolumn{4}{c}{ 33 July} |  |  |  | 20 11111111 |  |  |  |  |
+|  |  |  |  |  |  |  | 2 |  |
+|  |  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  | updateado |
+
+So for example if I hold this position till 12:30 PM on 27<sup>th</sup> July and let it expiry, assume the price is 67.4000, then I’d stand to make –
+= 1000 \* 0.29 \* 10
+=2900/-
+And this money will be credited to my trading account on 28<sup>th</sup> July 2016. Needless to say as long as you hold the contract, your position will be marked to market (M2M). This is similar to the way it works for equity futures.
+Hopefully this example should give you a sense of how the logistics for the currency futures work.
+Let us quickly run through the USDINR options contract.
+
+## ## 4.3 – USD INR options contract
+
+Let us have a look at how the USDINR option contract is structured. You may be interested to know that the option contract is made available only for the USD INR pair. Hopefully going forward, we could see option contracts on other currency pairs as well. While most of the parameters are similar to the future contract, there are few features specific to option contracts.
+**Option expiry style** – European
+**Premium** – Quoted in INR
+
+**Contract cycle -** While the future contracts are available for 12 months forward, the option contracts are available just 3 months forward. This is similar to equity derivatives. So, since we are in July, contracts are available for July, August, and September.
+**Strikes available -** 12 In the Money, 12 Out of the Money, and 1 Near the money option. So this is roughly 25 strikes available for you to pick and choose from. Of course, more options are added based on how the market behaves. Strikes are available at every 0.25 paisa intervals.
+**Settlement -** Settled in INR based on the settlement price (RBI reference rate on expiry date).
+Let’s have a look at the USD INR option contract and figure out the logistics. Have a look at the following image -
+From the option quote, we know the following -
+
+| **Print** |  |
+|---|---|
+| **RBI Reference Rates** | **67.1848** |
+| No. of Trades | 247 |
+| Traded Volume (contracts) | 5,562 |
+| Traded Value - Premium (lacs) | 38.71 |
+| Traded Value * (lacs) | 3,765.25 |
+| VWAP | 0.6960 |
+| Open Interest | 31,697 |
+| Change in Open Interest | 1,384 |
+| % Change In Open Interest | 4.57 |
+
+| **Buy Qty.** | **Buy Price** | **Sell Price** |  | **Sell Qty.** |
+|---|---|---|---|---|
+| 82 | 0.7200 | 0.7325 |  | 104 |
+| 20 | 0.7150 | 0.7350 |  | 71 |
+| 10 | 0.7125 | 0.7375 |  | 47 |
+| 100 | 0.7075 | 0.7400 |  | 99 |
+| 100 | 0.7050 | 0.7425 |  | 50 |
+| 626 | Total Quantity |  |  | 483 |
+
+## Option type – Call option
+
+Strike – 67.0000
+Spot price (see RBI reference rate) – 67.1848
+Expiry Date - 27<sup>th</sup> July 2016
+Position – Long
+Premium - 0.7400 (quoted in INR)
+We know the lot size is $1000, although the lot size has not been mentioned in the quote above. Usually this information is made available in the quote for equity derivatives. So if you are seeing this for the first time, just be aware that the lot size is $1000.
+Now, if you were to buy this option, what would be the premium outlay? Well, this is fairly easy to calculate -
+Premium to be paid = lot size * premium
+= 1000 * 0.7400
+= 740
+The option contract works similar to the equity derivative contracts. Here is an another snapshot I captured -
+
+As you can see, the premium has shot up, and I can choose to close my trade right away. If I did, here is how much I would make –
+= 1000 * 0.7750
+=775
+This translated to a profit of 775 – 740 = 35 per lot.
+What if you were to sell/write this option instead? Well, you know that option selling requires you to deposit margins. You can use Zerodha’s F&O Margin calculator to get an estimate on the margin required.
+Have a look at the snapshot below, I’ve used the calculator to identify the margin required to write (short) this option –
+
+|  | **Order Book** |  | **Intra-day** |  |
+|---|---|---|---|---|
+| Buy Qty. | Buy Price |  | Sell Price | Sell Qty. |
+| 75 | 0.7725 |  | 0.7800 | 53 |
+| 48 | 0.7700 |  | 0.7825 | 5 |
+| 94 | 0.7675 |  | 0.7850 | 30 |
+| 25 | 0.7650 |  | 0.7875 | 25 |
+| 59 | 0.7625 |  | 0.7900 | 2 |
+| 813. | Total Quantity |  |  | 179 |
+
+| **Add | or (0000)** |  |
+|---|---|
+| **ITSA** |  |
+
+|  | **Print** |  |  |  |
+|---|---|---|---|---|
+| -RBI Reference Rates | 67.4028 |  |  |  |
+| No. of Trades | 501 |  |  |  |
+| Traded Volume (contracts) | 10,927 |  |  |  |
+| Traded Value - Premium (lacs) | 78.66 |  |  |  |
+| Traded Value * (lacs) | 7,383.00 |  |  |  |
+| VWAP | 0.7216 |  |  |  |
+| Open Interest | 31,814 |  |  |  |
+| Change in OpenInterest | 1,501 |  |  |  |
+| % Change in Open Interest | 4.95 |  |  |  |
+
+| **Prelim Date :** |  |  |  |  |  |  |  | **Option Type** | **Stokes Price** |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **0.77500** |  | **prev. Close 0.6400** |  |  |  | **Open 0.6850** | **High 0.7750** | **Low 0.6475** |  |  |  |
+| D.14 21.09% |  |  |  |  |  |  |  |  |  |  |  |
+
+Note: " In case of Option Contracts "Traded Value" represents "Notional Turnover"
+
+As you can see, the margin required is Rs. 2,390/-.
+I hope this chapter has given you a basic sense of how the USD INR contracts are designed. In the next chapter, we will try and discuss some quantitative aspects of the USD INR pair, and perhaps look at the contract specification of other currency pairs.
+
+## **Key takeaways from this chapter**
+
+1. The contract specification specs out the logistics of the USD INR derivative.
+2. Lot size is fixed to §1,000 but this can be changed by the exchange anytime.
+3. Expiry of the USD INR contract is 2 days prior to the last working day of the month. The contract can be held/traded till 12:30 PM.
+4. Margins applicable = SPAN + Exposure, usually the margins add up to 2.25 – 2.5%.
+5. Currency pairs are quoted up to the 4<sup>th</sup> decimal place.
+6. A pip is the minimum price moment allowed in a currency.
+7. Currency options are European in nature.
+8. The premium quoted in currency options is in INR.
+9. Strikes are available at every 25 paisa price difference.
+10. Margins are blocked when you intend to write currency options.
+
+| **Exchange** | **Contract** |  | **Product** |  | **Strike** | **Qy** | **Initial margin** | **Exposure** | **Total** |
+|---|---|---|---|---|---|---|---|---|---|
+| CDS | USDINIRH6jUL |  | Options |  | 67 CE | 1 S | 1,378 | 1,012 | 2,390 |
+|  |  |  | Total |  |  |  |  |  | 2,390 |
+
+Total
+
+The USD INR Pair (Part 2)
+
+## ### 5.1 – Futures Calendar spread
+
+All else equal, the futures contract is always supposed to trade at a premium to the spot. This, as we know, can be attributed to the interest rate factor (cost of carry) in the Futures pricing formula. We have discussed this earlier in the **Futures module.** Any variation in this equation leads to an arbitrage opportunity.
+For a quick low level recap on that, consider this scenario where there is arbitrage opportunity between Spot and Futures –
+**Futures trade at a lower price** – Assume the spot price is at 100, and the fair value of its future is at 105. Fair value of the future can be calculated using the futures pricing formula. The ‘no arbitrage spread’ is the difference between spot and Future’s fair value i.e. 105 – 100 = 5
+Given this, for whatever reasons (read as market mispricing) assume the future is trading at 98, this leads to a spread of 7 (105-98) between the spot and future, which can be captured.
+
+All one has to do is buy the future at 98, and simultaneously sell the spot at 100. We know upon expiry, the futures and the spot will converge and therefore the spread gets captured.
+If you are unable to understand the above clearly, I’d encourage you to read the chapter from the Futures module (link posted above).
+Likewise, if the futures trade at a higher price (over and above its fair value) then one can capture the spread by selling the futures and buying the spot.
+We have learnt this before and this is quite straight forward. However, when it comes to the USDINR contract, for practical reasons such arbitrage trades involving spot and futures cannot be executed. This is because the USDINR spot market is not really accessible to the retail.
+So how does one trade the spreads in the currency segment? Well, this is fairly easy – as opposed to spot-future spread, one has to identify the spread between two different future contracts expiring over two different dates. This is also known as the ‘Calendar Spread’.
+In a calendar spread, you decide whether the spread between two futures contract is considered normal or otherwise. All else equal, the long dated futures contract will always trade at a premium over the ‘short term’ dated futures contract. For example, August month futures contract is expected to trade at a premium when compared to July month. Therefore, a certain amount of spread between these two contracts is deemed ‘normal’. However, there could be situations where the spread goes beyond normal (either higher or lower) and this is when opportunities arises.
+As of today the USD INR July Futures is trading at 67.3075 and the August contract is trading at 67.6900.
+The spread is calculated as the difference between the two futures contract –
+\(	ext{ }67.6900	ext{-}67.3075\)
+= 0.3825
+
+Now assume, for whatever reason you think this spread of 0.3825 high, and it should ideally be 0.2000 as opposed to 0.3825. This means you have an arbitrage opportunity here, and you stand to make -
+0.3825 – 0.2000
+= 0.1825
+To capture the spread, you are required to buy the July Futures and simultaneously sell the Aug futures -
+Long July Futures at 67.3075
+Short August Futures at 67.6900
+When you set up a trade wherein you are long current expiry and short a further term expiry, it is also called a "Future Bull Spread". Likewise, a **'Futures Bear spread'** is when you are required to short the current month expiry and go long on the further month expiry.
+Anyway, once you set up the ‘Future Bull Spread’, you will have to monitor the trade and close the position when the spread converges to 0.2000 or lower. You will profit when one of the following things happen -
+1. When the July (long) leg rises and Aug (short) leg falls
+2. When the long leg rises and the short leg remains unchanged
+3. When the long leg rises and short leg rises, albeit at a lower rate
+4. When the short leg falls faster than the long leg
+5. When the long leg remains unchanged and short leg falls
+Will the spread converge? If yes, then when will it converge? Why should it converge? Will one of the above situations really pan out? Well, the answer to this really depends on how well you know the spread, and for you to know the spread really well, you need to back test it. Techniques of back testing are perhaps a topic for another day; however, I**'d like to show you how easy it is to buy sell the spread from your trading terminal.
+
+## ## 5.2 – Executing the spread
+
+How would it be if you could directly buy or sell the spread? For example, in the above case we concluded 0.3825 is an overpriced spread, to capture this spread you execute two orders i.e. buy July Futures and sell August futures.
+Executing these trades has some inefficiency mainly in terms of execution risk - by the time you buy/sell both the contracts the prices could move and thereby the spread may no longer look attractive.
+Given this, it would be really convenient to buy the spreads directly and not really deal with two different contracts. If you are a Zerodha customer, you have access to NEST trader, from which you can trade the spread directly. Of course, going forward this will also be available in both Pi and Kite.
+Here are a series of snapshots which will help you trade the spreads directly.
+Look at the part highlighted in red, as you may have realized, this snapshot is from the market watch. Starting from the left -
+1. We select ‘Spread’ from the dropdown which specifies that we are looking at spread contracts.
+2. After selecting spreads, we choose CDS from the dropdown to indicate currency derivatives as the segment.
+3. FUTCUR indicates that within CDS spreads, we are interested in Future contracts.
+4. USDINR indicates that we are interested in the USDINR contracts.
+
+| **SPREAD** | **CDS** |  | **FlutCUR** |  | **USDINR** |  | **kx** | **-0.0100** | **100** | **100** |  | **USDINR 16.3. 1** |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Trading S | % Change |  | LTP | Bid Rate<g></g> | Ask Rate | Total Bid ... | Total As<g></g> |  |  |  |  | High | Low | Prev Close |
+|  |  |  |  |  |  |  |  |  |  |  | 273WL2626CT |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  | 273GL23285EP |  |  |  |
+|  | 7800 |  |  |  |  |  |  |  |  |  | 273GL29025EP |  |  |  |
+|  | 741 |  |  |  |  |  |  |  |  |  | 290UG260CT |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  | 294UG2840V |  |  |  |
+|  | 1056 |  |  |  |  |  |  |  |  |  | 294UG28269 |  |  |  |
+|  | 7914 |  |  |  |  |  |  |  |  |  | 296UG24FEB |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  | 296P360CT |  |  |  |
+|  | 10456 |  |  |  |  |  |  |  |  |  | 285EP28880V |  |  |  |
+|  | 7311 |  |  |  |  |  |  |  |  |  | 285EP2826EC |  |  |  |
+|  | 79156 |  |  |  |  |  |  |  |  |  | 285EP29446 |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  | -36OCT238NOV |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  |  | 26OCT2626EC |  |  |
+|  | 7503 |  |  |  |  |  |  |  |  |  | 288NOV2826EC |  |  |  |
+|  |  |  |  |  |  |  |  |  |  |  | -28NOV23840V |  |  |  |
+|  | 2862 |  |  |  |  |  |  |  |  |  | 280EC23.3.3 |  |  |  |
+
+5. The full view of the dropdown menu is visible here, as you can see there are many different spreads available. However, we are only interested in the July-August spread, which is what we have selected.
+Once we configure the above market watch, we submit this to load the spread, here is how it looks like –
+I’ve highlighted the spread’s last traded price. As you can see, this particular spread instrument just denotes the spread between July and August contract.
+Note – the spread should be trading at 0.3825 and not really 0.3700 right? Why do you think there is a difference in price?
+I’ll try and explain this from as per my own understanding, I could be wrong; therefore, comments are more than welcome! Also, we are digressing a bit here, so try not to lose focus on the main topic i.e. how to trade the spreads.
+Have a look at the snapshot below –
+The market watch has July, August and the July-August spread contract loaded.
+Forget about the spread contract for now, assume you want to set up a Future Bull Spread (buy July, sell Aug) contract, then you essentially –
+Buy July contract at the Ask Rate – 67.3100
+Sell Aug contract at the Bid Rate – 67.6775
+$pread = 67.6775 – 67.3100 = 0.3675
+Now, if you were to set up a Future Bear Spread, then you essentially –
+Buy August contract at Ask Rate – 67.6850
+
+| **SPREAD** | **# CDS** | **# FUTOLR** | **USDINR.** | **XX** | **-** | **-0.000** | **=** | **273.8.29AUG** | **t 主** | **USDINR163A.1** |  |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Trading Symbol | % Change | Se ... | LTP | Bid Rate | Ask Rate | Total Bid ... | Total Ask ... | Open | High | Low | hexpe! Close. |  |  |
+| USDINR16/UL16AUGFUT | 0.00 |  | 0.3700 | 0.3675 | 0.3700 | 9400 | 14913 | 0.3700 | 0.3700 | 0.3700 | 0.3700 | 0.0000 |  |
+
+| **Normal** | **# CDS** | **# FUTOLR | **USDINR.** | **XX** | **-** | **-0.000** | **=** | **Z9A2016** | **t 主** | **USDINR164UG** |  |  |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Trading Symbol** | **% Change** | **Se ...** | **LTP** | **Bid Rate** | **Ask Rate** | **Total Bid ...** | **Total Ask ...** | **Open** | **High** | **Low** | **Preve!Close** |  |  |  |
+| USDINR16AUGFUT | 0.00 |  | 67.6900 | 67.6775 | 67.6858 | 16574 | 16758 | 67.6000 | 67.7000 | 67.5900 | 67.6900 |  |  |  |
+| USDINR16/ULFUT | -0.02 |  | 67.3075 | 67.3075 | 67.3100 | 59765 | 45379 | 67.2500 | 67.3275 | 67.2100 | 67.3225 |  |  |  |
+| USDINR16/ULI6AUGFUT | 0.00 |  | 0.3700 | 0.3675 | 0.3700 | 9400 | 14913 | 0.3700 | 0.3700 | 0.3700 | 0.3700 | 0.0000 |  |  |
+
+As you can see, there are two spreads possible based on what you intend to do i.e. future bull/bear spread.
+Now the question is – which price should the spread reflect? Would it be that of the Future Bull Spread or the Future Bear spread?
+My guess is that the spread trades close to the average of the two spreads. In this case average is 0.3725, and the actual market spread is 0.3700. Why 0.3700 and not really 0.3725? I’d attribute this to one of the two things – the latest quote has not been captured by the terminal, or lack of liquidity.
+A different explanation here could be that the spread itself is mispriced!
+Anyway, back to the main topic i.e. buying/selling the spread. Once the spread instrument is loaded, all you need to do is select the instrument from your market watch and press F1 or F2 for buying and selling respectively.
+This is what you see upon invoking the buy order window -
+The window is pre-populated with the spread details; you may just want to edit the quantity bit to suit your lot size requirement. Press submit to place the order.
+As simple as that!
+
+## 5.3 – USD INR Stats
+
+| **Trading Symbol** |  | **% Change Se.** | **LTP Bid Rate** | **Ac** | **Rate** | **Total Bid** | **Total Ace** | **Open** | **High** | **Low** | **Prer Close** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| USDINR16I1UBFUT | -0 00 | 67.6875 | 67.6825 | 67.6875 | 17090 | 16413 | 67.6000 | 67.7000 | 67.5900 | 67.6900 |  |
+| USDINR16I1UFUT | -0.02 | 67.3100 | 67.3050 | 67.3100 | 59910 | 45289 | 67.2500 | 67.3275 | 67.2100 | 67.3225 |  |
+| USDINR16I1US16AUFUT | 0:00 | 0.3700 | 0.3675 | 0.3700 | 9400 | 14913 | 0.3700 | 0.3700 | 0.3700 | 0.0000 |  |
+
+| **Spread Contract Order Entry: ADMII/J** |  |  |  |  |  |  |  |  | **× x x** |  |  |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S.G | Just Name | Symbol | On Type, Sitte Price |  | Entry date |  | Total Qty. | Price | Market Lot |  |  |  |
+| BULL | FUTURE | USDINR |  | XX |  | 273.8.29MAUG |  | 1 | 0.3700 | 1 |  |  |
+| BUY | FUTURE | EURINR |  | XX | I |  | 273.5016 | I |  | 1 |  | Reset |
+| BUY | FUTURE | EURINR |  | XX | ia |  | 273.5026 - | I |  |  |  | Submit |
+| multicolumn{12}{c}{Budt Dog Order Paid Type Pro-D3 ClientDu Clon Shaw SAS DAY F1 M ~NONE} |  |  |  |  |  |  |  |  |  |  |  |  |
+
+I thought it would be interesting to study some statistics on the USD INR pair; I downloaded the **USD INR spot data** from the RBI site.
+Let us start by looking at the long term chart of the USD INR over the last 8 years (July 2008 to July 2016) –
+Clearly the US Dollar has strengthened against the Indian Rupee over the last 8 years.
+Quite intuitive as our economy has literally stagnated over these years.
+Have a look at the daily return plot of the USD INR –
+We can observe few interesting parameters from this -
+The average daily return of USD INR is about 0.025%. The maximum and minimum daily return stands at +4.01% and -2.962%, contrast this with Nifty 50’s maximum and
+
+minimum daily return of +3.81% and -5.92%, you will realize that the USD INR pair is a lot less volatility compared to Nifty 50 or in fact any other indices. This fact is further manifested in the volatility numbers –
+o Daily Standard deviation (last 8 years) – 0.567%
+o Daily standard deviation (2015) – 0.311%
+o Annualized standard deviation (2015) – 4.94%
+These numbers are clearly much lower compared to the Nifty 50’s daily volatility and annualized volatility number of 0.82% and 15.71% respectively.
+Further, I also ran a correlation function on Nifty 50 and USD INR, before I tell you the answer I want you to take a guess on what this correlation would be like.
+For those of you who don’t know what correlation is, here is a quick explanation –
+Correlation between two variables gives us a sense of how two variables move with respect to each other. Correlation is measured as a number which varies between -1 to +1. For example, if the correlation between two variables is +0.75, then it tells us two things –
+1. The plus preceding the number tell us that they both are positively correlated i.e. they move in the same direction
+2. The actual number gives us a sense of the strength of this movement. In a loose sense, the closer it is to +1 (or -1) the higher is the tendency for the two variables to move in tandem.
+3. A correlation of 0 suggests that the two variables are not related to each other.
+From the above, we know a correlation of +0.75 suggests that the two variables move not only in the same direction but also tend to move together closely. Note, the correlation does not suggest the extent of the move, all is suggesting is that the move in the same direction is likely to happen. For example, if Stock A moves 3%, and the correlation between stock A and stock B is +0.75, then it does not mean that Stock B will also move by 3%, all that the correlation suggests is that Stock B will move up positively, just like Stock A.
+
+But, there is another twist here – suppose stock A and Stock B are correlated at 0.75, and the daily average return of Stock A and Stock B is 0.9% a 1.2%, then it can be said that on any given day, if Stock A moves above its daily average return of 0.9%, then stock B is also likely to move higher than its daily average return of 1.2%.
+Likewise, a correlation of -0.75 indicates that the two variables move in opposite directions (indicated by the -ve sign). Suppose stock A moves up by +2.5%, then by virtue of correlation we know that Stock B is likely to come down, but by what degree will it come down isn’t known.
+While we are at it, one more point on correlation. This bit is only for those interested in the maths of correlation. The correlation data makes sense only if the data series is ‘stationary around the mean’. What does this mean? – Well, it simply means that the data set should be sticking close the average values. Take another look at the graph of the daily returns of the USD INR, reposting the same for your convenience –
+The daily average return here is 0.025%, and if you notice the daily returns, it is mean reverting in nature, meaning even if the returns shoots up, or comes down, it eventually sticks back to the average value. A data series which exhibits such a property is said to be “stationary around the mean”. Stock/commodity/currency returns are invariably stationary, but the Stock/commodity/currency prices are not stationary as they tend to trend.
+
+Confusing? Well, the key point that you need to remember here is that when you run a correlation test, make sure you run it on the daily returns (as they are stationary) and not really on the daily prices (as they tend to trend).
+Calculating correlation between two variables is quite easy, in fact has just 2 steps -
+1. Calculate the daily returns
+2. Use the ‘=Correl’ function in excel
+Press enter and you get the correlation between the two variables.
+Remember correlation between stock A and Stock B is the same as correlation between Stock B and Stock A.
+I hope you’ve had a decent understanding on correlation, its time I repost the question asked earlier.
+If you were to guess the correlation between USDINR and Nity 50, what would it be? Forget about the number, can you at least guess whether they are positively correlated or negatively correlated?
+Let us try and deduce this - If the markets (as a representation of the whole economy) are doing good, then the markets tend to attract investments from overseas. This means dollars are coming into the country. The dollars get sold to get converted to Rupee. Essentially this translates to dollars being sold for Rupees, naturally the Rupee strengths. This means the USDINR goes down while the Nity 50 increases. The same logic can be applied when you look at it from the other way i.e. market going down while USDINR increases.
+
+| **Date** | **Nifty Closing** | **Daily Rt** | **USD INR** | **Daily Rt** |
+|---|---|---|---|---|
+| 1-Jan-15 | 8284 |  | 63.3213 |  |
+| 2-Jan-15 | 8395.45 | 1.35% | 63.2878 | -0.053% |
+| 5-Jan-15 | 8378.4 | -0.20% | 63.3888 | 0.160% |
+| 6-Jan-15 | 8127.35 | -3.00% | 63.385 | -0.006% |
+| 7-Jan-15 | 8102.1 | -0.31% | 63.4495 | 0.102% |
+| 8-Jan-15 | 8234.6 | 1.64% | 62.967 | -0.760% |
+| 9-Jan-15 | 8284.5 | 0.61% | 62.3953 | -0.908% |
+| 12-Jan-15 | 8323 | 0.46% | 62.1605 | -0.376% |
+| 13-Jan-15 | 8299.4 | -0.28% | 62.1021 | -0.094% |
+| 14-Jan-15 | 8277.55 | -0.26% | 62.153 | 0.082% |
+
+Correlation =CORREL(C3:C242,E3:E242)
+
+This means Nifty 50 and the USDINR should be inversely correlated. In fact, this is true, and the correlation value is -0.12267 (2015 data).
+You can **download** the excel sheet.
+In the next chapter we will briefly look into other currency contracts and the role of Technical Analysis while trading currencies, and with this discussion we will wrap up currencies and start exploring the world oh commodities!
+**Key takeaways from this chapter**
+1. The classic future - spot arbitrage is not really accessible to the retail market, hence traders tend to look at calendar spreads
+2. In a calendar spread you simultaneously buy and sell contracts belonging to two different expires
+3. Future Bull spread is when you buy near month futures and sell the further month expiry
+4. Futures bear spread is when you sell near month futures and buy the further month expiry
+5. You can directly trade the spread from your trading terminal, these are called the ‘Spread contracts’
+6. The USD INR pair tends to have lower volatility when compared to Nifty 50
+7. The USD INR and Nifty 50 are inversely correlated
+
+## EUR, GBP, and JPY
+
+## ### 6.1 - The other currency pairs
+
+We focused on the USD INR pair extensively over the last few chapters, and we now look into the other currency pairs that are traded in the Indian markets, namely the EUR INR, GBP INR, and JPY INR. The functioning of the other currency pairs is very similar to the USD INR. Think about it this way - you know how the Nifty 50 contracts work, then you pretty much know or are capable of knowing how Bank Nifty works.
+Given this, the agenda for this chapter is to quickly run through the contract specifications of the other three crosses available for us to trade. In the 2<sup>nd</sup> part of this chapter we’ll dwell on some of the common trading techniques, mainly employing technical analysis, and with this we will conclude our discussion on currencies and start looking into commodities.
+So let’s get started.
+
+## ## EUR INR
+
+Globally the EUR USD is one of the most actively traded currencies, however we do not have that contract yet in India, but RBI has given the exchanges a nod to list these crosses as well. So I guess it is a matter of time before we have the EUR USD pair along with GDP USD, JPY USD etc. But for now, we do have EUR INR to trade.
+The EUR as we know is the currency of the European Union. Unlike other currencies, the EURO is backed by the economy of many European countries and not just one economy.
+The EUR INR contract structure is quite similar to the USD INR contract. Here are the key details that you need to know -
+So as you see, the contract specifications are similar to that of the USD INR pair. The only difference is that the lot size in EUR INR is € 1,000 as opposed to §1,000 in USD INR.
+
+| **Particular** | **EUR INR € 1,000** | **Remarks Intern equity derivatives, lot is number of shares, but here it's an Euro amount** |
+|---|---|---|
+| Lot Size |  |  |
+| Underlying | The rate of Indian Rupee against 1 EUR |  |
+| Tick Size | 0.25 Paise or in Rupee terms INR 0.0025 |  |
+| Trading Hours | Monday to Friday between 9:00 AM to 5:00 PM |  |
+| Expiry Cycle | Upto 12 month contracts | Note, equity derivatives have an expiry upto 3 months |
+| Last trading day | Contracts trades till 12:30 PM, 2 days prior to the last working day | Equity derivatives continue to trade till 3:30 PM of the expiry day |
+| Final Settlement day | Last working day of the month |  |
+| Margin | SPAN + Exposure | Usually SAPN is about 1.5%, and exposure is around 1%, hence roughly about 2.5% is the overall margin requirement |
+| Settlement Price | RBI Reference rate on the day of Final settlement | Closing price of spot |
+
+Let’s see how this would impact the margins; here is the snapshot of the EUR INR futures –
+As you can see, the last traded price of the contract is 74.8950, with this we can estimate the contract value –
+Contract Value = Lot size * Contract price
+= 1000 * 74.8950
+=74,895.0
+Assuming the margin is approximately 2.5%, the margin should be in the vicinity if Rs. 1,870/-, in fact one can use the margin calculator on Zerodha to get the exact value of the margin required.
+
+| 74.8950 | Prev. Close | Open | High | Low |  |
+|---|---|---|---|---|---|
+| -0.49-0.65% | 75.3875 | 75.5650 | 75.5725 | 74.7975 |  |
+
+| **Fundamentals** | **Historical Data** | **Order Book** |  |  |
+|---|---|---|---|---|
+| **Print** |  | **Buy Qty.** | **Buy Price | **Sell Price** |
+| RBI Reference Rates | 74,9893 |  | 5 | 74.8900 74.8975 |
+| No. of Trades | 5,857 |  | 42 | 74.8875 74.9000 39 |
+| Traded Volume (contracts) | 33,558 |  | 29 | 74.8850 74.9025 155 |
+| Traded Value * (lacs | 25,123.28 |  | 12 | 74.8825 74.9050 7 |
+| VWAP | 74.8987 |  | 20 | 74.8800 74.9075 12 |
+| Open Interest | 69,519 |  | 9,028 | Total Quantity 4,822 |
+| Change in Open Interest | -1,047 |  |  |  |
+| % Change in Open Interest | -1.48 |  |  |  |
+
+So the margins are slightly higher than the USD INR pair, but still way lower compared to what is required for any equity derivative contract.
+
+## ## GBP INR
+
+The GBP INR contract is probably the 2nd most popular currency contract after the USD INR pair. On the contract specification side of things, everything remains the same except for the lot size and the underlying. The underlying is the exchange rate of 1 GBP in Indian Rupees. The lot size is £1,000, which makes the contract value approximately Rs. 89,345/- considering the futures is trading at 89.3450 as of 5th August 2016.
+As you see below, the margin required for this slightly higher compared to the other two contracts we’ve already discussed–
+
+| **Sribus scheme** | **For independent brokerage** | **2014.17 Implementing Competentur Award 2013, 2014.826, / 8 |  | Home | **About us - Technology Pricing** | **FAQ Contact** |
+|---|---|---|---|---|---|---|
+| Securities under bank (UNDALSTEL) |  |  |  |  |  |  |
+| Exchange | Product | Combined margin requirements |  |  |  |  |
+| CDSD | Futures |  |  | Span | Rs: 1,523 |  |
+| Symbol |  |  |  | Exposure margin | Rs: 225 |  |
+| EURINR Aug 2016 |  |  |  | Total margin? | Rs: 1,748 |  |
+| Net quantity | ADD | HOSEP | Buy Sell |  |  |  |
+
+By the way, did you know in the international markets that the GBP USD pair is also called the ‘Cable’? So, when you hear a currency trader say he is short cable, he means he is short GBP USD cross.
+
+## **JPY INR**
+
+The JPY INR contracts are a bit tricky compared to the other currency contracts. The lot size is not the usual 1000 units, but 100000 and the underlying here is the exchange rate for 100 Japanese Yen in Indian Rupees.
+So when we look at this –
+Combined margin requirements
+
+We are essentially looking at the rate of 100 Japanese Yen, stated in Indian Rupees. In other words, it costs Rs.66.2750 to buy 100 Japanese Yen. Since the lot size is 100,000 the contract value is -
+= (100000 \*66.2750) / 100
+= Rs. 66,275/-
+The margin required for the JPY INR contract is Rs. 2,808/-, which translates to about 4.2%.
+Clearly, the margins required for JPY INR contract is the highest in the currency segment, and I guess this is because this contract could be the most volatile (owing to
+
+| **RBI Reference Rates** | **65,9500** |  |
+|---|---|---|
+| No. of Trades | 7,451 |  |
+| Traded Volume (contracts) | 40,634 |  |
+| Traded Value * (lacs) | 26,898.99 |  |
+| WWAP | 66.1982 |  |
+| Open Interest | 59,199 |  |
+| Change in Open Interest | 1,286 |  |
+| % Change in Open Interest | 2.22 |  |
+
+| **Buy Qty.** | **Buy Price** | **Sell Price** | **Sell Qty ..** |
+|---|---|---|---|
+| 25 | 66.2675 | 66.2750 | 4 |
+| 17 | 66.2650 | 66.2775 | 30 |
+| 40 | 66.2625 | 66.2800 | 4 |
+| 1 | 66.2600 | 66.2825 | 23 |
+| 1 | 66.2575 | 66.2850 | 8 |
+| 7,102 | Total Quantity |  | 4,275 |
+
+| **66.2750** | **Prev. Close** | **Open** | **High** | **Low** |
+|---|---|---|---|---|
+| -0,15-0.22% | 66.4225 | 66.3800 | 66.3800 | 66.0600 |
+| Fundamentals | Historical Data |  |  |  |
+|  | Print | Order Book | Intra-day |  |
+
+| **Instrument Type:** | **Symbol :** | **Expiry Date :** | **Option Type : Strike Price :** |
+|---|---|---|---|
+| Currency Fuu | JPYINR 29AUG2016 | Select | Select. Get Data |
+
+lower liquidity). Of course, this is just a casual observation, I’d encourage you to calculate the actual value on Excel to get a perspective on volatility of JPY INR.
+Spread contracts are available on all the currency pairs across all the expires. Here is the snapshot of the same form NSE’s website –
+But as you can see, the spread contracts (apart from USD INR) are not really liquid.
+Finally, if you were to select contracts to trade based on liquidity, here is what I’d suggest you look at, in order of preference-
+1. USD INR Futures
+2. USD INR ATM Options
+3. GBP INR Futures
+4. EUR INR Futures
+5. JPY INR Futures
+With this I’m assuming that you are clear with the logistics involved in currency trading. We now focus on developing some basic trading approach.
+ither way to get a number of happy times in the idea.
+
+| **Contracts** |  | **Best Bid** |  | **Best Ask** | **Volume (Contracts)** | **LTP Difference** | **No. Of Trades** |
+|---|---|---|---|---|---|---|---|
+| USDINR |  |  |  |  |  |  |  |
+| SPAUG145SEP16 | 20 | 0.3350 | 0.3400 | 253 | 502 | 0,3400 |  |
+| SPAUG14OCT16 | 100 | 0.6425 | 0.6675 | 100 | - |  |  |
+| SPAUG16NOY16 | 2100 | 0.6750 | - | - |  |  | - |
+| More contracts ⹍ |  |  |  |  |  |  |  |
+| CBPHIR |  |  |  |  |  |  |  |
+| SPAUG165EP16 | 110 | 0.4500 | 0.4575 | 129 | 466 | 0.4575 |  |
+| SPAUG14OCT16 | 1 | 0.7300 |  |  | - |  |  |
+| SPAUG16NOY16 | 300 | 0.2200 |  | - | - |  |  |
+| More contracts |  |  |  |  | finits |  |  |
+| JPYINR |  |  |  |  |  |  |  |
+| SPAUG145EP16 | 916 | 0.3350 | 0.3375 | 10 | 204 | 0.3375 |  |
+| SPAUG14OCT16 | 2 | 0.5025 | - |  | - |  |  |
+| SPAUG16NOY16 | 200 | 0.2200 | - | - | - |  |  |
+| More contracts ⹹ |  |  |  |  |  |  |  |
+| ElURINR |  |  |  |  |  |  |  |
+| SPAUG145EP16 | 149 | 0.3925 | 0.4100 | 100 | 2.776 | 0.3925 |  |
+| SPAUG14OCT16 | 20 | 0.6075 | - |  | 60 | 0.2500 |  |
+| SPAUG16NOY16 | 500 | 0.7550 |  |  | - |  |  |
+| More contracts |  |  |  |  |  |  |  |
+
+## ## 6.2 – The test for seasonality
+
+There is often a lot of debate on the seasonality involved in currencies. By seasonality I mean things like "USD INR always goes down in December" or something like "USD INR always goes up a week before expiry". In fact, many people base their trades based on this expectation without actually validating for seasonality. Given this, we thought we should check for the seasonality in currencies, and needless to say we picked the USD INR spot data to run the required test.
+∗∗ Warning∗∗
+The following discussion can get a bit technical, and this is not meant for regular Varsity readers. If you want a direct answer for whether any sort of seasonality exists in the USD INR pair, then the straight forward answer is – no, there is seasonality of any sort across any time frame. With this conclusion you can jump directly to the next section. However, if you have a statistical approach to things then you may just want to read through. Of course, I’ll try my best to keep it brief.
+Also, this section is contributed by our good friend Prakash, any queries regarding this should be directed to prakash.lekkala at gmail dot com.
+Seasonality in any time series can be checked by employing a statistical test called “Holt Winters test”. A typical Holt-Winters method has 3 components –
+\(\circ\) Level
+\(\circ\) Trend
+\(\circ\) Seasonality
+**Level**: this indicator measures the average change in USD INR on a YOY basis
+**Trend**: This indicator measures the average change in USD INR on a month on month basis
+**Seasonality**: This indicator measures if there is any seasonal impact on price change. For example - USD INR almost always rises in January, and almost always falls in April etc.
+There are two possibilities for components (level, trend, and seasonality)
+
+• Additive
+• Multiplicative
+I guess the details of this are beyond the scope of this discussion.
+
+## Holt-Winters test for seasonality:
+
+In Holt-Winters test, we check for seasonality in a time series by building a forecast model (let us call it Model 1) and study its residuals. Model 1 does not have any seasonality component inbuilt. We then build another forecast model with a seasonality component (Model 2) and check for the errors of this model.
+We compare the errors of both the models and compare to check if model 2 is gives us a better forecast when compared to Model 1. We do this by employing ‘Chi Square’ test to determine if accuracies are better. If Model 2 is statistically better than Model 1 then we conclude that there is some seasonal pattern in data. However, if the accuracies are same for both models or if Model 1 has better accuracy, there is no seasonality in data.
+
+## Seasonality results for USD INR
+
+Check for weekly seasonality:
+Model 1 (without seasonality component): The best model is (M, N, N) with coefficients 0.9999
+This model indicates that weekly data has only level component and no trend component. The coefficient of “level” is 0.9999 i.e. next week’s price is about 0.9999 times this week’s price.
+For readers who are aware of Random Walk Theory will be able to appreciate these parameters. The model is suggesting that on a weekly basis USD INR price movement is a random walk.
+Model 2 (with seasonality component): The best model is (M, N, M) with coefficients 0.7 and 0.0786
+This model indicates that weekly data has level and seasonality component. The interpretation is that next week’s price is 0.7 times of this week’s price and the remaining price is contributed by seasonality.
+
+Conclusion: Chi square test concluded that there is 100% chance that model 2 accuracy is same as model 1 accuracy i.e. forcing a seasonality model on USD INR isn’t increasing its accuracy.
+This can only happen when there is no seasonality in the data. As the data is prepared for weekly analysis, we can conclude that there is no seasonality on weekly a basis.
+Monthly seasonality:
+Model 1: The best model is (A, N, N) with coefficients 0.9999
+Like in the case of a weekly model, model on monthly data also suggests a random walk.
+Model 2: The best model is (A, N, A) with coefficients 0.9999 and 0.0001
+This model indicates that next month closing price is almost same as this month’s closing price with a small impact of seasonality.
+Conclusion: Chi square test concluded that there is a 20% chance that model 2 accuracy is better than model 1 accuracy. In statistical terms, such improvement in accuracy might happen due to randomness, like the window period you choose, the sample data etc.
+Typically, in statistics, the norm is to look for at least 95% chance that model 2’s accuracy is better than model 1’s to conclude there is seasonality in data. So in case of USD-INR, we can conclude that there is neither monthly nor weekly seasonality.
+The last 8 years USD INR spot data for this is taken from **RBI’s website.**
+So the next time you hear someone make a random statement like "the USD INR pair almost always goes down before Christmas", then you know he is just trying to sound smart with no real insights.
+
+## ## 6.3 - Classic TA
+
+Think about conducting a fundamental analysis on a company, for example - Hindustan Unliver Limited. Typically, you would study its business, financial
+
+statements, corporate governance, study its peers, and perhaps build a financial model to identify if the stock is worth investing in. Fundamental analysis is kind of a straightforward affair when it comes to equities. However, when you look at currency pairs, USD INR for example, there a lot more fundamental dimensions – the macro economics of the USA which is dependent on multiple domestic and international factors and the macro economics of India which is again dependent on multiple domestic and international factors. Once you understand these, you need weigh each one of these against another and build a relative view.
+Frankly speaking, this is no easy task and not many are capable of doing this. You need to be an economist with a trader’s mind-set to pull off quality fundamental analysis on currency pairs. Perhaps, this is the reason why Technical Analysis (TA) is so much more popular when it comes to trading currencies and commodities. As you probably aware, Technical Analysis assumes that the price that you see on the screen discounts everything including all the complex fundamental views that are panning out at the moment. With this assumption you go ahead and analyse the charts and develop a view point.
+TA on currencies and commodities works just like it does on equities. If you are not conversant on how to use Technical Analysis, I’d strongly suggest you read through this module on TA.
+I’ll post few snapshots of TA based trade setups –
+
+The two encircled candles form a classic candlestick pattern called ‘Piercing pattern’. The piercing pattern suggests the trader to go long on the USD INR pair. As you can see, the trade panned out well without triggering the stop loss.
+Here is a bearish Marubozu on GBP INR –
+The bearish Marubozu suggests you to short the underlying with an expectation that the asset will continue to slide down.
+Naturally, the trade setups can be endless. I know many people are under the belief that currency and commodities requires one to know a different set of technical analysis, but this is not true. TA works exactly the same way on any time series data, be it – stocks, commodities, currencies, or bonds.
+And with this, I would like to end our discussion on Currencies and would like to start our discussion on the 2nd part of this module i.e. commodity trading.
+
+## ## Key takeaways from the chapter
+
+1. The underlying for EUR INR is the spot rate of 1 Euro in Indian Rupees.
+2. The lot size for EUR INR is \(\unknown\)
+3. The underlying for GBP INR is the spot rate of 1 GBP in Indian Rupees. GBP INR is the 2nd most traded contract in the currency segment.
+
+4. The lot size for GBP INR is £
+5. Internationally GBP USD is also referred to as the ‘Cable’.
+6. JPY INR has the highest margin requirement in the currency segment, perhaps due to the higher volatility.
+7. Lot size in JPY INR is 100000.
+8. The underlying in JPY INR is the rate of 100 Japanese Yen in Indian Rupees.
+9. As opposed to popular belief, there is no seasonality in the USD INR pair – either on the weekly basis or on a monthly basis.
+10. TA can be applied to currencies just like the way it can be applied to stocks.
+
+Gold (Part 1)
+
+## ### 7.1 – Orientation
+
+As you know, there are two commodity exchanges in India - Multi Commodity Exchange (MCX) and National Commodity and Derivative Exchange (NCDEX). MCX is particularly popular for the Metals and Energy commodities while NCDEX for all the agri commodities. However, there is a lot of activity picking up on MCX for agri commodities as well. My job over the next few chapters is to discuss these commodities which are traded on the exchanges, and get you familiar with the commodity contracts.
+We will look into each and every commodity that is actively traded on the commodity exchanges. The idea is to know how the commodity contract works (contract specification), figure out which contract to trade, and identify the factor which influences the commodity. I will skip the usual background to commodities market part, the one which talks about the history, forwards markets, the farmers in US, the Chicago Mercantile Exchange etc. You will find this in almost any material on Commodity market. I would like get straight to the heart of the topic by slicing and dicing the contract specifications of commodities and other details around them.
+Here is the list of commodities available on MCX to trade; of course I got this list from the MCX website -
+
+| **Sr. No.** | **List of Commodities Available for Trading on MCX** | **List of Commodity Contracts Available for Trading on MCX** |
+|---|---|---|
+| 1 | ALUMINIUM | ALUMINIUM MINI |
+| 2 | CARDAMOM | CARDAMOM |
+| 3 | COPPER | COPPER |
+|  |  | COPPER MINI |
+| 4 | COTTON | COTTON |
+| 5 | CRUDE OIL | BRENT CRUDE OIL |
+|  |  | CRUDE OIL |
+|  |  | CRUDE OIL MINI |
+| 6 | CRUDE PALM OIL | CRUDE PALM OIL |
+
+The idea is to cover all the major commodities that one can trade. Needless to say, one has to know how ‘Derivative Futures’ function before attempting to understand Commodities. So if you are not familiar with Futures, I’d encourage you to read the module on futures trading.
+Anyway, assuming you are familiar with Futures, we will now start with Gold.
+
+| **7** | **GOLD** | **GOLD** |
+|---|---|---|
+|  |  | **GOLD GLOBAL** |
+|  |  | **GOLD GUINEA** |
+|  |  | **GOLD MINI** |
+|  |  | **GOLD PETAL** |
+|  |  | **GOLD PETAL DELHI** |
+| 8 | KAPAS | KAPAS |
+| 9 | LEAD | LEAD |
+|  |  | LEAD MINI |
+| 10 | MENTHA OIL | MENTHA OIL |
+| 11 | NATURAL GAS | NATURAL GAS |
+| 12 | NICKEL | NICKEL |
+|  |  | NICKEL MINI |
+| 13 | SILVER | SILVER |
+|  |  | SILVER 1000 |
+|  |  | SILVER MINI |
+|  |  | SILVER MICRO |
+| 14 | ZINC | ZINC |
+|  |  | ZINC MINI |
+
+## 7.2 – The Gold Contract
+Gold is a very actively traded contract in MCX. It has ample liquidity, with daily trades of roughly 15,000 contracts translating to a Rupee value of over 4500 Crore. Note, these numbers belong to just one type of Gold contract, often nicknamed "Big Gold".
+Gold comes in quite a few variants that one can choose to trade in. Newbie and sometimes even the experienced commodity traders often get confused with these contracts, not knowing which one to trade and the difference between them. To begin with, let me list down all the different types of Gold contracts -
+1. Gold (The Big Gold)
+2. Gold Mini
+3. Gold Guinea
+4. Gold Petal
+All these variants belong to the same underlying i.e. Gold. I guess the best way to understand the difference is by understanding the contract specification of each of these variants. We will start with the big boy first, i.e. ‘The Gold’.
+Here is the contract specification as per MCX, let me list the important things first and then we will understand them one by one -
+Let me discuss these details in the same sequential order, so that it becomes easy for you to understand the subsequent contracts. We’ll start with the price quotation.
+The price quotation as you can see is for 10 grams of Gold. This price includes all the import duties and taxes, of course we will talk more about this at a later stage. For now,
+
+| **Particular** | **Value** |
+|---|---|
+| Price Quotation | Rupee per 10 grams inclusive of all taxes and levies relating to import duty |
+| Lot Size | 1 kilogram |
+| Tick Size | 1 rupee |
+| P&L per tick | Rs. 100 |
+| Expiry Date | 5th day of contract month |
+| Delivery Logic | Compulsory |
+| Delivery Unit | 1 kilogram |
+
+just be aware that the price on MCX is all inclusive. Have a look at the following snapshot, it shows the last traded price of Gold futures on MCX –
+As you can see, the last traded price of Gold is Rs. 31,331/-. Do note, this is the quote for 10 grams of gold. Since the lot size is 1 Kg (1000 Grams), we can calculate the contract value –
+(1000 * 31331) / 10
+= Rs.31,33,100/-
+So what is the margin required to trade this? We can check this from Zerodha’s margin calculator –
+The margin amount required is Rs.1,25,868/-, which means the margin percentage is roughly –
+
+|  | **31300.00** | **31393.00** |
+|---|---|---|
+| Today |  |  |
+|  | 25700.00 | 32839.00 |
+| Lifetime |  |  |
+| Expiry Date |  | 05-OCT-2016 |
+| Average Price(Rs./Unit) |  | 31,344.16 |
+| Close |  | 31,467.00 |
+| Volume (Lots) |  | 4297 |
+| Trading Unit |  | 1 KGS |
+
+1,25,868 / 31,33,100
+
+## ## = 4.017%
+
+As you can see the margin percentage is just about 4%, which is pretty much similar to the currency contracts. However, the Rupee value of the margin is way too high and it therefore prohibits many retail traders to initiate positions in Gold. In fact, this is the reason we have contracts like Gold Mini and Gold Petal, where the Rupee value of the margins is lower. We will talk about these contracts a little later.
+Now assume you buy 1 lot of Gold on MCX, this means you have to park close to 1.25 lakhs as margin and with each tick you will either make Rs.100 or lose Rs.100, and how did we arrive at that? Well, it is fairly simple -
+
+## ### P&L per tick = (Lot Size / Quotation) \* Tick Size
+
+Let us apply this on Gold -
+= (1000 Grams / 10 Grams) \* 1 Rupee
+
+## ### = 100 Rupees
+
+In fact, you can apply this formula to any futures and options contract to calculate the P&L per tick. Let me demonstrate this formula for the JPY INR contract. If you recollect the lot size for this contract is 100000 JPY, and the quotation was for 100 JPY, and the tick size is 0.0025, using this we can calculate the P&L per tick -
+(100000/100) \*0.0025
+## = 2.5 Rupees
+Anyway, let us now focus on the expiry. If you look at the expiry of Gold, it simply says 5<sup>th</sup> day of contract month. Gold contracts are introduced every 2 months and each contract stays in the system for a year, and at any point you will have 6 contracts to choose from. Considering we are in August 2016, the following table should give you an idea of how this works -
+
+Needless to say, the most recent contract is the most liquid contract to trade; in this case it would be October 2016 contract. Now when the October 2016 contract expires on 5th Oct 2016, September 2017 contract will be introduced, and the most active contract from 5th Oct 2016 would now be the December 2016 contract.
+Do recall, settlement in equities is always in cash and not physical. However, when it comes to commodities the settlement is physical and therefore ‘delivery’ is compulsorily. This means if you hold 10 lots of gold and you opt for delivery then you will get 10 kg of gold. In order to get the delivery of the commodity, one has to express his intention to do so. This has to be done any time before 4 days to expiry. So given that the expiry is on 5th, one has to express his intent to take delivery anytime on or before the 4th (1st, 2nd, 3rd, 4th).
+If you are trading with Zerodha then do note, we do not allow you to get into the physical delivery of commodities. So you will be forced to close the position before 1st of the expiry month. In fact, I personally prefer to close the positions early on and not really get into the physical delivery of commodities.
+For all practical purposes if you know these things about the Gold contract, you pretty much know what is really required before you trade the big Gold contract.
+We will now move on to know the other variants of gold that gets traded on the exchange.
+
+## ## 7.3 – The other contracts (Gold Mini, Gold Guinea, Gold Petal)
+
+The big gold contract as you realize demands a heavy margin requirement in terms of Rupee value. This prevents a lot of traders from trading the big gold contract and
+
+| **Current available contract** | **Expires on** |
+|---|---|
+| October 2016 | 5th Oct 2016 |
+| December 2016 | 5th Dec 2016 |
+| February 2017 | 5th Feb 2017 |
+| April 2017 | 5th April 2017 |
+| June 2017 | 5th Jun 2017 |
+| August 2017 | 5th Aug 2017 |
+
+perhaps this is the reason the exchanges introduced contracts with much lesser margin requirement.
+The other gold contracts that are available to trade is –
+• Gold Mini
+• Gold Guinea
+• Gold Petal
+The details for the other gold contracts are as follows -
+I’m assuming the table above is a lot easier to understand now considering we have discussed these details earlier. Let’s dig straight into the margin details.
+
+| **#** | **Commodity** | **Lot size** | **Price** |  | **NRML Margin** | **+** |
+|---|---|---|---|---|---|---|
+| 1 | GOLD | 1 KGS |  | 31404 |  | 157020 |
+| 2 | GOLDGUINEA | 8 GRMS |  | 25033 |  | 1251 |
+| 3 | GOLDM | 100 GRMS |  | 31365 |  | 15682 |
+| 4 | GOLDPETAL | 1 GRMS |  | 3111 |  | 155 |
+| 5 | GOLDPTLDEL | 1 GRMS |  | 3094 |  | 154 |
+
+|  | **Price Quote** | **Lot Size** | **Tick Size** | **P&L/tick** | **Expiry** | **Delivery Logic** | **Delivery Unit** |
+|---|---|---|---|---|---|---|---|
+| Gold Mini | Rs. per 10 gm | 100 gm | 1 rupee | Rs.10 | 5th day | Compulsory | 100 gm |
+| Gold Guinea | Rs. per 8 gm | 8 gm | 1 Rupee | Rs.1 | Last day | Compulsory | 8 gm |
+| Gold Petal | Rs. per 1 gm | 1 gm | 1 Rupee | Rs.1 | Last day | Compulsory | 8 gm |
+
+Last Updated: 22 Aug 2016
+
+As you can see, Gold Mini (GoldM) contract requires a margin of Rs. 15,682/-. In terms of percentage –
+# = Margin / Contract Value
+Contract Value = (Price \* Lot size)/Price Quotation
+= (31365 \* 100)/10
+= Rs. 313,650
+=15682/313650
+# = 5%
+In terms of margin percentage, this is roughly the same as big Gold. For the sake of completeness let us quickly calculate the P&L per tick for Gold Mini. We know –
+
+## # P&L per tick = (Lot Size / Quotation) \* Tick Size
+
+= (100/10) \*1
+= Rs.10/- per tick.
+Beyond the Gold Mini contract, we have Gold Guinea and Gold Petal contract. These are extremely tiny contracts which demand a very low margin, as low as Rs.1251 (Gold Guinea) and Rs.154 (Gold Petal). The lot size is small and therefore the contract value is small as well. You will find few variants like Gold Petal (Delhi), Gold Guinea (Ahmadabad) etc., I would suggest you ignore these, especially if your idea is to just trade Gold.
+Here is my honest opinion - if you are trading Gold stick to either the Big Gold contract or the Gold Mini contract, simply because the liquidity is quite bad in all the other contracts. To give you a perspective on liquidity on a regular trading day (on MCX) -
+o 12 - 13K lots of big gold contracts get traded
+o 14-15K lots of Gold mini contracts get traded
+o 1-1.5K lots of Gold Guinea contracts get traded
+o 8-9K lots of Gold Petal contracts get traded
+
+The number of lots in Gold Petal should not entice you believe that the liquidity is high, do remember Gold Petal lot size is just 8 grams, and therefore 8-9K lots translates to roughly 2-2.5 Cas.
+Another important thing to note - liquidity is highest in the nearest month contract, so always stick to these. The thumb rule here is - farther the contract expiry, lower is the liquidity.
+With this, I assume you are familiar with the Gold contracts and the logistics. In the next chapter we will discuss few interesting topics such as the parity in domestic and International gold contracts, factors influencing Gold, relationship between gold, equities, and dollar etc.
+
+## ## Key takeaways from this chapter
+
+1. Gold is one of the most popular bullion contracts that gets traded on MCX.
+2. Gold contract comes in a few variants - Big Gold, Gold Mini, Gold Guinea, and Gold Petal.
+3. Big Gold is the most popular contract, but requires a margin in excess of Rs.1,25,000/-.
+4. The P&L per tick for the big Gold is Rs.100.
+5. P&L per tick can be calculated as = (Lot Size / Quotation) \* Tick Size.
+6. Gold Mini is the 2<sup>nd</sup> most popular Gold contract, requires a margin of roughly 15K.
+7. Gold Petal and Guinea are other variants demanding much lower margin requirement. However, the liquidity in these contracts is quite low.
+8. It is always a good idea to stick to the nearest month contract as liquidity is high in these contracts.
+9. Delivery is compulsory for all these contracts; therefore, it makes sense to close these contracts at least 4 days before the expiry of the contract.
+
+Gold (Part 2)
+
+## 8.1 – The London fix
+
+In the previous chapter we discussed the various Gold contracts that are available on MCX. I’d like to begin this chapter by discussing how the prices of Gold in the spot market are arrived at internationally and in India. However, I have to mention this – this method to ‘fix’ gold prices are merely symbolic and holds very little relevance to trading gold futures at MCX. I’m discussing this simply because it is an interesting thing to know. J
+Internationally, the price of Gold is fixed in London on a daily basis, twice a day in two different sessions. The morning session at 10:30 AM is referred to as ‘AM Fix’ and the evening session at 3:00 PM is called the ‘PM Fix’. The prices are fixed by the gold dealers from London’s biggest bullion desk. The whole process is facilitated by Nathan Mayer Rothschild & Sons.
+
+There are about 10-11 participating banks, which include names like JP Morgan, Standard Chartered, ScotiaMocatta (Scotiabank), Société Générale etc. Do note, the general public and other banks are not permitted to participate in this process. The dealers from these banks call the dedicated conference line at the designated time and submit their bids to buy and sell gold. From all the bids and offers an average price is arrived at, and the same price is relayed to the market which then becomes the benchmark for gold trading. The whole process lasts for about 10-15 minutes. The process is again repeated in the ‘PM session’ and the gold prices are again discovered and relayed to the markets.
+The gold price that is fixed by the AM and PM sessions is very close to the actual price of gold that is traded in London and other international markets. So in a sense, the price that is relayed holds no surprise to traders or bullion dealers, in fact some participants even believe that like many things in England, even this is conducted more to keep up with tradition .
+India too follows a somewhat similar practice, but less elaborate, India, being one of the biggest consumers of Gold, imports the yellow metal. The gold is imported by designated banks and the banks in turn supply this gold to bullion dealers (after adding the necessary charges; more on this a little later). The Indian Bullion Association then bids for the gold through its network of bullion dealers. These dealers mainly base their quotes on how much gold they would like to buy or sell at a given price, the rates are averaged out, and this roughly sets the floor for the Gold prices in India. In fact, there is some sort of circularity here because dealers tend to look at the Gold futures price traded on MCX before placing their bids with the Indian bullion association. Anyway, this price is relayed to the dealers’ and jewellers’ network and the price for the day is set.
+
+## ## 8.2 - Gold price disparity
+
+Traders tend to compare the Gold futures rate in Chicago Mercantile Exchange (CME) and the Gold Futures rate on MCX and assume there is an arbitrage opportunity lurking around. The rationale for this is that Gold being an international commodity should often trade at around the same price, in the absence of which an arbitrage opportunity<tbc>
+
+arises. So for example if 10 grams of 995 purity Gold in CME is quoted at §430, then on MCX the price of 10 grams of 995 purity should be in and around § 430.
+But this is often not the case, they trade at a significantly different price and due to this a disparity between gold futures in CME and MCX always exists. The question however is, why does this disparity between the two gold future contracts exist?
+Let us figure this out –
+To understand the disparity between the two future contracts, one should understand how the Gold spot rate evolves in India.
+Remember, India is a net importer of gold. In the international markets, US especially, Gold is quoted on a per troy ounce basis. One troy ounce is approximately 31.1035 grams. Assume Gold in the US spot market is traded at §1320 per troy ounce – given this, what do you think should be the spot price of gold in India. Assume § 1 = Rs 65.
+The general tendency is to identify the cost for 10 gram of gold in USD and multiply the same with the current USD INR rate and figure out the price. Let us do this math quickly –
+31.1 Grams = §1320, therefore 10 grams = §424.43. Since USD INR is at 65, the price of Gold in India should be approximately = Rs. 27,588/-.
+Unfortunately, in reality this is not so straightforward. Gold when imported (remember it is the banks which import gold) attracts duties and taxes. The spot price of Gold in India should include all these charges. In fact, let me list down all the costs that are applicable when a bank imports gold –
+1. CIF applicable in Dollars (CIF stands for cost, insurance, and freight)
+2. Custom duty
+3. Cess
+4. Bank cost
+With all these charges, the landed price of Gold tends to increase. In fact, this post on TradingQ&A beautifully illustrates how the cost adds up.
+So for example if the rate of spot Gold in US is §420 per 10 grams, then in India after adding all the additional costs, the spot rate will be much higher. For the sake of this
+
+discussion, let us assume the rate in India is §435 - leading to a §15 disparity in spot rates.
+Now, this explains the disparity in spot rates, but what about the futures price? Remember the futures prices is a derived from spot rates, the formula linking futures price with spot price is -
+
+## **F = S\*e**<sup>(rt)</sup>
+
+You can read more on **futures pricing.**
+So in the US markets, the basis for the future pricing will be the spot price of Gold in the US, i.e. §420, while at the same time the basis for the future price in India will be the spot price of gold in India i.e. §435. Given this, naturally the futures price of gold in CME and MCX will differ. This difference should not be mistaken for an arbitrage opportunity.
+
+## ## 8.3 - What drives the gold price?
+
+Investors across the world have this strange, but predictable behavior - at times of uncertainties, well at least economic uncertainties, they are all in a hurry to buy gold. Gold has always been considered a safe haven capable of safeguarding investments against any sort of economic meltdown.
+Consider the Brexit (June 2016) event, the most recent event which kind of shook the world, and here is how Gold behaved before and after the event -
+
+There was a clear run up in Gold before the event and post the event, in fact the big candle that you see during this period is on 24<sup>th</sup> June, the day after the Brexit verdict was out. Naturally, gold rallied owing to the outcome of Brexit. In fact, each and every time there is any sort of global/domestic uncertainty, investors flock to buy gold. This is mainly driven by the fact that Gold is considered a safe haven, capable of preserving your wealth.
+Almost all the major events in the past has had an impact on Gold, think about it – Oil crisis, middle eastern uprising, Israel-Palestine, EU migrant crisis, Greek economy, Euro crisis, Lehman Brothers; the list is never ending. But the point to note is that every world event impacts the prices of gold.
+This leads us to an important conclusion – Gold tends to increase in value in the backdrop of economic uncertainties. In fact, in the backdrop of economic uncertainties, demand for risky assets such as equities goes down, and the demand for safe haven assets such as Gold tends to increase.
+Now besides the uncertain events, even on a day to day basis, investors tend to buy gold considering it a safe hedge against inflation. They believe, in the long run the value of gold will continue to rise. This perception is justified if you look at a very long term chart of gold -
+
+Take a look at the chart above, in 1970 Gold was at roughly $35 and today in 2016, Gold is at $1360, translating to a 37x return. However, when you look at it from a CARG perspective, this translates to about 8% year on year growth. The world average inflation is roughly between 5-6%. This means if you are an investor in gold, on one hand you are expected to make 8% and on the other you lose about 6% (owing to inflation) netting you with an out performance of 2%. However, in countries such as India where inflation is high, investment in Gold does not really fetch much.
+
+## ## 8.4 – Gold, Dollar, Rupee, and Interest rates
+
+The movement in gold is also related to how the currencies and interest rate of the economy moves. So if you are a trader in Gold, then it is not only important to keep track of world economics, but also important to keep track of currencies and interest rates. The equations are simple; let us start with the dollar and build on it.
+Have a look at this graph below –
+_Source: http://www.lbma.org.uk/pricing-and-statistics_
+
+This is the graph of USD versus Gold. The inverse relation between the two is quite evident. This inverse relation can broadly be attributed to two reasons –
+1. When the dollar decreases in values with respect to another currency, then the value of the other currency increases. With the increase in the currency value, the demand for commodities including Gold tends to increase. As the demand for gold increases, the prices too tend to increase.
+2. A falling US dollar becomes less attractive to investors; the investors tend to look at parking their money in safer havens such as gold.
+Having said this, one should be aware that this may not always be true.. There could be instances when both gold and USD tends to increase. For example, think about a crisis in Saudi Arabia (declining oil prices), domestic investors may want to move away from investments in Saudi and park it in safer assets such as Gold and USD, thereby increasing the value of both these assets.
+Either ways, it must be clear to you now that USD has a role to play in the directional movement of Gold. Having said, one must study the correlations between various variables and gold to see if any correlations actually exist. For example, increase in the US federal rates tends to strengthen the US Dollar, by virtue of this Gold price should reduce. But this does not necessarily happen all the time, and if I’m right the correlation between Gold and Federal rates is just under 0.3.
+I understand the discussion above is kind of counter intuitive, as in earlier I mentioned a strong dollar tends to push gold prices down, but the factors that influence USD may not actually have a strong bearing on Gold itself.
+_Source: https://fred.stlouisfed.org/graph/?g=33vD_
+
+Confusing? Yes it is, I agree.
+So how would one actually trade gold? One of the best ways to trade gold is by studying its demand and supply. Demand and supply factors are many and complex, especially for an international commodity such as Gold. However, the demand and supply pressures reflect themselves in prices and in a sense manifest themselves in the form of charts, and charts can be read by means of ‘Technical Analysis’, and this is how you can develop trading insights in gold.
+I’m a huge fan of Fundamental Analysis when it comes equities, but when it comes to commodities and currencies, I resort to charts.
+
+## ## 8.5 - Technical Analysis on Gold
+
+If you are not familiar with Technical Analysis (TA), then I’d suggest you read the **module on TA**.
+One of the key attributes of TA is that TA can be applied to any asset class including currencies and commodities. Let me develop some trading notes on Gold by employing TA, hopefully this will give you a sense of how to apply TA on Gold.
+When I trade Gold, the objective is very clear - it is a short term trade and there are no intentions to carry the trade for say more than few days.
+The very first thing that I do when developing a trading view is to look at the long term chart of the asset, by long term I mean at least 2 years. I’ll do the same here; I’ll look at the end of day Gold Bees (ETF) chart for this. Do note, I will use this chart to develop a rough idea on the primary trend of Gold and also observe critical price points, if any.
+
+1. Gold declined starting from late 2013, all the way to late 2015.
+2. Prices kind of bottomed over the last few months of 2015.
+3. Gold in fact formed a double bottom between Sept – Dec 2015.
+4. Prices have been trending up since early 2016.
+5. Traders have bought Gold at every decline starting from early 2016.
+6. Clearly the bearishness in gold is no longer there, this is evident given the fact that gold has scaled back to 2013 prices.
+With all this, I can conclude that I’d be more comfortable with long trades than short, but this does not mean that I will not short Gold. I would, if the risk to reward is enticing enough. However, if I short Gold, I will always be aware that traders out there are looking for opportunities to buy gold at every dip; hence I will be quick to cover my short position. Do note, until this stage I have only developed a broad based view on Gold and have not ventured into any specific price levels.
+I would now be interested in looking at a short term chart of Gold, to identify trading opportunities if any. Have a look at the chart below, before we get into identifying trading opportunities (for which we will have to look at the right side of the chart), let’s spend a little time on the left side of the chart.
+From the chart above, I note the following points –
+
+The starting point of this chart is sometime in the late 2015, and till about end of June 2016, there is pretty much no activity. This is evident when you look at both the price and volume. The volume is almost non-existent, and the prices just tend to gap up and down. Can you guess why?
+Well, remember Gold contracts are introduced almost a year in advance, for example the Oct 2016 contract (which we are looking at), would have been introduced around Oct 2015. However, this contract does not attract any liquidity till it nears its actual expiry i.e. October 2016. If on the other hand, our markets were very vibrant with lots of liquidity, then probably this contract would have attracted liquidity much earlier.
+Anyway, let us now look into the left side of the chart and identify trading opportunities if any. I’ll repost the chart emphasizing the recent candles; I have overlaid 9 and 21 day exponential moving averages on the prices –
+
+1. The current market price is below both the short term averages.
+2. There are three price action zones in the recent past at around 30956 (I’ve encircled the same in blue circles), and since the current market price is below this level, 30956 becomes an immediate resistance.
+3. In the recent past, we can see a Bearish Marubuzo formed (circled in black), which has played out well. Traders may be booking profits on this one.
+Considering all the above, I would be looking at buying opportunities in Gold, the moment it crosses the resistance level of 30956. Notice, this also coincides with the two short term moving averages, which further encourages me to go long. However, if the price of gold stays below the resistance level, I would hesitate to short for reasons we discussed earlier. So in summary my trade would be something like this -
+• Position: Long
+• Price: Above 30956
+• Target: 31418 (have placed a short blue line)
+• Stoploss: 30700 (current market price)
+• Reward to risk assuming I’m going long at 30956: 1.8
+• % move from entry – 1.5%
+Not a bad trade from a reward to risk perspective I’d think. Also, since we are looking a 1.5% move, this may pretty much happen in a single day.
+Anyway, the whole point here is to elaborately explain to you that TA can easily be applied to commodities such as Gold.
+I hope the last two chapters have given you enough information on Gold, this according to me is put you in a good spot to get started in trading Gold.
+Onwards to Silver!
+
+## **Key takeaways from this chapter**
+
+1. The price of Gold if fixed twice a day in the AM & PM session in London
+2. Only designated banks can participate in the London fix
+
+3. India too has a gold fix, similar to London fix – however there is some sort of circularity here as traders tend to look at the prices of MCX
+4. Spot price of gold in US and India differs mainly owing to the additions duties, taxes, and charges that get added in India
+5. Since spot prices vary, so does futures price
+6. Dollar and Gold are inversely related
+7. Commodity fundamentals are complex to understand, hence traders tend to look at demand and supply
+8. Demand & supply reflects in the current price, and also manifests itself in charts
+9. You can apply technical analysis on Gold and other commodities
+
+## silver
+
+## ### 9.1 – The Bullion Twins
+
+Anyway, let us get straight to work and discuss Silver. Precious metals such as Gold, Silver, and Platinum are collectively referred to as ‘Bullion’. There is a common perception that the market price of gold and silver makes similar moves. If this is true, then it gives raise to many trading opportunities such a ‘pair trading’. We will discuss pair trading in detail, perhaps in a different module altogether. However, let us go ahead and investigate if Gold and Silver move in tandem. I did run a correlation check on Gold and Silver using 30 minutes’ intraday data for the last 3 months (note this is over a 1000 data points) and here are the results –
+
+The correlation on an intraday basis is **0.7**, which is quite remarkable. I’m guessing the correlation on end of day basis would be even better. So what does this mean? Well, the correlation suggests that the two metals make similar moves on an intraday basis. If you recall, we discussed the concept of correlation in detail in the USD INR chapter. I’d suggest you read up <u>section 5.3</u> of chapter 5 if you haven’t already done so.
+If the intraday correlation is as tight as 0.7, then we can think about exploring trading ideas of going long on gold and short on silver or vice versa. This will be a kind of hedged strategy as you are long and short (on similar assets) at the same time. The idea here is just to let you know that building such a trading strategy is a possibility, please don’t jump in and set up a trade just with this information. J
+There are lots of other things to take care of when you initiate such trades; more on pair trading at a later point. Meanwhile, have a look at the intraday graph of both gold and silver; I’ve normalized it to start at 100 so that the graphs are more comparable –
+
+| **Period** | **Gold Close** | **Gold Rt** | **Gold norm** | **Silver Close** | **Silver Rt** | **Silver norm** |  |
+|---|---|---|---|---|---|---|---|
+| 5/10/2016 11:30 | 30000 |  | 100.00 | 43040 |  |  | 100.0 |
+| 5/10/2016 11:00 | 30000 | 0.000% | 100.00 | 43068 | 0.065% |  | 100.1 |
+| 5/10/2016 10:30 | 30015 | 0.050% | 100.05 | 43100 | 0.074% |  | 100.1 |
+| 5/10/2016 10:00 | 30025 | 0.033% | 100.08 | 43163 | 0.146% |  | 100.3 |
+| 4/10/2016 23:00 | 30149 | 0.413% | 100.50 | 42925 | -0.551% |  | 99.7 |
+| 4/10/2016 22:30 | 29885 | -0.876% | 99.62 | 42708 | -0.506% |  | 99.2 |
+| 4/10/2016 22:00 | 29970 | 0.284% | 99.90 | 43016 | 0.721% |  | 99.9 |
+| 4/10/2016 21:30 | 30016 | 0.153% | 100.05 | 43239 | 0.518% |  | 100.5 |
+| 4/10/2016 21:00 | 30016 | 0.000% | 100.05 | 43275 | 0.083% |  | 100.5 |
+| 4/10/2016 20:30 | 30140 | 0.413% | 100.47 | 43353 | 0.180% |  | 100.7 |
+| 4/10/2016 20:00 | 30180 | 0.133% | 100.60 | 43617 | 0.609% |  | 101.3 |
+| 4/10/2016 19:30 | 30250 | 0.232% | 100.83 | 43723 | 0.243% |  | 101.6 |
+| 4/10/2016 19:00 | 30200 | -0.165% | 100.67 | 43821 | 0.224% |  | 101.8 |
+| 4/10/2016 18:30 | 30350 | 0.497% | 101.17 | 44253 | 0.986% |  | 102.8 |
+| 4/10/2016 18:00 | 30380 | 0.099% | 101.27 | 44275 | 0.050% |  | 102.9 |
+| 4/10/2016 17:30 | 30500 | 0.395% | 101.67 | 44321 | 0.104% |  | 103.0 |
+| 4/10/2016 17:00 | 30641 | 0.462% | 102.14 | 44632 | 0.702% |  | 103.7 |
+| 4/10/2016 16:30 | 30660 | 0.062% | 102.20 | 44700 | 0.152% |  | 103.9 |
+| 4/10/2016 16:00 | 30630 | -0.098% | 102.10 | 44770 | 0.157% |  | 104.0 |
+| 4/10/2016 15:30 | 30630 | 0.000% | 102.10 | 44808 | 0.085% |  | 104.1 |
+| 4/10/2016 15:00 | 30625 | -0.016% | 102.08 | 44750 | -0.129% |  | 104.0 |
+
+Correlation 0.70600911
+
+If you were to just look at the graph and take a call on how closely the two metals move, then chances are you would have disregarded any sort of correlation between them J, but the actual numbers paint a completely different picture!
+Anyway, as I mentioned earlier, I’ve used intraday data here to develop both the correlation and the graph. Longer term data will portray more meaningful information. In fact, I dug up the correlation data between silver and gold from a recent survey by Thomson Reuters, and here is what they suggest –
+The correlations are broken down on a quarterly basis (clearly a longer term approach here) and as you can see the correlation between Gold and Silver is on average is about 0.8, which is why traders prefer to call this pair the ‘Bullion Twins’.
+The tight EOD correlation implies that traders and investors consider both gold and silver as safe havens in times of economic crisis. This further implies that any global geo political tensions tend to drive the price of not just gold, but silver as well.
+
+|  | **Q1 15** | **Q2 15** | **Q3 15** | **Q4 15** | **Q1 16** |
+|---|---|---|---|---|---|
+| Gold | 0.87 | 0.70 | 0.62 | 0.95 | 0.93 |
+| US$ Index | -0.35 | -0.05 | -0.05 | -0.75 | -0.85 |
+| Oil (WTI) | -0.16 | -0.08 | 0.32 | 0.84 | 0.42 |
+| CRB Spot Metals | 0.42 | 0.50 | 0.25 | 0.85 | 0.85 |
+| GSCI | -0.42 | 0.08 | 0.44 | 0.84 | 0.64 |
+| Copper | -0.48 | 0.59 | 0.39 | 0.92 | 0.74 |
+| S&P 500 | -0.30 | 0.29 | 0.27 | -0.13 | 0.41 |
+| Source: GFMS, Thomson Reuters |  |  |  |  |  |
+
+CORRELATIONS OF CHANGES IN DAILY PRICES
+
+Also, please do note the correlation of Silver with Oil, it is quite erratic and gives a sense on unreliability here.
+
+## ## 9.2 - The Silver Basics
+
+Silver has applications in industrial fabrication, photography, fashion, electrical, and electronics industries. Hence, there is always a demand for silver. In fact, the recent survey from ‘The Silver Institute’ in the United States suggests that the global silver demand stands at 1170.5 million ounces. Historically, the demand for silver has grown at roughly 2.5% year on year. Out of the total global demand, bulk of it comes from industrial fabrication and manufacturing. This directly suggests that the price of silver is kind of influenced by growth of manufacturing and industrial economies such as China and, to some extent, India.
+On the supply side, global mining production along with scrap and sovereign sales stands at 1040.6 million ounces, clearly indicating that silver as a commodity is under slight deficit. The supply has not really improved over the years; in fact, the data suggests that the growth in supply has just been about 1.4%.
+Here is the table which gives you the complete demand supply scenario in silver -
+
+You can read the complete survey report.
+Given how the supply and demand scenario plays out, there is a lot of scope to trade silver as a commodity. This leads us back to the most important question – who decides the rate of silver? Well, silver rates are fixed the same way as that of gold, in London, by a pool of participating banks. To know how gold/silver rates are fixed, I’d recommend you read this.
+
+## ## 9.3 – The Silver contracts
+
+There are four variants of silver contracts that are available for you to trade on MCX. They differ mainly in terms of contract value, and therefore the margin required. These contracts are as follows –
+
+| **(million ounces)** | **2006** | **2007** | **2008** | **2009** | **2010** | **2011** | **2012** | **2013** | **2014** | **2015** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Supply |  |  |  |  |  |  |  |  |  |  |
+| Mine Production | 643.4 | 667.7 | 684.7 | 717.3 | 753.0 | 757.6 | 790.8 | 823.7 | 868.3 | 886.7 |
+| Net Government Sales | 78.5 | 42.5 | 30.5 | 15.6 | 44.2 | 12.0 | 7.4 | 7.9 | - | - |
+| Scrap | 207.1 | 204.2 | 202.0 | 201.2 | 227.5 | 261.5 | 255.5 | 192.1 | 168.3 | 146.1 |
+| Net Hedging Supply | -11.6 | -24.1 | -8.7 | -17.4 | 50.4 | 12.2 | -47.1 | -34.8 | 16.8 | 7.8 |
+| Total Supply | 917.3 | 890.3 | 908.6 | 916.7 | 1,075.2 | 1,043.3 | 1,006.6 | 988.9 | 1,053.3 | 1,040.6 |
+| Demand |  |  |  |  |  |  |  |  |  |  |
+| Jewelry | 174.5 | 182.3 | 177.6 | 176.9 | 190.0 | 187.9 | 185.4 | 217.8 | 224.0 | 226.5 |
+| Coins & Bars | 50.7 | 56.1 | 192.3 | 91.6 | 144.4 | 210.4 | 160.5 | 242.1 | 236.1 | 292.3 |
+| Silverware | 62.1 | 60.2 | 58.4 | 53.2 | 51.6 | 47.2 | 43.7 | 58.8 | 60.7 | 62.9 |
+| Industrial Fabrication | 648.9 | 661.0 | 656.8 | 542.6 | 650.3 | 676.3 | 615.0 | 619.1 | 611.2 | 588.7 |
+| _of which Electrical & Electronics | 242.3 | 262.5 | 271.7 | 227.4 | 301.2 | 290.8 | 266.7 | 266.0 | 263.4 | 246.7 |
+| _of which Brazing Alloys & Solders | 54.7 | 58.3 | 61.6 | 53.6 | 60.9 | 62.7 | 60.6 | 63.2 | 66.1 | 61.1 |
+| _of which Photography | 142.2 | 117.0 | 98.2 | 76.4 | 67.5 | 61.2 | 54.2 | 50.5 | 48.5 | 46.7 |
+| _of which Photovoltaic* |  |  |  |  |  | 75.8 | 62.9 | 62.5 | 63.2 | 77.6 |
+| _of which Ethylene Oxide | 6.6 | 7.9 | 7.4 | 4.8 | 8.7 | 6.2 | 4.7 | 7.7 | 5.0 | 10.2 |
+| _of which Other Industrial* | 203.1 | 215.3 | 217.9 | 180.4 | 212.1 | 179.4 | 165.8 | 169.3 | 165.1 | 146.4 |
+| Physical Demand | 936.3 | 959.6 | 1,085.1 | 864.2 | 1,036.4 | 1,121.8 | 1,004.6 | 1,137.9 | 1,131.9 | 1,170.5 |
+| Physical Surplus/Deficit | -19.0 | -69.3 | -176.6 | 52.5 | 38.8 | -78.5 | 2.0 | -149.0 | -78.6 | -129.8 |
+| ETP Inventory Build | 126.8 | 54.8 | 101.3 | 156.9 | 129.5 | -24.0 | 55.3 | 2.5 | 1.5 | -17.7 |
+| Exchange Inventory Build | -9.0 | 21.5 | -7.1 | -15.3 | -7.4 | 12.2 | 62.2 | 8.8 | -8.8 | 0.3 |
+| Net Balance | -136.8 | -145.5 | -270.7 | -89.2 | -83.3 | -66.7 | -115.5 | -160.2 | -71.3 | -112.5 |
+| Silver Price, $ per oz. | 11.55 | 13.38 | 14.99 | 14.67 | 20.19 | 35.12 | 31.55 | 23.79 | 19.08 | 15.68 |
+| *Photovoltaic demand included in "Other Industrial" prior to 2011 |  |  |  |  |  |  |  |  |  |  |
+| © CFMS, Thomson Reuters / The Silver Institute |  |  |  |  |  |  |  |  |  |  |
+
+TABLE 1 - WORLD SILVER SUPPLY AND DEMAND
+
+Of all the four contracts, the ‘Silver’ 30 kg contract and ‘Silver Mini’ are most actively traded on MCX, we shall discuss both these contracts detail. Let us begin with the main Silver contract.
+The price quotation for the Silver contract is 1 kilogram. This means when you check the price of Silver on MCX or on your trading terminal, the price that you see is for 1 kg of silver. This price includes the import duties, taxes, and all the other applicable duties. Have a look at the screenshot below (taken from Kite) –
+
+| **Contracts** | **Price Quote** | **Lot Size** | **Tick Size** | **P&L/tick** | **Expiry** | **Delivery Units** |
+|---|---|---|---|---|---|---|
+| Silver | 1 kilogram | 30 kgs | Rs.1/tick | Rs.30/tick | 5th day of expiry month | 30 kgs |
+| Silver Mini | 1 kilogram | 5 kgs | Rs.1/tick | Rs.5/tick | Last day of expiry month | 30 kgs |
+| Silver Micro | 1 kilogram | 1 kg | Rs.1/tick | Rs.1/tick | Last day of expiry month | 30 kgs |
+| Silver 1000 | 1 kilogram | 1 kg | Rs.1/tick | Rs.1/tick | Last day of expiry month | 1 kg |
+
+The current price of Silver December Future is Rs. 42,266/-, note this is quoted on a per kg basis. Since the contract is for 30 kgs (lot size), the contract value will be –
+= 30 * 42,266
+= Rs.12,67,980/-
+The margins on Silver is roughly 5%, in fact here is the snapshot of the margin required to trade this contracts –
+This works out to –
+= 68619/1267980
+= 5.41%
+The P&L per tick can be calculated using the following formula –
+P&L per tick = (Lot Size / Quotation) * Tick Size
+
+| **SILVER DEC FUT MCX** |  |  | **+0.51 % 42266.00** |  |  |
+|---|---|---|---|---|---|
+|  | **BIDS** |  | **OFFERS** |  |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 42266.00 | 1 | 4 | 42270.00 | 2 | 2 |
+| 42265.00 | 1 | 1 | 42272.00 | 1 | 1 |
+| 42260.00 | 1 | 4 | 42274.00 | 1 | 2 |
+| 42257.00 | 1 | 4 | 42276.00 | 1 | 4 |
+| 42256.00 | 2 | 2 | 42278.00 | 1 | 2 |
+| Total |  | 582 | Total |  | 770 |
+| EXPIRY | 2016-12-05 |  | VOL. TRADED | 2,357 |  |
+| O 42300.00 | H 42400.00 |  | L 42235.00 | C 42051.00 |  |
+
+= (30 kgs /1 kg) \* Rs.1/-
+
+## = Rs. **30/-**
+
+So for every tick on Silver, you either make Rs.30/- or lose Rs.30/-
+As far as the contracts expiries are concerned, here are the set of contracts that are available to trade as of now (as of Oct 2016), note all contracts expire on the 5<sup>th</sup> of the contract month -
+\(\bullet\) December 2016 \(\bullet\) March 2017 \(\bullet\) May 2017 \(\bullet\) July 2017 \(\bullet\) September 2017
+When the December 2016 contract expires, the December 2017 contract gets introduced to the market. You must be aware by now that the most liquid contract to trade would be the one which has the closest expiry date. For example, we are now in Oct 2016 and if I were to trade Silver, I’d choose the December 2016 contract.
+Do recall, settlement in equities is always in cash and not physical. However, when it comes to commodities, the settlement is physical and therefore ‘delivery’ is compulsorily. This means if you hold 10 lots of Silver and you opt for delivery then you will get delivery on 300 kg of Silver. In order to get the delivery of the commodity, one has to express his intention to do so. This has to be done any time before 4 days to expiry. So given that the expiry is on 5th, one has to express his intent to take delivery anytime on or before the 4th (1st, 2nd, 3rd, 4th).
+If you are trading with Zerodha, note that we do not allow you to get into the physical delivery of commodities. So you will be forced to close the position before 1st of the expiry month. In fact, I personally prefer to close the positions early on and not really get into the physical delivery of commodities just because of the logistics involved.
+Another important point to note here – while the delivery is mandatory for Silver (30 kgs) contract, delivery is not mandatory for the Silver Mini and Silver Micro contracts. This means to say that you can let the Silver Mini/Micro contract expire and settle for
+
+cash (or opt for delivery). However, you do not have the option to cash settle the Silver 30 kg contract.
+Finally, here is something else you should know. Have a look at this snapshot below –
+The table above maps a commodity with a location, for example Silver Micro is mapped to Ahmedabad. Ever wondered what this really means?
+We all know that upon expiry, the price of the underlying in the spot market and its futures price converge to a single price point. Now in case of equities, the underlying and its futures are traded on the same platform i.e. NSE (and now BSE as well). So for example Infosys Spot in NSE will converge with Infosys Futures on NSE. However, in case of commodities there are many different spot markets. For example, Pepper and Rubber are prominently traded in Kochi. Gold is traded in both Mumbai and Ahmedabad and so on. Given this, upon expiry, the futures of Gold should merge with which spot price? Should it be the one in Mumbai or the one in Ahmedabad? For this exact reason, MCX has mapped each commodity with a spot market, and upon expiry the futures price will converge with the price of the designated spot market.
+
+## ## 9.4 – The other Silver contracts
+
+If you are comfortable with the contract details of Silver mentioned above, then it is fairly easy to understand the other silver contracts that are traded on MCX. They vary mainly in terms of the lot size and therefore the margin requirement.
+
+| **Commodity** | **Unit** | **Location** |
+|---|---|---|
+| SILVER1000 | 1 KGS | NEWDELHI |
+| SILVERMIC | 1 KGS | AHMEDABAD |
+| SOYABEAN | 100 KGS | INDORE |
+| SUGARMDEL | 100 KGS | DELHI |
+| SUGARMKOL | 100 KGS | KOLHAPUR |
+| SUGARSKLP | 100 KGS | KOLHAPUR |
+| TIN | 1 KGS | MUMBAI |
+| WHEAT | 100 KGS | DELHI |
+| ZINC | 1 KGS | MUMBAI |
+| ZINCMINI | 1 KGS | MUMBAI |
+
+I’ll skip working out the math, but instead put up the margin numbers and the delivery option directly for you. The delivery option helps you decided whether you would like to take delivery of the contract or simply cash settle.
+As far as trading is concerned, similar to Gold, the Silver Fundamentals are quite complex – tracking them on a day to day basis may not really be possible and in fact is not really required. Most traders I know trade commodities based on technical analysis. I personally think this a much better way to go about active commodity trading.
+Apart from technical analysis, one can even choose to trade based on quantitative techniques such as ‘Pair Trading’. As stated earlier in this chapter, we’ll discuss this technique in a separate module altogether.
+
+## **Key takeaways from this chapter**
+
+1. Gold and Silver are correlated both on an intraday basis and on an end of day basis.
+2. Gold and Silver make a good pair for trading based on the ‘Pair trading technique’.
+3. Silver does not have a great correlation with crude oil.
+## 4. There are 4 variants of silver traded on MCX.
+
+| ** Contract** | ** Margin Required** | ** Margin as a \%** | ** Delivery options** |
+|---|---|---|---|
+| Silver Mini | Rs.13,158/- | 6.27\% | Cash/Physical |
+| Silver Micro | Rs.2,618/- | 5.1\% | Cash/Physical |
+| Silver 1000 | Rs.2,711/- | 6.2\% | Physical only |
+
+As you can see, the margins required are much lesser (quite naturally) compared to the big silver contract.
+
+5. The main Silver contract has a lot size of 30 kgs and requires a margin close to Rs. 75,000/-.
+6. The average margin requirement for silver is roughly between 5-6% of the contract value.
+7. Technical analysis works quite well on Silver.
+
+Crude Oil (Part 1), digging the past
+
+## 10.1 – The Commodities super star
+
+If I have to pick one international commodity which can give you all the dramatic ups and downs of stock markets as portrayed in the movies, then it has to be the ‘Crude Oil’. Wonder why? Have a look at the chart below –
+
+The dramatic rise to $140 per barrel to the immediate sharp correction, then a recovery back to near Ş110 to a merciless crash to sub Ş30, the crude oil chart can invoke all human emotions, just like a perfectly well directed movie! The fact that this is an international commodity, actively traded by hundreds of thousands of traders across the globe only adds to the complexity of it all.
+So what is really going on in crude? Why did crude crack from the highs of §115 all the way down to Ş28? What caused this manic panic? What is happening to crude now? Where are we headed now? To understand this fully, we need to rewind and dig into the recent history of 2014 - 15.
+This is exactly what we will do in this chapter. For the sake of this chapter, let us go back to first half of 2015 and see how things looked back then.
+
+## ### 10.2 - The crisis revisited
+
+From over Ş110 per barrel in January 2014 to a low of Ş28 per barrel in January 2016, the Brent Crude oil has perhaps seen the worst decline in prices over the recent 5 years. While this dramatic price decline has brought cheer to a few corporate and perhaps few countries, it has disrupted oil producing economies. Literally nobody saw this coming; even if someone did, the magnitude of this fall (over 75%) was beyond everybody’s wildest imagination. Is this the bottom of the crash? Well, your guess is as good as mine, but the intensity of the crash in crude oil is so severe, it would be hard to believe the bottom is in sight.
+So what really went wrong?
+To understand what went wrong, we need to understand the dynamics of crude oil and how business was carried out before the recent crash. This discussion also doubles up as ‘oil basics’ for you. Oil rich countries produced several million barrels of crude oil which were exported to The US, China, India, and European countries on a daily basis. The oil producing countries are split into two baskets -
+1. "Organization of the Petroleum Countries **(OPEC)**" nations which include countries like Saudi Arabia, Qatar, Kuwait, UAE, etc., and
+
+2. Other oil producing countries such as – Brazil, Canada, Russia, Mexico, Norway, etc., choose not be part of the oil cartel i.e. OPEC. Hence they are just referred to as ‘Non OPEC countries’.
+Between the OPEC and non OPEC countries, close to 90 million barrels of oil were pumped on a daily basis. The graph below shows the daily oil production split between OPEC and non OPEC countries –
+
+## ## The Trigger
+
+Different countries produce oil at different rates; this rate at which they produce mainly depends on the individual country’s finances and technology. While production depends on internal factors, the sale of oil has always been driven by markets. Clearly the breakeven point (expressed on a per barrel basis), is the rate at which countries need to sell per barrel of oil to cover the expense of producing the same, varies from country to country. Naturally, selling oil below the breakeven point implies that the country cannot balance their state budget. The table below shows the breakeven points for the OPEC countries –
+
+In the backdrop of these trade dynamics, a triple digit oil price till early 2013 worked really well for the oil producing economies. However, the recent developments changed the landscape of crude oil business dynamics. Specifically, the following three major events turned the tables around for crude oil prices -
+1. **American Shale Oil** – The American shale oil, which comes from oil shale (sedimentary rocks containing bituminous material), which is an alternate to crude oil became technologically viable and the cost of producing the same became relatively cheaper. The output from the American Shale oil production increased, flooding the market with cheaper oil. By current estimates, it is believed that US has enough shale oil reserves to last generations. Shale oil from Texas and North Dakota displaced exports from OPEC members to The USA. This set the stage for a collapse in crude oil prices.
+2. **Lack of co-ordinate action** – In the backdrop of increased shale oil production in The USA and the ongoing slide in crude oil price, one of the methods for oil producing countries to control the situation was to lower the supplies and regulate the demand supply situation. However, OPEC was not really successful in convincing OPEC and other non OPEC oil producing countries to cut the crude oil production to support the crude price. In fact, cutting oil production is considered more expensive than pumping oil.
+3. **China Factor** – China has been one of the largest consumers of major international commodities including iron ore, coal, and crude oil. In fact, in 2013 China surpassed The US in oil imports. However, reports suggest that the Chinese economy is not growing at the same pace as it used to, resulting in lower demand for international
+
+| **Country** | **Breakeven point on a per barrel basis*** |
+|---|---|
+| Iran | $130.7 |
+| Algeria | $130.5 |
+| Nigeria | $122.5 |
+| Venezuela | $117.5 |
+| Saudi Arabia | $106.0 |
+| Iraq | $100.6 |
+| UAE | $77.3 |
+| Qatar | $60.0 |
+| Kuwait | $54.0 |
+
+commodities. Needless to say, this has a significant impact on the spiralling crude oil prices.
+4. **Market Dynamics** - The above three points triggered a steep sell off in crude oil, adding fire to this sell off was the heavy short positions built up on Crude Oil contracts.
+Generally, when the price of crude oil falls, the US dollar tends to get stronger especially over the currencies of the emerging economies. This is quite natural as **an increase in oil** price widens the US current account deficit (remember US also imports oil from the Middle East), which obviously is not a great factor for the US Dollar, and the reverse helps the dollar strengthen. **Hence the Dollar and oil share an inverse relation**. Do recollect, in 2008 when Oil hit a peak of $148, US Dollar was trading at 1.6 to the EURO.
+
+## ## The Russian Episode
+
+Russia is one of the largest (non OPEC) producers and exporters of oil. The Russian federation’s oil exports contribute nearly 40% of the total exports. With a slump in oil prices, the Russian economy seems considerably weakened. There are three factors working against Russia, two of which can be directly attributed to the oil prices -
+1. **Oil Price** - Russia needs the oil prices to be approximately in the region of $105 - $107 to balance its budget and keep its finances in order; clearly with oil at $50, Russia gets a severe blow on its budget.
+2. **Ruble Trouble** - Remember, Russia is an emerging economy. With the slide in oil price, the Russian Ruble has massively weakened against the US Dollar. So much so, that the Russian Central Bank increased the interest rate overnight by 7.5% in order to defend the Ruble (yes, this did happen back in 2015).
+3. **Crimea Curse** - Western countries continue to impose sanction cuts on Russia for its aggression on Ukraine. This means access to external capital is extremely difficult (especially when it’s most required) for Russia.
+Add to this the Syrian crisis, and a host of other local factors, there is little hope that that Russia may not actually slip into a financial coma dragging the federation into a recession.
+
+## ## The India macro angle
+
+On the face of it, the fall in crude oil seems to significantly benefit India as the pressure on petroleum subsidy eases. India being a net oil importer (nearly two-third of India’s oil is imported) pays a heavy bill for its oil imports. Naturally the fall in crude oil means improvement in the fiscal deficit, easing of inflation and possibility of an interest rate cut. All of which is desirable for India in the backdrop of the current economic situation.
+But there is another angle to low oil prices. While low oil prices help the domestic import bill, it will also impact our exports receipts. Most of the exports from India are to countries whose economy depends on oil – UAE, US, Saudi Arabia, Kuwait, Iran, China etc. Quite naturally, with low oil prices the spending by these countries also decreases, thereby impacting business with India.
+
+## **Is this the end?**
+
+In fact, if you go back and look at the October 2014 import & export data from RBI, it clearly suggests the same – while the oil import bill reduced by 19% (y-o-y), the exports also declined by 5%. Clearly the advantage of low oil price is not the boon it seems to be. In fact, on 6<sup>th</sup> January 2015 we got a glimpse into what can happen if the oil price continues its fall – the NSE Nity fell over 255 (∼3.0% decline) points creating a ruckus on the street.
+
+## ## Impact on the Indian Companies
+
+State owned oil marketing companies (OMC) such as HPCL, BPCL, and IOC are a direct beneficiary of low oil prices. Low oil price has a positive impact on oil marketing companies (OMC) in terms of reducing the stress on their working capital requirements. In fact, both BPCL and HPCL have retired over 50% and 30% of their short term borrowings over the last two years respectively. If the price of crude oil prices stabilizes around the current level of $50 per barrel, then naturally it will be great for these companies in term of cleaning up their balance sheets and improving their bottom line.
+Well, this just depends on the supply-demand situation. Clearly as Saudi Prince Al- Waleed Bin Talal says, “If the supply stays where it is and the demand continues to be where it is, then there is little hope for the oil prices to bottom out here”. Besides, the US has withdrawn the 40-year ban on export of oil– which means more supply to the market, thereby putting more pressure on prices.
+
+Last month, i.e., September 2016, OPEC has finally agreed to cut the production in order to support the oil price. You can read the <u>**article on Bloomberg.**</u>
+American shale oil has no doubt created a ripple in the market but there is another angle to this - how strong are the balance sheet of these companies fracking shale oil? Are they over leveraged? Are they overstating the reserves? These are things the market will learn sooner or later; which will again impact crude oil prices.
+However, at this stage if you ask me - is this the bottom of the oil price crash? Well, your guess is as good as mine.
+Please note, unlike all the previous chapters on Varsity, this chapter will not have any key take away points as I’ve just narrated what really happened to crude. What we have discussed today could just be a piece of irrelevant history going forward!
+_PS: I have taken all the inputs for this chapter form <u>The special report</u> on oil crisis was published by Dalal Street Investment journal, authored by me._
+
+Crude Oil (Part 2), the crude oil
+ecosystem
+
+## ## 11.1 – Mapping companies
+
+I’m hoping that the previous chapter gave you some insight into the current situation
+of the crude oil fundamentals. Some of you may also be interested in learning how
+crude oil is extracted from the ground and supplied to various stakeholders such as the
+refineries. The ‘Oil and Gas videos’ channel on YouTube, has done a stellar job in
+putting up short animated videos on this topic. If not all the videos, I’d encourage you
+to at least <u>watch this one</u>.
+This animated video gives a beautiful, high level understanding of how oil is extracted
+from the ground and ocean beds. You will also understand what ‘oil rigs’ are in this
+video. They are those huge pad-like things, floating in the ocean, with flames spewing
+out of the exhaust. Companies such as Aban Offshore, Selan Exploration, Cairn India
+etc., are involved in setting this infrastructure up. I know a lot of traders and even
+investors investing in these asset heavy companies, without knowing the operational
+core of such companies. Personally, I think this is not a great idea; one should always
+know what they are dealing with. Given this, and the relevance of crude oil on many
+listed companies, I would like to briefly discuss how the oil industry is structured.
+
+## ## 11.2 – Upstream, Downstream, and Midstream
+
+A note of warning here - I’m no oil and gas expert; my knowledge is limited to just the
+basics. As a crude oil trader, I do think it is extremely important to know the industry
+dynamics simply because the trading opportunities may not always be presented to
+you directly. For example, there could be some fundamental change brewing in crude
+oil, it may not manifest into a trade in crude oil directly, but instead a trade opportunity
+may come about in the downstream companies. For you to benefit from this, it
+
+becomes imperative to know the layout of the industry and identify areas of opportunity. My objective here is to familiarize you with the industry layout and help you map companies and how they fit into the overall oil and gas ecosystem.
+So let us get started.
+The oil and gas industry can be segregated into three sections -
+1. The upstream industry
+2. The downstream industry
+3. The midstream industry
+Let us briefly discuss each one of the starting from the upstream companies.
+
+## ## Upstream companies
+
+The upstream companies are the ones that do the dirty work - they take on geological surveys, dig up bore wells to get a sense of what’s in the ground underneath, and if they find oil reserves, they then begin the drilling and extraction of crude oil. It takes many years for upstream companies to identify an asset (potential oil well) and convert it into a fully functional, profitable oil well. Upstream companies manufacture and store crude oil in barrels (millions of barrels are produced every day). These companies do R&D and engineering, and are asset heavy. Therefore, they end up spending a lot of money (read as capital expenditure) to extract oil.
+
+However, the price at which they can sell this oil in the open market is not really in their control. The price is determined by the markets in which market participants like you and I participate and influence the international oil price. Every upstream company has a breakeven point – defined as the cost of producing one barrel of oil. The breakeven point is also referred to as the ‘full cycle cost’. Naturally, these companies would strive hard to keep their costs low and bring down the full cycle cost.
+Companies such as ONGC, Carin India, Reliance Industries, Oil India are some of the Indian upstream companies. Internationally companies such as Shell, BP, Chevron etc., fall in this category.
+The key point to note here is that low oil prices do not really favor upstream companies in general, especially the ones which have high economies of scale (the ones which have high full cost cycle). Obviously, higher oil price is good for these companies as their efforts to extract oil remain the same, but margins improve drastically.
+
+## ## Downstream companies
+
+We will talk about the **downstream industry** first, and then discuss the mid stream industry. Generally speaking, the job of the upstream companies ends at producing crude oil. ‘Crude oil’ as you realize is produced in its raw form. If we have to use it as petrol or diesel, then the crude oil has to be refined. This is where the downstream industry comes into the picture. These companies purchase the crude oil from upstream companies and refine the crude oil to various forms such as – petrol, diesel,
+
+aviation fuel, marine oil, kerosene, lubricants, waxes, asphalts, liquefied petroleum gas etc.,
+Companies in this sector also go the extent of distributing these products across the value chain, right from business to business (B2B distribution) to business to consumer (B2C) distribution. In fact, petrol bunks are a good example of this phenomenon. Petrol bunks are nothing but a retail outlet, retailing petroleum products and owned by downstream companies.
+Good examples of downstream companies in the Indian context are - BPCL, HPCL, IOC etc. Some companies try and integrate and operate across the value chain i.e., they try and do both upstream and downstream operations. Companies that successfully combine these operations are often referred to as the ‘Super Major’. Classic example of this is the US based ‘Exxon Mobil Corp’. They produce close to 4 million oil barrels per day and operate around 40 oil refineries across 21 countries. An operation of this scale is a mammoth management and operational undertaking; clearly not everybody’s cup of tea.
+So, if the oil prices cool off, then it implies that the downstream companies can buy oil at cheaper prices from the upstream company (which is not so good for upstream boys as their efforts to produce oil is still the same). However, the benefit of lower oil price is not passed on to the end user i.e. you and me, but in developed countries like US and UK, this benefit is passed on to the end users quite quickly.
+Anyway, here is what you need to remember at this stage -
+• Upstream and downstream companies share a see-saw relationship
+• Low oil prices are bad for the upstream boys but good for the downstream fellows
+• Higher oil price is good for upstream fellows but bad for downstream boys.
+So the next time you see oil prices going down, don’t be in a hurry to short ONGC or BPCL. Take a minute to understand weather the company is downstream or upstream company, and analyse the impact of oil prices on the company.
+
+## ## Midstream companies
+
+We will quickly discuss the **midstream companies** before looking into other aspects.
+In very loose terms, midstream companies are the ones act as a courier between the upstream and downstream companies. They are responsible for the transport of oil from the oil well to the refineries. They do this via pipelines, road transportation (oil takers), and by ocean shipments. Consider them as the wholesalers of crude oil. Some midstream companies try to deliver more on the value chain by refining the crude oil to some extent, hence their operations sometimes overlap with downstream companies. Since midstream companies deal with both up and downstream companies, they are kind of caught in the middle, they neither want oil prices to increase or decrease, but seek stability in oil prices. If oil price decreases, then upstream companies are affected, this is not good for them. Likewise, if the prices increase downstream companies are affected, this is again not so great for them.
+Some of the top players in this segment are transCanada, Spectra Energy, Williams and Company etc.
+Here is a snapshot which gives you a quick overview of all the three industries -
+
+## ## 11.2 – Difference between WTI Crude and Brent
+
+Many people tend to speak about ‘Crude Oil’ like as if it is a single uniform entity, something like Gold. However, this is not true. Did you know there are many varieties of crude oil which can be extracted from the ground below? The difference comes in mainly from the geographic variation and its unique characteristics. The impact of geography is so much that the characteristics of crude oil, right from thickness, colour (light yellow, golden yellow, deep black), viscosity, sulfur content, volatility etc., change drastically.
+Given this, naturally, there are many different types of Crude oil. I’ll not get into details of the many different types of oil - not that I don’t want to, it’s simply because I don’t know them myself J. I know the basic difference between to West Texas Intermediate (WTI) and Brent Blend, which is what matters to most of the crude oil traders and hence we will stick to it.
+Before we get into the difference between the two, let us touch upon two distinct characteristics of crude oil, which basically define the variation of crude.
+**API Gravity - API here stands for ‘American Petroleum Institute’, which is essentially a metric to compare the lightness of crude oil with that of water. If the ‘API Gravity’ of a particular variety of oil is higher than 10, it simply indicates that the oil is lighter than water, therefore the oil can float on water. API gravity less than 10 indicates that the oil is heavier than water; hence the oil will sink in water.
+
+Sweetness – Crude oil of any form will naturally contain sulfur. The lesser the content (I was told sub 0.5%) the ‘sweeter’ the oil is considered. Higher the content of sulfur, then the oil is not considered ‘not so sweet’.
+The difference between WTI and Brent mainly comes from the API Gravity and its sweetness.
+West Texas Intermediate (WTI) – This is considered a very superior quality of crude, hence the final refined products are also meant to be of superior quality. The API gravity is 39.6 (recall higher than 10, then it’s lighter than water) therefore WTI is considered super light. Further, the sulfur content is just 0.26 percent, making it a very sweet crude oil
+Brent Blend – Much like blended scotch, crude oil can also be blended to create variants with certain properties. Apparently, the Brent blend is created by blending oil from over 15 oil wells. Brent has a sulfur content of 0.37%, which makes it sweet, but not as sweet as WTI. The API gravity is around 38.06, which makes Brent quite ‘light’.
+Clearly, due to the variation in the characteristics, the two are traded at different prices. Have a look at the price quote for these two variants –
+Brent crude is priced higher compared to WTI. Most importantly, you need to know that crude oil traded on MCX follows the Brent crude and not WTI. In fact, Brent crude is the benchmark for International crude oil pricing.
+
+## 11.3 – Crude oil inventory levels
+
+Supply-demand effects crude oil prices and therefore the profitability of many companies linked at various points in the oil and gas eco-system. This makes tracking
+
+| **INDEX** | **UNITS** | **PRICE** | **CHANGE** | **%CHANGE** | **CONTRACT** | **TIME (EST)** | **2 DAY** |
+|---|---|---|---|---|---|---|---|
+| CLTI-COM WTI Crude Oil (Nymex) | USD/bbl. | 44.93 | -0.49 | -1.08% | Dec 2016 | 2:11 AM |  |
+| COV-COM Brent Crude (ICE) | USD/bbl. | 46.13 | -0.36 | -0.77% | Jan 2017 | 2:12 AM |  |
+
+Source: Bloomberg
+
+the inventory levels of crude oil prices important on several counts. You can use this information to trade not just crude at MCX, but also set up trades on companies such as BPCL, HPCL, IOC, ONGC etc.
+There are two organizations which out out the inventory details -
+1. US Energy Information Administration (US EIA) – They report the inventory levels on a weekly basis. You can track the `information here`. Remember inventories tend to increase when the demand is low or there is an oversupply, either which way, it is bad for oil prices, and hence the upstream companies. Likewise, lower inventories mean either there is a lot of demand or there is a cut in production, both ways it’s good for crude prices and upstream companies.
+2. OECD Crude Oil inventory – OECD stands for ‘Organization of Economic Co-operation and Development’. OECD also gives out crude oil inventory (but not at a weekly forecast like EIA). You can track the inventory position on <u>OECD’s website</u>.
+
+## **11.4 – The relationship between US Dollar and Crude Oil**
+
+The crude oil and US Dollar share an inverse relationship with each other. A strengthening US Dollar tends to drive the price of crude oil down. Likewise, weakening USD tends to drive the prices of crude oil higher. At this point it is very important to note that both these assets have their own supply demand dynamics influencing their price movement; however, they are also somewhat linked to one another.
+If you do an image search for ‘Crude Oil versus Dollar’, you will find many charts which display this inverse relationship. Here is one for example –
+
+The interesting thing to note here is, the dollar used in these charts is not the “USD Dollar Spot” but instead the ‘Dollar index’, which is a representation of dollar against major world currencies. This makes absolute sense as crude oil is an international currency priced in dollars, therefore irrespective of who is buying crude oil, payments happen in US dollars.
+Given this, if the Dollar increases (for whatever reasons), then countries tend to purchase more oil for the same level of dollar (more oil can be purchased for the same dollar level). This leads to quicker depletion of inventory levels, therefore the price of oil increases.
+The argument above is generally true over long time periods. However, please do remember that both these assets have their own fundamental dynamics playing. So there could be instances where both of them may break their inverse correlation and head in same direction.
+Also, remember the inverse correlation only suggests that the two assets move in opposite direction but does not say anything in magnitude. So for example if the dollar declines 10%, this does not imply that the Crude oil will increase 10%.
+In the next chapter, we will discuss the contract specification of Crude oil on MCX.
+
+Crude Oil (Part 3), the crude oil contract
+
+## ### 12.1 – The contract
+
+Crude oil is the most actively traded commodity on MCX. The combined value of crude oil (across all contracts) traded on MCX, on average, exceeds Rupees 3000 crores on a daily basis. This translates to roughly 8500 barrels of crude oil traded daily. Active market participation in crude oil comes in from both corporate and retail individual traders. On any given day, you can expect both upstream companies (ONGC, CAIRN, Reliance) and downstream companies (IOC, BPCL, HPCL) placing orders on MCX. If I were to guess, these institutional orders are mainly to hedge their exposure in the spot (physical) market. On the other hand, the retail traders mostly speculate on the crude oil prices.
+I’d encourage you to check the <u>**MCX ‘Bhav Copy’.**</u> This gives you a perspective on a particular contract’s liquidity and volume.
+There are two main Crude oil contracts which are traded on the MCX –
+1. Crude Oil (the big crude or the main contract)
+2. Crude Oil Mini (the baby version)
+In this chapter, we will learn how these contracts are structured - right from expiry to margins to P&L per tick.
+
+## ## 12.2 - Crude Oil, the big contract
+
+With an average daily traded value of Rupees 2500 Cr, the big crude oil contract is certainly one of the biggest contracts (value wise) that gets traded on MCX. Without wasting much time, let’s get straight to the contract details of the big crude.
+The contract details are as follows - \(\bullet\) \(\bullet\) Price Quote - Per barrel \(\bullet\) Lot size - 100 barrels \(\bullet\) Tick Size - Rs.1/- \(\bullet\) P&L per tick - Rs.100/- \(\bullet\) Expiry -19/20<sup>th</sup> of every month \(\bullet\) Delivery units - 50,000 barrels \(\bullet\) Physical Delivery - Mumbai / JNPT Port
+Let’s understand this information in better detail. The crude oil on MCX is quoted on a per barrel basis (one barrel is equal to 42 gallons or about 159 liters). Have a look at the image below; this is the snap shot of Crude oil’s market depth -
+
+As you can see, the Crude Oil contract expiring on 19th Dec 2016 is trading at Rs.3197/per barrel, quite obviously as we know price quote is on a per barrel basis.
+The lot size is 100 barrels, which means to say that if you want to buy (or go long) on crude oil, the value of such a contract will be -
+Lot size * price quote
+= 100 * 3198 (offer price to go long)
+= Rs. 319,800/-
+This is the contract value of the crude oil, but what about the margins? Unlike the margins on other commodities, the margin on crude oil is slightly higher. If you wish to carry the position forward overnight, then the margin requirement is roughly 9%.
+This means, 1 lot of crude oil (100 barrels) requires a margin deposit of -
+9% * 319800
+= Rs. 28,782/-
+In fact, you can use the margin calculator on Zerodha’s website to get a ready reference of approximate margin requirement. Here is the snap shot of the same -
+
+|  |  |  |  |  |  |  |
+|---|---|---|---|---|---|---|
+|  | **CRUDEOIL DEC FUT** | **MCX** | **-1.72 %** | **3197.00** |  |  |
+|  | **BIDS** |  | **OFFERS** |  |  |  |
+| PRICE | ORDERS | **QTY.** | **PRICE** | **ORDERS** | **QTY.** |  |
+| 3197.00 | 12 | 98 | 3198.00 | 5 | 7 |  |
+| 3196.00 | 9 | 77 | 3199.00 | 19 | 123 |  |
+| 3195.00 | 16 | 67 | 3200.00 | 44 | 108 |  |
+| 3194.00 | 6 | 28 | 3201.00 | 10 | 38 |  |
+| 3193.00 | 9 | 51 | 3202.00 | 26 | 114 |  |
+| Total |  | 2,395 | Total |  | 3,907 |  |
+|  | EXPIRY | 2016-12-19 VOL. TRADED |  | 60,386 |  |  |
+|  | 3255.00 | H | 3255.00 | L 3176.00 | 3253.00 |  |
+
+| **#** | **Commodity** |  | **€** **Lot size** | **** | **Price** | **** | **NRML Margin** | **** | **MIS Margin** |
+|---|---|---|---|---|---|---|---|---|---|
+|  | CRUDEOIL |  | 100 BBL |  | 3253 | 29114 |  | 14557 |  |
+|  | CRUDEOILM |  | 10 BBL |  | 3251 | 2912 1456 |  |  |  |
+
+The margin requirement under NRLM (for overnight position) is Rs. 29,114/-, assuming the price of Crude is Rs. 3,253/-. However, if you wish to make an intraday trade using MIS, then the margin requirement is roughly 4.5%. Clearly, as you can see from the snapshot above, margin under MIS is just Rs. 14,557/-.
+
+## ## 12.3 – Selecting the right contract to trade (expiry logic)
+
+New crude oil contracts are launched every month. The newly introduced crude oil contracts have an expiry scheduled six months later. For example, the contract introduced in November 2016, will have its expiry in 6 months i.e., May 2017. MCX puts up this information regularly in their circulars, but I find it a little confusing to interpret the expiry table. Here is what MCX intends to convey –
+And this is how the table in the circular reads –
+
+| **Current month** | **Contract Introduced** | **Expiry on** |
+|---|---|---|
+| November 2016 | May 2017 | 19th May |
+| December 2016 | June 2017 | 19th June |
+| January 2017 | July 2017 | 19th July |
+| February 2017 | August 2017 | 21st August |
+| March 2017 | September 2017 | 19th September |
+| April 2017 | October 2017 | 18th October |
+| May 2017 | November 2017 | 17th November |
+
+# Contract Launch Calendar of Crude Oil
+So, as I write this, its November 2016, which means to say the November 2016 contract must have been introduced in May 2016.
+Anyway, the point to note here is this –
+1. Every month a new contract, 6 months in advance is launched (long dated contracts).
+2. These contracts expire on or around 19<sup>th</sup> of the expiry month, 6 months later.
+3. Given this, each contract lasts for 6 months in the market.
+For active trading, always choose the near month contract. Now, assuming today is November 5<sup>th</sup> 2016, I’d choose the November 2016 contract expiring on 19<sup>th</sup> November to trade. Maybe around 15<sup>th</sup> or 16<sup>th</sup>November (as we progress closer to expiry), I’d shift to the December 2016 contract. The reason for this is simple. Liquidity is highest for the current month contract (November 2016 in this example). Liquidity picks up in the next month’s contract (i.e. December 2016) as we move closer to the expiry of current month’s contract.
+All the other contracts, even though exist in the market, pretty much lead a meaningless life, until they become current.
+
+| **Contract Month Contract Launch Date Contract Expiry Date** |  |  |
+|---|---|---|
+| January 2017 | 20th July 2016 | 19th January 2017 |
+| February 2017 | 22nd August 2016 | 17th February 2017 |
+| March 2017 | 20th September 2016 | 20th March 2017 |
+| April 2017 | X 0th October 2016 | 19th April 2017 |
+| May 2017 | 21st November 2016 | 19th May 2017 |
+| June 2017 | 20th December 2016 | 19th June 2017 |
+| July 2017 | 20th January 2017 | 19th July 2017 |
+| August 2017 | 20th February 2017 | 21st August 2017 |
+| September 2017 | 21st March 2017 | 19th September 2017 |
+| October 2017 | 20th April 2017 | 18th October 2017 |
+| November 2017 | 22nd May 2017 | 17th November 2017 |
+| December 2017 | 20th June 2017 | 18th December 2017 |
+
+## ## 12.3 – The Crude Oil Mini contract
+
+The Crude Oil mini is quite a favourite amongst the trading community. The reason for this is straightforward –
+1. The margin required is lesser
+2. The P&L per tick is lot lesser - _did you know people prefer to see lesser loss than seeing higher profits?_
+Here are the contract details –
+• Price Quote – Per barrel
+• Lot size – 10 barrels
+• Tick Size – Rs.1/-
+• P&L per tick – Rs.10/-
+• Expiry -19/20<sup>th</sup> of every month
+• Delivery units – 50,000 barrels
+• Physical Delivery – Mumbai / JNPT Port
+Have a look at the quote below –
+The Crude Oil Mini, December future is trading at Rupees 3,210/- per barrel. The contract value for this would be -
+Rs. 3,210 \* 10
+= Rs. 32,100/-
+
+| CRUDEOILM DEC FUT | MCX | \multicolumn{4}{c}{+3.12 % | 3210.00 |  |  |
+|---|---|---|---|---|---|
+|  | BIDS | OFFERS |  |  |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 3210.00 | 1 | 1 | 3211.00 | 11 | 89 |
+| 3209.00 | 6 | 105 | 3212.00 | 8 | 26 |
+| 3208.00 | 9 | 160 | 3213.00 | 5 | 23 |
+| 3207.00 | 4 | 83 | 3214.00 | 12 | 32 |
+| 3206.00 | 3 | 53 | 3215.00 | 20 | 54 |
+| Total |  | 10,448 | Total |  | 2,478 |
+|  | EXPIRY 2016-12-19 |  | VOL. TRADED |  | 88,728 |
+|  | O 3125.00 H 3230.00 |  | L 3125.00 |  | C 3113.00 |
+
+The margin required in percentage terms is little higher – around 9.5% for NRML and 4.8% for MIS.
+This puts the margin requirement for NRML at Rs. 3,049/- and Rs. 1,540/- for MIS. Clearly, way lower compared to the margin required for the big Crude oil.
+Except for lot size, and therefore the margins, the other remaining features don’t change for both the crude oil contract contracts.
+
+## ## 12.4 – Crude Oil Arbitrage
+
+Have a look at the image below –
+The first part of the snapshot captures Crude Oil December future (big crude contract) along with its market depth. The second part of the snapshot captures the Crude Oil Mini December contract along with its market depth.
+
+| **CRUDEOIL DEC FUT** |  | **MCX** |  | **+3.47 %** |  | **In 3221.00** |
+|---|---|---|---|---|---|---|
+|  | **BIDS** |  |  |  | **OFFERS** |  |
+| PRICE | ORDERS | QTY. | PRICE |  | ORDERS | QTY. |
+| 3221.00 | 1 | 1 | 3222.00 |  | 11 | 93 |
+| 3220.00 | 9 | 71 | 3223.00 | 7 |  | 84 |
+| 3219.00 | 5 | 51 | 3224.00 | 8 |  | 51 |
+| 3218.00 | 7 | 47 | 3225.00 |  | 36 | 110 |
+| 3217.00 | 4 | 25 | 3226.00 | 12 |  | 23 |
+| Total |  | 4,864 | Total |  |  | 1,518 |
+
+| EXPIRY | 2016-12-19 | VOL. TRADED |
+|---|---|---|
+| 0 3135.00 | H 3232.00 | L 3128.00 |
+| CRUDEOILM DEC FUT MKX |  | +3.47 % A 3221.00 |
+
+|  | **BIDS** |  |  | **OFFERS** |  |
+|---|---|---|---|---|---|
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 3221.00 | 1 | 1 | 3222.00 | 9 | 151 |
+| 3220.00 | 9 | 53 | 3223.00 | 3 | 59 |
+| 3219.00 | 10 | 24 | 3224.00 | 11 | 78 |
+| 3218.00 | 5 | 67 | 3225.00 | 80 | 202 |
+| 3217.00 | 3 | 56 | 3226.00 | 16 | 79 |
+| Total |  | 11,838 | Total |  | 2,835 |
+
+| **EXPIRY** | **2016-12-19** |  | **VOL. TRADED** | **1,00,439** |  |
+|---|---|---|---|---|---|
+
+All else equal, both these contracts at the same time should trade at the same price. They are not supposed to trade at different prices, since the underlying is the same. In fact, this is what we notice here - both Crude oil contracts trade at Rs. 3,221/-.
+But, what if they don’t?
+Let’s say, for whatever reason, both these contracts trade at different prices? For example, Crude Oil is trading at Rs. 3,221/- and the Crude Oil Mini is trading at Rs. 3,217/-. Do we have a trading opportunity here? Yes, of course, we do have an arbitrage opportunity here, and here is how we can trade this.
+Crude Oil - 3221
+Crude Oil Mini = 3217
+Risk free profit potential (arbitrage) = 3221-3217 = 4 points
+
+## Trade Setup -
+
+We know the rule of thumb in any arbitrage trade - always buy the cheaper asset and sell the expensive one. So in this case -
+We buy the crude oil mini at 3217 and sell the crude oil at 3221. However, please note, for a perfect arbitrage opportunity, we should always trade similar values.
+The contract value of Crude oil is - 3221 \* 100 = Rs. 3,22,100/-
+The contract value of Crude oil mini is 3217 \* 10 = Rs. 32,170/-
+Given this, one should buy 10 lots of Crude oil mini at 3217 and sell 1 lot of crude oil at 3221. By doing so, the contract sizes are similar and therefore the arbitrage holds.
+Once we execute this trade (efficiently), the arbitrage profit is locked in. Remember, in all arbitrage cases, the price will converge to a single price point. So assume the price finally converges to 3230 -
+We make +13 points on the crude oil mini and we lose -9 points on crude oil, and on a net basis we make 4 points.
+In fact, irrespective of where the price heads the 4 points are guaranteed.
+
+It is unlikely you will find such sweet opportunities on a daily basis, and even if you do, algorithms grab them. However, I have occasionally witnessed such opportunities lasting for several minutes.
+So do watch out for such trading opportunities, and if it indeed comes by, you know what to do.
+This brings us to the end of our conversation on Crude Oil. Over the next few chapters, we will focus our attention towards ‘Metals’.
+
+## **Key takeaways from this chapter**
+
+1. There are two crude oil contracts available - Crude Oil and Crude Oil mini
+2. Both the contracts vary in the lot size. Lot size of the big crude is 100 barrels while the crude mini’s lot size is 10 barrels.
+3. Price quote is on a per barrel basis
+4. Every month new crude oil contracts are introduced which expire 6 months later.
+5. Expiry is on 19<sup>th</sup> of every month.
+6. The current month contract attracts maximum liquidity.
+7. Arbitrage between the two crude contracts can be executed - but one has to ensure contract values are similar.
+
+## Copper & Aluminium
+
+## ## 13.1 – Sumitomo Copper scandal
+
+If you are remotely connected to the commodity world, then this is one story you must
+have heard of - ‘The Sumitomo Copper Scandal’. This scandal unfolded in Japan,
+around 1995, but the severity of this event sent a ripple down the spine of entire
+commodity trading world. So much so, that it’s talked about even today and it gets a
+special mention whenever the financial world talks about ‘rouge trading’.
+Sumitomo Corporation is a huge conglomerate, incorporated and listed in Japan. The
+company is involved in general trading of goods and commodities. Back in the days,
+Sumitomo had a significant copper trading division. Sumitomo’s copper trading
+involved buying of copper in spot market and physically storing them in its warehouses.
+The company also had a large exposure to copper futures on the London Metals
+Exchange (LME). Yasuo Hamanaka, was Sumitomo’s chief ‘Copper Trader’. He was
+Sumitomo’s go-to man for anything related to Copper.
+
+So here is what happened -
+\(\bullet\) Yasuo Hamanaka bought copper in physical form (spot market) and hoarded them in warehouses.
+\(\bullet\) He bought copper not just in Japan, but across the world and stored it at different locations/ports.
+\(\bullet\) Essentially, he was long copper in the spot market.
+\(\bullet\) His exposure in the spot market was around 5% of the entire world’s outstanding reserves. At that point, he was probably the only man on the planet with so much copper. This meant he could control the prices of copper, quite literally.
+\(\bullet\) At the same time, he also bought Copper Futures at LME.
+\(\bullet\) Every trader knew that Yasuo Hamanaka was copper bull, but nobody knew the extent of his exposure (as LME wasn’t publishing open interest data at the time).
+\(\bullet\) Whenever traders or trading firms shorted copper, Hamanaka would buy. He could buy because Sumitomo was cash rich and funded these trades.
+\(\bullet\) Since he bought in such large quantities, copper prices went up.
+\(\bullet\) Remember, copper is an international commodity and the price is market driven (LME futures).
+\(\bullet\) So LME prices went up - short traders were squeezed, Hamanaka made profits on futures.
+\(\bullet\) Short traders would eventually default, which meant they had to deliver copper upon expiry.
+\(\bullet\) Invariably these traders would end up buying copper from Sumitomo at a premium, which meant Sumitomo minted crisp profits on their spot position as well.
+\(\bullet\) The profits snowballed and Yasuo Hamanaka became the undisputed king of copper.
+This set up functioned really well for over a decade. However, sometime around early 90s, China upped their copper production, to an extent where they flooded the market with excess supply. Naturally, the prices started to cool off and Yasuo Hamanaka started feeling the heat. His exposure was so large that it was difficult for him to off load the contracts (especially since he was doing most of the buying)! He went to the extent of borrowing funds to maintain his long positions. Remember, these were all leveraged positions, and when you have super large quantities of any leveraged positions, a small move against you can result in massive losses.
+
+This is exactly what happened - copper prices crashed and Yasuo Hamanaka’s copper kingdom collapsed. Losses piled to an extent that the Sumitomo Corporation filed for bankruptcy. The estimated losses were close to a whopping §5 billion, in 1995!
+What followed next were the routine blame games, law suits, denials, and all the resulting drama. However, the key take away from this story is the importance of **risk management**. We will talk about this soon in a separate module all together.
+Anyway, that was that; let’s move ahead to copper basics.
+
+## ## 13.2 - Copper Basics
+
+Copper is a base metal, highly traded on MCX. A metal is classified as a ‘base’ if it is not precious like gold and silver.
+The daily traded value is approximated at INR 2,050 crores across an average of 55,000 lots. So, as you can imagine, copper on MCX is a very liquid contract. The liquidity matches that of crude oil and gold.
+Copper is a very interesting metal. It is the 3<sup>rd</sup> most consumed metal after steel and aluminium. The price of copper (much like aluminium) is directly dependent on global economics. You may know, copper is one of the best conductors of electricity, and therefore, copper is the preferred choice of metal in electrical wires. In fact, did you know, at the core of Tesla’s hybrid car there is a copper motor as opposed a regular engine motor (permanent magnet motor)?
+Check this article.
+Of course, apart from this, copper finds its application in a whole host of other things such as -
+\(\circ\) Building and Construction \(\circ\) Copper alloy molds \(\circ\) Electrical and electronics \(\circ\) Plumbing solutions \(\circ\) Industrial uses \(\circ\) Telecom
+
+o Railways
+But my favourite application of copper has to be this -
+Can you guess what this is? If you can, then probably you and I have a common interest.
+The demand - consumption of copper showcases similar trends as aluminium. Have a look at this snapshot -
+_Source: Hindalco annual Report (2015-16)_
+
+In 2015, the global demand for refined copper was 24 million tons; half of this demand was from China and Japan. The supply was higher than the demand (look at the last two bars from right), and thanks to the recent commodity glut, the price has considerably cooled off over the last few years.
+It’s good to know basic fundamentals, but like any other commodity; I’d rely on charts to trade copper. Given this, let’s focus on the contract specifications. Of course, both aluminium and copper have two contracts – the big copper contract and its mini version. Let me list down the contract specs of the big copper contract.
+o Price Quote – Per kilogram
+o Lot size – 1 metric ton
+o Tick size – Rs.0.05
+o P&L per tick – Rs.0.05 * 1000 = Rs.50/-
+o Expiry –Last day of the month
+o Delivery units – 10 MT
+Here is the snap quote of copper, expiring in Feb 2017 –
+The price as seen here is Rs.389.1 per Kg. The contract value therefore would be –
+Lot size * price
+= 1000 * 389.1
+= Rs. 389,100/-
+
+| **COPPER 17FEB FUT MCX** |  |  | **-0.13 % V** |  |  |
+|---|---|---|---|---|---|
+|  | **BIDS** |  | **OFFERS** |  |  |
+| **PRICE** | **ORDERS** | **QTY.** | **PRICE** | **ORDERS** | **QTY.** |
+| 389.10 | 1 | 5 | 389.15 | 4 | 12 |
+| 389.05 | 2 | 3 | 389.20 | 7 | 31 |
+| 389.00 | 9 | 19 | 389.25 | 2 | 9 |
+| 388.95 | 3 | 7 | 389.30 | 3 | 8 |
+| 388.90 | 8 | 30 | 389.35 | 2 | 27 |
+| Total |  | 2,059 | Total |  | 2,643 |
+| EXPIRY %2017-02-28 |  | VOL. TRADED |  | 15,170 |  |
+|  | 391.50 H 393.65 |  | L 388.75 | C 389.60 |  |
+
+The NRML margin is as shown below –
+Rs. 30,544/-, which works out to 7.8%. MIS margin is half this amount.
+The Copper Mini contract has a lesser lot size, therefore lesser P&L per tick, and lesser margins.
+Office Quote – Per kilogram
+Office List size – 250 Kgs
+Office List size – Rs.0.05
+Office List size – Rs.0.05 ** 250 = Rs.12.5/-
+Office List size – Gas
+Office List size – 10 MT
+I’d suggest you look at technical analysis to trade copper, and commodities in general. They work really well on liquid commodities such as copper. So essentially, you just need to know the contract details to get started.
+Onwards to Aluminium!
+
+## ## 13.3 – Aluminium Basics
+
+Remember, our objective here is to understand basic information. We are not going deep into the subject, simply because most of us would be trading this commodity with an average holding period of not more than 2-3 days. When this is the objective, it makes more sense to spend time on the price dynamics rather than the fundamentals. Hence, I’ll stick to basics, and for ease of reading, highlights of the chapter are presented as bullet points. Post this; we will dig deeper into contract specifications.
+Talk about Aluminium and chances are you will think about that wafer thin, silvery foil, which wraps your leftover food in your refrigerator. Well, Aluminium’s applications go beyond that.
+
+| COPPER | 1 MT | 389.6 | 30544 | 15272 |  |
+|---|---|---|---|---|---|
+| COPPERM | 250 KGS | 389.55 | 7674 | 3837 |  |
+
+Here are few things you need to know (have collected this information from various online sources) -
+1. There is plenty of Aluminium (supply is not an issue) - roughly 8% of the earth’s crust is made up of Aluminium. This makes aluminium the third most abundant, after oxygen and silicon.
+2. The fact that aluminium resists corrosion makes it a very desirable metal
+3. Aluminium manufacturing is power intensive - it takes a whopping 17.4 megawatt hour of power to manufacture 1 metric ton of Aluminium. Check this -
+This is power and fuel cost of Hindalco (leading manufacturer of Aluminium), and as you can see nearly 10% of the expense is on power and fuel. Remember, Hindalco has its own captive power units. So, I’m guessing this power is consumed over and above what Hindalco generated internally
+1. That said, recycling aluminium is a power friendly affair. It requires just about 5% of the power to recycle.
+2. Aluminium has a wide range of applications - right from a smart phone to a Boeing 747. Did you know you need approximately 70,000 kilograms of aluminium is used up in a single Boeing 747?
+
+| CONSOLIDATED STATEMENT OF PROFIT AND LOSS FOR THE YEAR ENDED 31ST MARCH, 2016 |  |  |  |
+|---|---|---|---|
+|  | **Note No.** | **Year ended 31/03/2016** | **(€ crore)** |
+|  |  |  | **Year ended 31/03/2015** |
+| INCOME |  |  |  |
+| Revenue from Operations: | '27' | 102, 84.77 | 106,695.56 2,414.46 |
+| Gross Revenue from Operations |  |  |  |
+| Less: Excise Duty |  | 2,442.61 |  |
+| Net Revenue from Operations |  | 100,042.16 | 104,281.10 |
+| Other Income | '28' | 1,215.30 | 1,104.74 |
+| Total Income |  | 101,257.46 | 105,385.84 |
+| EXPENSES |  |  |  |
+| Purchases of Stock-in-Trade |  | 1.48 | 36.55 |
+| Cost of Materials Consumed | '29' | 58,100.95 | 66,133.05 |
+| Changes in Inventories of Finished Goods, Work-in-Progress and |  |  |  |
+| Stock-in-Trade | '30' | 1,285.22 | (1,237.89) |
+| Employee Benefits Expenses | '31' | 8,238.34 | 7,991.23 |
+| Power and Fuel | '32' | 9,316.92 | 8,378.56 |
+| Finance Costs | '33' | 5,048.94 | 4,178.42" |
+| Depreciation and Amortization | '34' | 4,126.56 | 3,493.38 |
+| Impairment Loss/(Reversal) (Net) | '35' | 160.63 | 97.18 |
+| Other Expenses | '36' | 14,307.72 | 14,035.03 |
+| Total Expenses |  | 100,588.76 | 103,105.51 |
+
+3. Aluminium is also used up in other industries – automotive, building & construction, defense, electrical, electronic, pharmaceuticals, white goods, etc.,
+4. Aluminium is one metal that has abundant supply and demand.
+5. Aluminium prices on MCX closely follow the international prices of aluminium which is traded on the London Metal Exchange (LME).
+In fact, here is a snapshot which gives you the trends in production, supply, and average price of aluminium on LME –
+This is a very interesting chart; in fact, based on this chart alone, a few basic trading principles can be formulated. Let’s break this graph up in smaller bits –
+1. The global production (blue bar) of aluminium in 2015 stands at 56 million tonnes. This represents a growth of about 4% from the previous year.
+2. The global production nets a CAGR of 6% over the last 8 years.
+3. The demand (yellow bar) on the other side matches up to the global production – this implies that there are no supply-demand disruptions.
+4. In fact, the demand and the supply have remained more or less stable over the years.
+5. The price of aluminium over the last few years has declined. Its averages to §1,500/- per ton, which is a decline from its recent peak of §2,500/- per ton. You must have heard about the global commodity glut. Clearly, the Chinese demand plays a key role to the aluminium’s global pricing
+_Source: Hindalco Annual Report (2015-2016)_
+
+6. The Indian demand on the other hand is better than the global demand (in percentage terms). Hindalco, in its annual report claims the demand for aluminium in India is about 2 million tonnes. Much of this demand is met by importing aluminium.
+I guess these basic points should help you get started on Aluminium fundamentals. However, I’d be happy to trade aluminium based on technical analysis, simply because of my short holding period, usually not exceeding few trading sessions.
+So, with this, I’d like to move ahead and discuss contract specifications, which will help you understand the practicality of trading aluminium on MCX.
+
+## ## 13.4 – Aluminium contract specifications
+
+As you may have guessed, there are two main aluminium contracts to trade on MCX. They are the big aluminium contract and the aluminium mini contract. Clearly, both of them differ on the lot size and therefore contract value. We will discuss the big aluminium contract first.
+The daily average traded value of big aluminium is roughly about INR 375 Cr. On a good day, the volume could reach a little over INR 500 crores. As you may have realized, the value is not as high as commodities such as gold and crude oil.
+The contract details are as follows -
+\(\circ\) Price Quote – Per kilogram
+\(\circ\) Lot size – 5 metric ton
+At this point you may have realized that this is a huge contract. A metric ton is 1000 kilograms, so 5MT makes it 5000 kgs. Since the price is quote per kg, and the lot size is 5000 kgs, each tick will cause a P&L of Rs.5000/- PROVIDED the tick is Rs.1/-. Since this would be very large, especially for retail trading, MCX has reduced the tick size to the lowest possible value i.e. Rs.0.05
+\(\circ\) Tick size - Rs.0.05
+\(\circ\) P&L per tick - Rs.0.05 \* 5000 = Rs.250/-
+\(\circ\) Expiry -Last day of the month
+\(\circ\) Delivery units - 10 MT
+
+Let’s understand this information in better detail. Aluminium on MCX is quoted on a per kilogram basis. Have a look at the image below; this is the snap shot of Crude oil’s market depth –
+As you can see, the aluminium expiring in Dec 2016 is trading at Rs.118.4/ - per kg/
+The lot size is 5 MT (5000 kgs), which means to say that if you want to buy (or go long) on Aluminium, the value of such a contract will be -
+Lot size * price quote
+= 5000 * 118.4 (offer price to go long)
+= Rs. 592,000/-
+The price movement in aluminium is 0.05, which means, if aluminium moves from 118.4 to 118.45, the profit will be -
+118.45 – 118.4
+=0.05
+=0.05*5000
+=Rs.250/-
+What about the margins? Have a look at the following snapshot –
+
+| **ALUMINIUM DEC FUT MCE** |  |  | **+0.42 %** |  | **118.40** |
+|---|---|---|---|---|---|
+|  | **BIDS** |  |  | **OFFERS** |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 118.35 | 2 | 2 | 118.40 |  | 1 |
+| 118.30 | 10 | 14 | 118.45 | 11 | 22 |
+| 118.25 | 8 | 20 | 118.50 | 6 | 9 |
+| 118.20 | 12 | 43 | 118.55 | 12 | 42 |
+| 118.15 | 6 | 7 | 118.60 | 6 | 13 |
+| Total |  | 543 | Total |  | 383 |
+
+| **EXPIRY** | **\%2016-12-30** |  | **VOL. TRADED** | **1,051** |
+|---|---|---|---|---|
+| O 117.85 | H 118.60 |  | L 117.85 | C 117.90 |
+
+The NRML margin charged is Rs. 33,719/- which works out to 5.6%. However, MIS margin is almost half of NRML margin.
+Here are the contract details of Aluminium mini –
+• Price Quote – Per kilogram
+• Lot size – 1 metric ton
+• Tick size – Rs.0.05
+• P&L per tick – Rs.0.05 * 1000 = Rs.50/-
+• Expiy –Last day of the month
+• Delivery units – 10 MT
+The contract value is quite small –
+= 1000 * 118.4
+=Rs. 118,400/-
+NRML margin is Rs. 6,779/-, which is 5.7%. MIS margin is much lesser at Rs. 3,389 or just about 2.8% of the contract value.
+P&L per tick is Rs.50/-, a value which is much ‘deal-able’ while trading.
+I guess, this info is good enough to get started on trading with Aluminium. Frankly, you just need to look at the chart, develop a point of view, and place trades based on the chart pattern. If you are keen on digging deeper into aluminium I’d recommend you spend time reading up on www.world-aluminium.org and www.aluminium.org.
+
+| **# Commodity** | **Lot size** | **Price** | **NRML Margin** | **MIS Margin** |  |  |  |
+|---|---|---|---|---|---|---|---|
+| 1 ALUMNI | 1 MT | 117.9 | 6779 | 3389 |  |  | CALLOLATE |
+| 2 ALUMNIUM | 5 MT | 117.9 | 33719 | 16859 |  |  | CALLOLATE |
+
+**Key takeaways from this chapter**
+1. Both Copper and Aluminium are base metals.
+2. Aluminium is found in abundance (next only to silicon and oxygen).
+3. The demand-consumption of aluminium and copper seem to have some sort of equilibrium.
+4. The prices of both aluminium and copper have declined over the years.
+5. The prices of aluminium and copper on the London Metal Exchange (LME) act as a reference price for these international commodities.
+6. Both copper and aluminium have two contracts - the big one and mini.
+NOTE 7. The contracts vary in lot size and therefore contract values and margins.
+
+Lead & Nickel
+
+## 14.1 – Lead – some history, some basis.
+
+Would you believe, if I said that ‘Lead’, as in the metal Lead, played a role in bringing down the Roman Empire? Not Gold nor Silver, not diamonds or rubies – but lead, which is found in abundance.
+Don’t worry; I don’t intend to make this a history lesson! However, lead and the Roman Empire are somewhat related, and I’d like to take this opportunity to share this interesting information with you.
+I don’t intend to take too much of your time – here is an interesting perspective of how lead could have acted as a catalyst to the fall of the mighty Roman Empire.
+The characteristics of Lead make it a very unique metal –
+
+o It’s a lustrous heavy metal
+o Highly malleable and ductile
+o Poor conductor of electricity
+o Quite resistant to corrosion
+o Very dense
+o Reasonably available
+Lead was discovered and has been in use since pre historic times. In fact, lead is the 
+earliest metal discovered. Lead figurines found in Egypt that date back to 4,000 BC are 
+testimony to this. Perhaps, the most popular use of lead and the therefore the peak of 
+lead production was during the Roman Empire. Romans used lead extensively, 
+especially as water pipes, aqueducts, tank linings, cooking pots, and even as cosmetics.
+In fact, here is a picture on a Roman era water pipe -
+Apparently, during the Roman era, it was a considered ‘aristo’ to have water pipes 
+running into the residence, directly plumbing water. The owner’s name was inscribed
+_Source: Welcome Images, UK._
+
+on the lead water pipe (you can notice this on the picture as well), to showcase the aristocracy. Talk about customized water pipes
+Romans gradually paid a price for such extensive use of lead. Lead, unlike iron has no use for the human body. It is toxic and carcinogenic. The extensive use of lead, especially as water pipes proved to be fatal. Lead poisoning eventually claimed the lives of many people – especially people from the higher strata, involved in decision making. This mass loss of lives is believed to have played a crucial role in the eventual collapse of Roman Empire.
+Well, there you go, that’s about it – I’m not a historian, so if you want to know more, I’d advise you to do your research on this, and here is an <u>interesting link</u> to get started.
+Humans have evolved since the Roman era, and we have put lead to better use since then. Here is wide variety of uses for lead –
+o Solders
+o Industrial lining of sinks, tanks, chambers
+o Protective shield against radiation
+o Lead acid storage batteries (largest application of lead)
+o Lead foil used for covering cables
+o Pigments and compounds
+o Ship building
+By the way, many people think of ‘lead’ and immediately imagine the pencil lead found at the tip of pencil. Although, the one found in the pencil is called lead, it is not lead. It is graphite.
+The supply demand of lead has more or less been stable over the last few years, have a look at the data below –
+
+| \multicolumn{6}{c}{**World Refined Lead Supply and Usage 2011 - 2016 000 tonnes**} |  |  |  |  |  |
+|---|---|---|---|---|---|
+|  | **2011** | **2012** | **2013** | **2014** | **2015** |
+| Mine Production | 4617 | 4902 | 5244 | 4929 | 4763 |
+| Metal Production | 10684 | 10646 | 11157 | 10959 | 10836 |
+| Metal Usage | 10536 | 10589 | 11154 | 10949 | 10864 |
+
+In fact, the price of lead has more or less remained range bound over these years. Have a look the long term chart of Lead; do pay attention to the last few years –
+If you intend to trade Lead futures on MCX, then it pretty much has to be a play on price action. I would personally refrain from setting up trades based on news or fundamentals for Lead.
+However, if you do plan to set up trades based on fundamentals, click here to get all the fundamental data –
+
+## ## 14.2 – Contract Specifications
+
+Let’s take a quick look at the contract specifications. Like many other commodities listed on MCX, Lead too comes in two variants – Lead (big contract) and Lead Mini. Let me list down the contract specs of the big Lead first and then look into Lead Mini.
+The specs are as below -
+o Price Quote – Per kilogram
+o Lot size – 5 metric tonnes (5000kgs)
+o Tick size – Rs. 0.05
+
+o P&L per tick – Rs. 0.05 * 5,000 = Rs. 250/-
+o Expiry – Last day of the month
+o Delivery units – 10 MT
+Here is the snap quote of the Lead contract expiring in Jan 2017 –
+The price, as seen here, is Rs. 137.05 per Kg. Therefore, the contract value would be –
+Lot size * price
+= 5,000 * 137.05
+= Rs. 685,250/-
+The NRML margin is as shown below –
+As you can see, the NRML (for overnight positions) margin is Rs. 80,482/-and MIS (for intraday) margin is Rs. 40,241/-.
+This makes it about 11.7% for NRML and about 5.9% for MIS, clearly one of the highest margin requirements in the commodities market.
+And now for the Lead Mini contract –
+
+| **LEAD JAN FUT MCK** |  |  | **+0.81%** | **137.05** |
+|---|---|---|---|---|
+|  | **BIDS** |  |  |  |
+| PRICE | ORDERS | QTY. | OFFERS |  |
+| 137.05 | 1 | 1 | 137.10 | QTY. |
+| 137.00 | 2 | 2 | 137.15 | 5 |
+| 136.95 | 6 | 6 | 137.20 | 10 |
+| 136.90 | 7 | 11 | 137.25 | 7 |
+| 136.85 | 8 | 17 | 137.30 | 8 |
+| Total |  | 528 | Total | 652 |
+
+| **EXPIRY** | **%2017-01-31** | **VOL. TRADED** | **1,202** |  |
+|---|---|---|---|---|
+| O 136.60 | H 137.35 | L 136.50 | C 135.95 |  |
+
+o Price Quote – Per kilogram
+o Lot size – 1 metric ton (1000 kgs)
+o Tick size – Rs. 0.05
+o P&L per tick – Rs. 0.05 * 1,000 = Rs. 50/-
+o Expiry –Last day of the month
+o Delivery units – 10 MT
+Here is the snap quote of Lead Mini, expiring in Jan 2017 –
+The price as seen here is Rs.137.50 per Kg. The contract value therefore would be –
+Lot size * price
+= 1,000 * 137.50
+= Rs. 137,500/-
+The NRML margin is as shown below –
+As you can see, the NRML margin is Rs. 16,442/-and MIS margin is Rs. 8,221/-.
+
+| **LEADMINI JAN FUT Mtps** |  |  | **+0.47 %** |  | **137.50** |
+|---|---|---|---|---|---|
+|  | **BIDS** |  | **OFFERS** |  |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 137.50 | 4 | 4 | 137.55 | 2 | 4 |
+| 137.45 | 14 | 16 | 137.60 | 8 | 17 |
+| 137.40 | 19 | 31 | 137.65 | 6 | 15 |
+| 137.35 | 8 | 21 | 137.70 | 6 | 14 |
+| 137.30 | 13 | 22 | 137.75 | 4 | 13 |
+| Total |  | 1,179 | Total |  | 1,326 |
+
+| **EXPIRY %2017-01-31** |  |
+|---|---|
+| **O 136.40 H 138.35** | **VOL. TRADED 4,232** |
+
+| # Commodity |  | Lot size | Price |  | NRML Margin |  | MIS Margin |  |
+|---|---|---|---|---|---|---|---|---|
+| 16 | LEAD | 5 MT | 135.95 |  | 80482 |  | 40241 |  |
+| 17 | LEADMINI | 1 MT | 136 |  | 16442 |  | 8221 |  |
+
+This makes it about 11.7% for NRML and about 5.9% for MIS. The margin for Lead Mini (for both NRML & MIS) is similar to the margins charged for Lead big contract. However, because the lot size is smaller, the financial outlay towards margins is lot lesser.
+
+## ## 14.3 – Lead contract logic
+
+MCX introduces new contracts every month, and each new contract introduced expires on the last day of the 5<sup>th</sup> month. For example, in January 2017, MCX will introduce May 2017 contract. The May 2017 contract will expire on the last working day of May 2017.
+Note, the January 2017 contract would itself expire on the last working day of January 2017. Further, as you can see in the table below, the January contract would have been introduced 5 months prior, i.e., in September 2016.
+This introduction pattern ensures that there is a current month contract available at any point in the system.
+Have a look at the table below –
+Although, the contract is commissioned 5 months before expiry, it gains liquidity only in its last month. Therefore, it makes sense to always trade the current month contract. Remember, higher liquidity means tighter bid ask spreads, tighter spreads mean lower impact cost, lower impact cost means, less damage especially when you place market orders.
+
+| **Contract Launch Months** | **Contract Expiry Months** |
+|---|---|
+| September | January |
+| October | February |
+| November | March |
+| December | April |
+| January | May |
+| February | June |
+| March | July |
+| April | August |
+| May | September |
+| June | October |
+| July | November |
+| August | December |
+
+## ## 14.4 – Nickel basics
+
+Nickel and its alloys find extensive used in our day to day lives. Be it kitchenware, mobile phones, medical equipment, building, power generation, or even transport - Nickel is almost always used, either directly or as an alloy. The largest application of Nickel has to be in the manufacturing of stainless steel. In fact, about 65% of nickel produced is used towards the manufacturing of stainless steel.
+Here is the ‘demand – supply’ situation of Nickel –
+As you can see, Nickel production has overtaken the demand. This probably explains why Nickel prices have been down over the year -
+
+| **Primary Nickel Production ('000 tonnes)** | **2009** | **2010** | **2011** | **2012** | **2013** | **2014** |
+|---|---|---|---|---|---|---|
+| Africa | 36,6 | 36,3 | 36,7 | 41,2 | 59,0 | 75,2 |
+| America | 234,1 | 223,1 | 268,0 | 306,1 | 293,3 | 295.7 |
+| Asia | 432,0 | 537,6 | 631,2 | 728,0 | 922,5 | 939,6 |
+| Europe | 446,1 | 503,4 | 515,7 | 510,3 | 498,3 | 483,4 |
+| EU27 | 81,5 | 108,7 | 119,2 | 117,8 | 116,6 | 109,6 |
+| Oceania | 167,6 | 141,4 | 150,2 | 174,1 | 189.9 | 199.8 |
+| World Total | 1316,4 | 1441,8 | 1601,8 | 1759,7 | 1963,1 | 1993,6 |
+
+| **Primary Nickel Usage ('000 tonnes)** | **2009** | **2010** | **2011** | **2012** | **2013** | **2014** |
+|---|---|---|---|---|---|---|
+| Africa | 31,7 | 24,0 | 23,9 | 24,6 | 22,9 | 21,4 |
+| America | 121,8 | 153,2 | 165,0 | 166,4 | 174,8 | 181,9 |
+| Asia | 760,4 | 929,4 | 1050,6 | 1109,9 | 1233,7 | 1308,6 |
+| Europe | 317,7 | 355,9 | 364,5 | 364,1 | 350.8 | 353,9 |
+| EU27 | 279,9 | 317,4 | 325,5 | 322,0 | 310,6 | 313,5 |
+| Oceania | 2,7 | 2,7 | 2,7 | 2,7 | 2,7 | 2,7 |
+| World Total | 1234,3 | 1465,2 | 1606,7 | 1667,7 | 1784,9 | 1868,5 |
+
+Again, my advice when it comes to trading Nickel would be the same – trade the price and not really the fundamentals.
+
+## ## 14.5 - Contract Specifications of Nickel
+
+No prize for guessing, Nickel too comes in two variants - Nickel (big contract) and Nickel Mini. Let me list down the contract specs of the big Nickel first and then look into Nickel Mini.
+Nickel (big) specs are as below –
+o Price Quote – Per kilogram
+o Lot size – 250 Kgs
+o Tick size – Rs. 0.10
+o P&L per tick – Rs. 0.10 * 250 = Rs. 25/-
+o Expiry - Last day of the month
+o Delivery units – 3 MT
+Here is the snap quote of Nickel, expiring in Jan 2017 –
+
+The price as seen here is Rs. 685.50 per Kg. The contract value therefore would be –
+Lot size * price
+= 250 * 686.5
+= Rs. 1,71,625/-
+The NRML margin is as shown below –
+As you can see, the NRML (for overnight positions) margin is Rs. 16,924/-and MIS (for intraday) margin is Rs. 8,462/-.
+This makes it about 10% for NRML and about 5% for MIS.
+And now for the Nickel Mini contract –
+o Price Quote – Per kilogram
+o Lot size – 100 kgs
+o Tick size – Rs. 0.10
+o P&L per tick – Rs. 0.10 * 100 = Rs. 10/-
+o Expiry – Last day of the month
+o Delivery units – 3 MT
+
+| **NICKEL JAN FUT** |  |  | **NOX** | **+0.39 %** | **686.50** |
+|---|---|---|---|---|---|
+|  | **BIDS** |  |  | **OFFERS** |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 686.30 | 2 | 13 | 686.60 | 1 |  |
+| 686.20 | 2 | 5 | 686.70 | 2 | 7 |
+| 686.00 | 3 | 7 | 686.80 | 1 | 5 |
+| 685.90 | 1 | 2 | 686.90 | 2 |  |
+| 685.80 | 3 | 21 | 687.00 | 4 | 11 |
+| Total |  | 630 | Total |  | 1,164 |
+
+| EXPIRY | %2017-01-31 |
+|---|---|
+| O 687.30 | H 689.40 |
+
+| VOL TRADED 3,903 |  |
+|---|---|
+| L 685.20 | C 683.80 |
+
+| **#** | **Commodity** | **** | **Lot size** | **Recapsacity** | **# NRML Margin** | **# MIS Margin** | **#** |  |
+|---|---|---|---|---|---|---|---|---|
+| CM | NICKEL | 250 KGS | 683.8 | 16924 |  | 8462 | CALOILATE |  |
+| 21 | NICKELM | 100 KGS | 683.8 | 6694 |  | 3347 | CALOILATE |  |
+
+Here is the snap quote of Nickel Mini, expiring in Jan 2017 –
+The price as seen here is Rs. 686/- per Kg. The contract value therefore would be –
+Lot size * price
+= 100 * 686
+= Rs. 68,600/-
+The NRML margin is as shown below –
+As you can see, the NRML (for overnight positions) margin is Rs. 6,694/-and MIS (for intraday) margin is Rs. 3,347/-.
+This is consistent with the big contract – works out to 10% for NRML and about 5.0% for MIS.
+The contracts are introduced on a monthly basis, in the same exact way as Lead. I’d suggest you stick to the current month contract for trading as these contracts have the highest liquidity.
+
+| **NICKELM JAN FUT** |  |  | **MCR** |  |  |  |  |  |  |  | **+0.32 %** |  |  |  | **ニ** |  |  | **686.00** |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|  |  | **BIDS** |  |  |  |  |  |  |  |  | **OFFERS ORDERS** |  |  |  |  |  |  |  |
+| **PRICE** | **ORDERS** |  |  | **QTY. PRICE** |  |  |  |  |  |  |  |  |  |  | **QTY.** |  |  |  |
+| 686.00 | \multicolumn{3}{c}{14 22} |  | 686.40 |  |  |  | 2 |  |  |  |  |  | 2 |  |  |  |  |  |
+| 685.90 | 5 |  |  | 13 |  |  |  | 686.50 |  | 2 |  |  |  |  | 3 |  |  |  |
+| 685.80 | 2 |  |  | 7 |  |  |  | 686.60 |  | 1 |  |  |  |  | 6 |  |  |  |
+| 685.70 | 3 |  |  |  |  | 8 |  |  | 686.70 |  | 11 |  |  |  | 24 |  |  |  |
+| 685.60 | 4 |  |  | 24 |  |  |  | 686.80 |  | 2 |  |  |  |  | 6 |  |  |  |
+| Total |  |  |  | multicolumn{3}{c}{826} | Total |  |  |  |  |  |  |  |  | 1,570 |  |  |  |  |
+| EXPIRY |  | \%2017-01-31 |  |  |  |  |  | VOL. TRADED |  |  |  | 4,439 |  |  |  |  |  |  |
+| O | 686.80 |  | H 689.40 |  |  |  |  | L 685.40 |  |  |  |  |  |  | C | 683.80 |  |  |
+
+| **#** | **Commodity** | **±** | **Lot size** | **±** | **Price** | **-** | **NRML Margin 5** |  | **MIS Margin 5** |  |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 20 | NICKEL |  | 250 KGS | 683.8 |  | 16924 |  | 8462 |  | CALOLATE |
+| OC | NICKELM |  | 100 KGS | 683.8 |  | 6694 |  | 3347 |  | CALOLATE |
+
+## Key takeaways from this chapter
+
+1. There are two contracts for Lead Futures; Lead and Lead Mini.
+2. Lot size of Lead is 5000 MT and Lead Mini is 1000 MT.
+3. P&L per tick is Rs. 250 for Lead and Rs. 50 for Lead Mini.
+4. ‘Demand supply’ has remained stable for Lead over the last few years
+5. There are two contracts for Nickel futures; Nickel and Nickel Mini.
+6. Lot size of Nickel is 250 Kgs and 100 kgs for Nickel Mini.
+7. P&L per tick is Rs. 25 for Nickel and Rs. 10 for Nickel Mini.
+8. Nickel production has outstripped its demand.
+9. It is advisable to stick to the current month futures of both Lead and Nickel.
+10. It makes sense to look at price data to place short term trades in both Lead and Nickel.
+
+Cardamom & Mentha Oil
+
+## 15.1 – Monsoon blues
+
+Back in the day, I traded stocks with ICICI Direct. Around the same time, MCX had just started operations and ICICI was one of the first brokers to get a membership. MCX was aggressively campaigning and were conducting workshops and seminars to educate market participants, hoping to get more activity on the exchange. I was in the discovery phase, curious to know about everything tradable in India. I attended some of these sessions and, for some reason, believed I would be far more efficient trading an alternate asset like commodities as opposed to trading equities.
+I was quite excited to start trading commodities. I quickly showed up at my broker’s office with all the necessary documents to open my commodities trading account. To my surprise, I was one of their earliest clients from Bangalore to open an account with MCX. It took about 12 days (that seemed like an eternity to set up my account with MCX.
+
+Finally, my broker called me to say I’m good to go live and place trades the next day. I actually took a day off from work to trade commodities! I was thrilled to put my new found commodities knowledge (although half-baked) to practice.
+I chose to trade ‘Pepper futures’. Though the rationale behind this choice eludes memory, Pepper futures it was!
+So, my first commodities trade was ‘Long pepper’, 10 lots (I guess it was a 1 metric tonne contract), I don’t remember the exact price, but I suppose it was somewhere around Rs.7,500/- per quintal. I had bet my entire trading account on Pepper futures!
+What followed through was quite predictable. To my dismay, Pepper hit its 52-week low over the next two days, I brought in additional capital, but Pepper continued to crash, as did my account until there was nothing left in it.
+Dejected, I did some post-mortem analysis to figure out what went wrong and realised the monsoons were expected to be great in Kochi, which would result in a very good harvest of Pepper.
+Only now did I understand that one really needs to have some sort of understanding of monsoons and harvest cycles before trading agri commodities. Unfortunately, I learnt this lesson at very high price. No wonder I remember it to this day.
+Anyway, considering this, we will spend a little time understanding a bit of this topic, and hopefully, you will not make the same mistakes I did in the past.
+And, just so you know - right after I burnt my trading account with my first commodities trade, what happened next is easy to guess - Pepper futures bottomed out and rallied nonstop to Rs. 12,500/- per quintal!
+
+## ## 15.2 – Understanding Rainfall
+
+The Indian economy’s dependence on agriculture has reduced over the years. A few decades ago, agriculture contributed to over 30% to our GDP, but this has now reduced to about 10%. However, agriculture and allied services are still the largest employers in India. This perhaps explains why the Central Government most often takes a populist stance when it comes to reforms and policies in this sector.
+
+Have a look at the snapshot below, this gives you an idea of which sector contributes how much to the Indian economy –
+This data is published by RBI and is freely available on RBI website. The data is available for as long back as the 50s. I’ve just manipulated the data to show the percentage contribution of each sector. As you can see, the percentage contribution of agriculture has declined over the years, while the % contribution of services (mainly software and allied services) has steadily increased.
+But, like I just mentioned, agriculture is still the largest employer in India and this entire industry and workforce is dependent on how the yearly rainfall pans out. This is quite natural as 2/3rd of India’s arable land is rain-fed.
+There are two main rainfalls seasons (monsoons) in India –
+1. The Southwest Monsoon (principal rainfall season), and
+2. The Northeast Monsoon
+I will not get into the technicalities of how these spells are caused, clearly not my area of expertise. However, these are the things you need to know about these two seasons
+1. The south-west monsoon occurs from the southern India and covers all the regions up to central India. This spell is expected to start around June/July through September/October
+2. The North-eastern monsoon covers the north eastern India, North India, Himalayas, and the western parts, and a large part of Tamil Nadu. This spell occurs from early December through March.
+During each of these monsoon seasons, seeds are sown and crops harvested. Based on how good or bad the monsoon is, the harvest can be estimated.
+
+| **Agriculture,** |  |  |  |  |  |  | **Transport,** |  | **Financial services, Real Estate & Insurance** | **Public, Defence & Admin** |  |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Year** | **Forest and Fishing** | **Industry** | **Minning** | **Manufacturing** | **Energy** | **Services** | **Construction** | ** Hotels** |  |  |  |
+| 2011-12 | 10.21% | 12.63% | 1.77% | 9.58% | 1.27% | 32.27% | 5.28% | 6.01% |  |  |  |
+| 2012-13 | 10.10% | 12.47% | 1.72% | 9.45% | 1.29% | 32.77% | 5.09% |  | 3.66% | 10.40% | 6.97% |
+| 2013-14 | 10.19% | 12.14% | 1.59% | 9.19% | 1.37% | 33.28% | 4.99% |  | 3.70% | 11.16% | 5.98% |
+| 2014-15 | 9.66% | 11.81% | 1.47% | 8.94% | 1.40% | 34.09% | 4.86% |  | 3.82% | 11.43% | 5.98% |
+| 2015-16 | 9.49% | 11.94% | 1.44% | 9.04% | 1.45% | 34.24% | 4.61% |  | 3.62% | 11.49% | 5.57% |
+
+Percentage contribution to Indian Economy (by sectors
+
+\(\circ\) Crops sown during the south-westmonsoons is called the **Kharif Crop** (it is even referred to as the monsoon crops). These are mainly pulses, millets, rice, urad dal, moong dal, cotton etc. The sowing of kharif crop takes placed around end May-early June (before the south-west spell) and harvesting is done post the monsoons i.e around October.
+\(\circ\) Crops sown during the northeastmonsoons is called the **Rabi Crop** (it is even referred to as the winter crops). Rabi crops are mainly **wheat**, gram, coriander, mustard, oats etc. The sowing of rabi crop occurs at the onset of winter and harvest of Rabi crops is around end April.
+Rice and Wheat are India’s staple, contributes close to 40% of the food grain production, and hence plays a crucial role in India’s food security. Do note, they are harvested and sown in Kharif and Rabi season respectively.
+The progress of sowing and harvesting is continuously monitored and is reported across leading publications. Have a look at this –
+Source: Ministry of agriculture
+
+|  | **Area sown (m ha)** |  |
+|---|---|---|
+| **Crops** | **2012-13** | **2011-12** |
+| Wheat | 29.76 | 28.53 |
+| Rice (rabi) | 1.48 | 2.04 |
+| Sorghum | 3.88 | 3.77 |
+| Coarse cereals | 6.19 | 5.89 |
+| Gram | 9.32 | 8.96 |
+| Pulses | 14.45 | 14.59 |
+| Rapeseed & mustard | 6.72 | 6.54 |
+| Oilseeds | 8.62 | 8.46 |
+| Total rabi area | 60.50 | 60.84 |
+
+# RABI CROP SOWING DATA
+This one reports the progress of Rabi crops –
+
+In fact, with whatever basic knowledge we have gathered so far, I’d request you to read this <u>**newspiece.**</u>
+The idea is to make sure, we understand what is being discussed here and relate to the news article. If you are a serious agri trader, I’d expect you to continuously keep track of such news pieces and strategies your trades.
+The following agri commodities are available to trade on MCX –
+1. Cardamom
+2. Castor Seed
+3. Cotton
+4. Crude Palm Oil
+5. Kapas
+6. Mentha Oil
+Of all these agri commodities, I’d recommend you trade Cardamom and Mentha Oil, simply because the liquidity reasons.
+Let’s discuss these two commodities. Also, note that agri commodities (especially the Indian agri commodities) are traded till 5:00 PM.
+
+| **OVERALL KHARIF ACREACE (AS ON JULY 13) (in lakh ha)** |  |  |  |  |
+|---|---|---|---|---|
+| **Crops** | **Normal Area** | **This year** | **Last year** | **Change** |
+| Rice | 111.63 | 96.79 | 120.4 | -23.61 |
+| Coarse cereals | 79.82 | 39.76 | 74.39 | -34.63 |
+| Pulses | 32.88 | 20.54 | 32.83 | -12.29 |
+| Oilseeds | 78.33 | 67.70 | 86.97 | -19.27 |
+| Sugarcane | 46.97 | 52.85 | 50.77 | 2.08 |
+| Cotton | 70.43 | 65.22 | 59.22 | 6 |
+| Jute+Mesta | 8 | 8.18 | 8.79 | -0.61 |
+| Total Kharif area | 428.06 | 351.04 | 433.37 | -82.34 |
+
+## ## 15.3 – Cardamom
+
+Cardamom is a spice mainly grown in Southern India (Karnataka & Kerala). The cardamom variety grown in India is called ‘Small Cardamom’. India is the 2<sup>nd</sup> largest producer and 1<sup>st</sup> largest consumer of Cardamom, while Guatemala is the world’s largest producer of Cardamom. The Cardamom produced by Guatemala is mainly for export.
+Cardamom, as you may know, is mainly used in India sweets. It also has few therapeutic applications like skin and dental care – not that savouring sweets is less therapeutic.
+Cardamom, is a Kharif crop, the demand supply dynamics mainly depends on -
+1. The southwest monsoons
+2. The quality – flavour, colour, size, and aroma of the harvest
+3. Production parameters – like inset attack on plantation
+4. Stock available at both India and Guatemal
+5. Domestic consumption patterns (although this is quite steady over the years)
+Let’s take a quick look at the contract specifications. Unlike other commodities listed on MCX, Cardamom does not have two variants. So don’t go looking for Cardamom and Cardamom mini. J
+The supply and demand for cardamom is kind of steady. Co incidentally, I read a news piece today related to this, and I thought it would be interesting to shares the same here -
+
+| **CARDAMOM FEB FUT MCX** |  |  | **+0.56 % O 1564.00** |  |  |
+|---|---|---|---|---|---|
+|  | **BIDS** |  |  | **OFFERS** |  |
+| PRICE | ORDERS | QTY. | PRICE | ORDERS | QTY. |
+| 1563.60 | 1 | 1 | 1566.50 | 1 | 1 |
+| 1563.50 | 1 | 1 | 1566.60 | 1 | 1 |
+| 1563.30 | 1 | 1 | 1567.50 | 1 | 1 |
+| 1563.10 | 1 | 1 | 1568.00 | 1 | 1 |
+| 1560.50 | 1 | 1 | 1569.40 | 1 | 2 |
+| Total |  | 83 | Total |  | 81 |
+
+| **EXPIRY** | **2017-02-15** |  | **VOL. TRADED** | **320** |  |
+|---|---|---|---|---|---|
+| O 1560.00 | H 1580.00 |  | L 1554.00 | C 1555.30 |  |
+
+The contact specs for Cardamom are as below  –
+o Price Quote – Per kilogram
+o Lot size – 100 kgs
+o Tick size – Rs. 0.10
+o P&L per tick – Rs. 10/-
+o Expiry – 15th of every month
+o Delivery units – 100 Kgs
+Here is the snap quote of the Cardamom expiring in Feb 2017 –
+The price, as seen here, is Rs. 1,564 per Kg. Therefore, the contract value would be –
+Lot size * price
+= 100 * 1564
+= Rs. 156,400/-
+The NRML margin is as shown below –
+
+| **#** | **Commodity** | **Lot size** |  | **Price** | **NRML Margin** | **MIS Margin** | **€** |  |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ALUMINI | 1 MT |  | 121.75 | 7061 | 3530 |  | CALCULATE |
+| 2 | ALUMINIUM | 5 MT |  | 121.8 | 36905 | 18452 |  | CALCULATE |
+|  | CARDAMOM | 100 KGS |  | 1555.3 | 16237 | N/A |  | CALCULATE |
+
+# Contract Launch Calendar for cardamom contracts expiring during the year 2016 and 2017 onwards
+As you can see, the NRML (for overnight positions) margin is Rs. 16,237/-. This makes it about 10.5% margin for NRML orders.
+Further, as you can notice the MIS margin for Cardamom is not available. In fact, there is no MIS margin for any agri commodities. There is a reason for this – agri commodities are quite volatile and they tend to hit the circuit limits frequently, and therefore unwinding the position by end of day would not easy. For this reason, a trader is better off trading NRML for intraday as well.
+Here is the contract introduction table of Cardamom –
+
+| **Contract Launch Months** | **Contract Expiry Months** |
+|---|---|
+| August | January |
+| September | February |
+| October | March |
+| November | April |
+| December | May |
+| January | June |
+| February | July |
+| March | August |
+| April | September |
+| May | October |
+| June | November |
+| July | December |
+
+BusinessLine
+
+## # Small cardamom maintains steady aroma
+
+As you can see, every month a six month futures contract is introduced. For example, in the month of January, June futures are introduced. Hence, June futures will continue to stay in the system till 15th of June (remember, expiry is on 15th of every month). For all practical purposes, it makes sense to always trade the current month contract for liquidity.
+For example, as I write this article (it is 17th Jan 2017), if I were to trade Cardamom, I’d opt to trade Feb 2017 Cardamom contract (Jan 2017 contract expired on 15th Jan).
+
+## ### 15.4 – Mentha Oil
+
+Mentha is an aromatic herb which is used in its raw form for Indian cooking. Besides, it distilled and filtered to produce the Mentha oil. It is Mentha Oil is traded on MCX. Mentha oil is used in food, pharmaceutical, perfumery, and flavouring industry.
+Post Comment
+
+Mantha oil is also imported to countries such as US, China, and Singapore. This clearly indicates that Mantha Oil contract is sensitive to fluctuations in USD-INR rates. Besides this, other factors such as rainfall, insect attack, and crop acreage also exerts its influence on the contract.
+The contact specs for Mantha Oil are as below –
+o Price Quote – Per kilogram
+o Lot size – 360 kgs
+o Tick size – Rs. 0.10
+o P&L per tick – Rs. 36/-
+o Expiry – Last day
+o Delivery units – 360 Kgs
+Of all the things listed in India, probably Mantha Oil is the only asset which has Rs.36/-
+P&L per tick
+Here is the snap quote of the Mantha Oil, expiring 2017 –
+The price, as seen here, is Rs. 1,023.2 per Kg. Therefore the contract value would be –
+Lot size * price
+= 360 * 1023.2
+= Rs. 368,352/-
+
+| **MENTHAOIL JAN FUT Mclx** |  |  |  |  | **-0.44 % 0** |  |  | **1023.20** |
+|---|---|---|---|---|---|---|---|---|
+| **BIDS** |  |  |  |  | **OFFERS** |  |  |  |
+| **PRICE** | **ORDERS** |  | **QTY.** | **PRICE** |  | **ORDERS** |  | **QTY.** |
+| 1023.00 | 1 |  | 1 | 1023.90 |  | 1 |  | 1 |
+| 1022.50 | 1 |  | 1 | 1025.00 |  | 1 |  | 1 |
+| 1022.10 | 1 |  | 6 | 1025.40 |  | 1 |  | 1 |
+| 1022.00 | 2 |  | 2 | 1025.50 |  | 1 |  | 1 |
+| 1021.00 | 5 |  | 7 | 1026.00 |  | 2 |  | 2 |
+| Total |  |  | 253 |  | Total |  |  | 212 |
+
+| **EXPIRY** | **%2017-01-31** |  | **VOL. TRADED** | **531** |  |
+|---|---|---|---|---|---|
+| O 1029.10 |  | H 1030.90 | L 1020.20 | C 1027.70 |  |
+
+The NRML margin is as shown below –
+As you can see, the NRML (for overnight positions) margin is Rs. 29,893/-. This makes it about 8.5% margin for NRML orders. For reasons mentioned earlier, there is no MIS margin for Mentha Oil as well.
+The contracts are introduced every month, 5 months forward. As usual, I’d suggest you stick to the current month contract to trade.
+
+## Key takeaways from this chapter
+
+1. Agriculture as an industry contributes close to 10% to Indian economy, but it is still the largest employer in India.
+2. India is still very dependent on rainfall when it comes to agriculture.
+3. There are two main rainfalls – Southwest monsoon (principal rainfall) and northeast monsoon.
+4. Crops sowed and harvested in northwest monsoon is called Kharif. Rice is a major Kharif crop.
+5. Crops sowed and harvested in northeast monsoon is called Rabi. Wheat is a major Rabi crop.
+6. Agri commodities are traded till 5:00 PM on MCX.
+7. India is the largest consumer of cardamom and 2nd largest producer of Cardamom, stands 2nd to Guatemala in production.
+8. Demand supply for cardamom is quite stable.
+9. MIS margin is not available for agri commodities.
+10. Mentha oil is distilled and filtered from Mentha leaves.
+
+| # | Commodity | • | Lot size | • | Price | • | NRML Margin | • | MIS Margin | • |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 19 | MENTHAOIL |  |  | 360 KGS |  | 1027.7 |  | 29893 | N/A | CALCULATE |
+
+Natural Gas
+
+## 16.1 – History and background
+
+I know this chapter on Natural Gas is coming in late; we should have discussed this much earlier, probably when we discussed Crude oil. Unfortunately, I missed doing this; but anyway, better late than never!
+We will discuss Natural Gas in this chapter, and with that, we will conclude this module on Currencies and Commodities.
+As usual, let us start our discussion with some background information, history, and how natural gas is extracted.
+Natural gas is a naturally occurring, non-renewable, hydrocarbon gas mixture, primarily consisting of methane. Natural Gas is a fossil fuel and is used as an energy source. Natural gas has many applications in our day to day lives including electricity (generation process), heating, and cooking. Besides, natural gas also has a wide variety of application in the fertilizer and plastics industry.
+
+Apparently, way back in 1000, B.C., natural gas seeped from the ground, on Mount Parnassus in ancient Greece, caught fire and a flame was lit.
+The Greeks believed this was the Oracle at Delphi, and a temple was built. This has to be the first ever reference to Natural Gas. By the way, do you wonder how natural gas can seep through the land surface? Well, have a look at this picture of natural gas seeping from ground and catching fire –
+The Chinese discovered Natural Gas around 500 B.C., and they put this to better use – they started using bamboo “pipelines” to transport natural gas that seeped to the surface and to use it to boil sea water to get drinkable water.
+However, the first commercialized application of natural gas occurred in the Great Britain. Around 1785, the British used natural gas produced from coal to lighthouses and streets.
+By now, you must have guessed that ‘Natural Gas’ is somewhere hidden deep below the earth’s surface. The question is – how and why is natural gas present there?
+Millions of years ago, when plants and animals died, the remains were buried in sand and silt. The buried remains mixed further with sand and silt, got buried deeper, and
+Source: Daily mail online, UK.
+
+decayed further. Pressure and heat converted these materials into coal, oil, and natural gas. This entire process panned across millions of years. In some places, natural gas moved into large cracks and spaces between layers of overlying rocks, while in other places natural gas just settled on the porous surface of rocks. Natural Gas, in its original form, is colorless, odorless, and tasteless. Now, practically this can be an issue - imagine if natural gas leaks and spreads, there is no way one can identify its presence in the atmosphere, which is a highly hazardous situation. Hence, producer of natural gas adds a substance called ‘mercaptan’, which gives natural gas a pungent, sulfuric odor, making it easier to detect in case of a leak.
+The search of natural gas is quite similar to the search for crude oil. Geologists identify land parcels which are likely to contain natural gas. Sometimes, these land parcels are on the surface of the earth and sometimes this can be offshore, deep inside, on the ocean floor. Geologists use the seismic surveys to identify the right place to drill in order to maximize the probability of finding natural gas. If the site seems promising, then an exploratory well is drilled to investigate further. Further, if the economics favor then more wells are drilled and the natural gas is extracted from the ground.
+India is the 7th largest producer of natural gas in the world, accounting for nearly 2.5% of the natural gas production in the world. The bulk of the natural gas produced in India is used towards power generation, industrial fuel, and LPG. A large chunk is also used in the fertilizer industry as feedstock.
+Needless to say, this discussion on Natural Gas - production and application can get quite vast, but I guess we are good to stop here, considering we are looking at Natural gas from a short-term trading approach.
+We will move ahead to discuss the contract specification.
+However, no discussion on Natural gas is complete without talking about the ‘Amarant Natural Gas gamble’. J
+
+## ## 16.2 - Amaranth Natural gas gamble
+
+Amaranth Advisors, established around 2000, was a US-based multi-strategy hedge fund operating from Greenwich, Connecticut. The fund had its interest in various hedge fund strategies ranging from convertible bonds, merger arbitrage, leveraged assets,
+
+and energy trading. By mid-2006, the fund had become a $9 Billion behemoth; this included the profits that were ploughed back to the fund. This positioned Amaranth as one of US’s top-performing hedge fund.
+Amaranth’s energy trading desk picked up activity (and a lot of attention) when a star trader named Brain Hunter joined Amaranth’s trading team. Hunter had previously gained a lot of a popularity for his energy trading strategies (mainly natural gas) at Deutsche Bank. Apparently, he made few millions of dollars as annual bonuses. His success continued when he joined Amaranth to head the energy desk – where he traded natural gas for obvious reasons. Hunter ensured profits rolled for Amaranth and its clients, so much so that Amaranth netted close to $2 Billion by April 2006. Both Amaranth’s clients and management were quite seduced by Hunter’s trading skills.
+At this stage, I have to mention this – although an international commodity, natural gas trading was highly vulnerable. Any midsized hedge fund could easily corner the market by taking positions in few thousands of contracts. This made Amaranth one the largest hedge funds operating in the natural gas market.
+Anyway, here is what happened post-April 2006 –
+1. Hunter noticed a surplus inventory of natural gas in the US, which would drive the price of natural gas lower in the US
+2. Inventory of Natural gas, unlike oil, cannot be easily moved to cater to supply- demand pressures
+3. He also expected a harsh winter (or perhaps a hurricane) to ensue, which quite obviously would exert pressure on the supplies and push the price of Natural gas higher
+4. Apparently, Hunter had profited when hurricane Katrina and Rita had hit the US coastlines in 2005
+5. He set up complex strategies at multiple points across multiple contracts to benefit from his staggered point of view. These were highly leveraged, speculative futures positions
+6. However, nature had a different game plan for Hunter and Amaranth – the possibilities of a hurricane diminished, supplies continued to pour
+7. Bulls started to unwind, triggering the price of Natural Gas below the psychological support of $5.5
+
+8. This further triggered a panic sell leading to a single day fall of 20% Natural gas’s price
+9. Amaranth was hit quite hard but Hunter’s conviction and reputation were still intact. They now borrowed money and doubled down on their positions
+10. The leverage was as high as 1 to 8, meaning for every 1 USD of their own capital, they had 8 USD in borrowed capital
+11. This didn’t stop natural gas prices to tank further, prices continued to crash, and along with the price Amaranth too crashed
+12. Amaranth was forced to liquidate and take a hit of §6 Billion USD, making it one of the largest hedge fund fiascos in the world.
+If there is one key lesson you get to learn from the Amaranth’s episode, then it has to be (yet again) the importance of risk management. Risk management sits above all and has the authority of question every aspect of your trade.
+Respect risk and risk respects you back, ignore it and it will show you the corner.
+For this reason, we will dedicate the whole of next module to Risk and trading psychology.
+For now, let us proceed to discuss the contract specs of Natural Gas.
+
+## ## 16.3 – Contract specifications
+
+The contact specs for Natural Gas are as below -
+\(\circ\) Price Quote - Rupee per Million British Thermal Unit (mmBtu)
+\(\circ\) Lot size - 1250 mmBtu
+\(\circ\) Tick size - Rs. 0.10
+\(\circ\) P&L per tick - Rs. 125/-
+\(\circ\) Expiry - 25<sup>th</sup> of every month
+\(\circ\) Delivery units - 10,000 mmBtu
+Here is the snap quote of the Natural gas expiring in Feb 2017 –
+
+The price, as seen here, is Rs. 217.3 per mmBtu. Therefore the contract value would be –
+Lot size * price
+= 1250 * 217.3
+= Rs. 271,625/-
+The NRML margin is as shown below –
+As you can see, the NRML (for overnight positions) margin is Rs. 40,644/-. This makes it about 15% margin for NRML orders (probably one of the highest in the markets) and MIS margin is Rs.20,322/- which makes it about 7% for MIS positions.
+The contract introduction and expiry logic is quite straightforward, have a look at the table below –
+
+| NATURALGAS FEB FUT MCX | +2.11 % A 217.30 |
+|---|---|
+| BIDS | OFFERS |
+| PRICE ORDERS QTY. PRICE ORDERS QTY. 217.20 14 37 217.30 7 14 217.10 17 76 217.40 18 49 217.00 13 38 217.50 29 79 216.90 8 32 217.60 16 44 216.80 10 31 217.70 20 50 Total 1,639 Total 1,255 EXPIRY %2017-02-23 VOL. TRADED 15,397 O 212.50 H 217.60 L 212.30 C 212.80 |  |
+
+| \# | Commodity | F Lot size | Price | Merrim M RIGMM | 5 | Miles Margin | E |  |  |
+|---|---|---|---|---|---|---|---|---|---|
+| 20 | NATURALGAS | 1250 MMBTU | 212.8 |  | 40644 |  | 20322 | CALCOLATE |  |
+
+## **Contract Launch Calendar of Natural Gas**
+
+Every 4 months a new contract is introduced. For example, the January 2017 contract was introduced in Oct 2016, and this contract expires on 25th of Jan 2017.
+Here is something that you need to know – although, Natural Gas in an international commodity, its spot price in India is also dependent on how the domestic demand and supply situation pans out. However, the futures contract listed on MCX closely mirrors the Natural gas listed on NYMEX.
+Have a look at the image below –
+
+This is the graph of the Natural Gas futures contract on MCX overlaid with NYMEX – quite evidently, both the futures contracts move in unison. Given this, the following events have a significant impact on the natural gas prices on NYMEX and therefore MCX natural gas futures –
+\(\circ\) **Natural Gas inventory data** – increase in inventory tends to lower the futures price and decrease in inventory data tends to increase the futures price
+\(\circ\) **US weather conditions** – the US is the biggest natural gas market, so US weather conditions really matter. A harsh winter in the US leads to more natural gas consumption (as people use natural gas to heat homes) and therefore the inventory is consumed rapidly leading to increasing in price.
+\(\circ\) **Hurricane in the US** – Hurricane besides disrupting the weather conditions also tends to disrupt inventories. Hence, if you see a hurricane approaching the US coast, be prepared to go long in Natural Gas or at least, do not short natural gas contracts
+\(\circ\) **The price of Crude oil** – Natural gas is not only a cleaner fuel compared to crude but also costs much lower. Historically, the two contracts are highly correlated, although the correlation is not holding up over the recent few months. **Check this!**
+So, next time you are trading natural gas, make sure to check how the sun is shining in the US!
+And with this, folks, we will conclude this chapter on Natural Gas and this module on Currencies and commodities. We hope you liked reading this module as much as we enjoyed writing it for you.
+Onwards to Risk and Trading psychology!
+
+## **Key takeaways from this chapter**
+
+1. Natural gas occurs naturally and is found deep underground.
+2. Natural Gas has been in use since ancient times.
+3. Primary use of natural gas includes power generation, heating, cooking etc.,
+4. India is the 7th largest natural producer of natural gas.
+
+5. Lot size of natural gas is 1250 MMBtu, price quote if for 100 mmBtu.
+6. P&L per tick is Rs.125/- per tick.
+7. Natural gas futures on MCX mimic s the price movement of Natural gas on NYMEX.
+
+## CHAPTER 17
+
+## Commodity Options
+
+## 17.1 – Commodity options, finally!
+
+My first commodity trade was on pepper futures and this was sometime towards the end of 2005 or early 2006. Since then I’ve closely tracked the developments of the commodities market and the commodities exchanges in India. MCX has done a tremendous job in promoting commodities market in India. They have continuously introduced new contracts and enhanced the market depth. Liquidity too has improved many fold since then. If I remember right, sometime around 2009, there was an attempt to introduce options in the commodity market. Needless to say, when I first heard about this, I was quite excited thinking about all the possibilities that one would have trading commodity options.
+But unfortunately, this never came through and the commodities options were never introduced in the market. Since then, this topic on commodities options has surfaced couple of times but each time, it just remained a market rumor.
+
+However, it now appears that options on commodities will finally hit the market somtime soon. Around June 2017, SEBI cleared the files to permit commodities options.
+
+## You can read the new article **here.**
+
+Since then commodities exchanges have been working hard to build a good framework to introduce the commodities options. Given this, I thought it would be good to have this quick note on what to expect and what to look for in the commodities options market.
+For those who are not too familiar about options, I’d suggest you start reading the module on Options **here.**
+Just like futures, the options theory for commodities would remain the same. You have to just pay attention to logistics, and that’s the objective of this chapter.
+
+## ## 17.2 - Black 76
+
+One of the important bits that you need to note with commodity options is that **these are options on Futures** and not really the spot market.
+For example, if you look at a call option on Biocon, the underlying for this option is the spot price of Biocon. Likewise, if you look at Nifty options, the underlying is the spot Nifty 50 index value. However, if you were to look at an option on Crude Oil, the underlying here is not the spot price of Crude Oil. This is quite intuitive as we do not have a spot market for Crude Oil or for that matter any commodities in India. However, we do have a vibrant futures market. Hence the commodity options are based on the commodity futures market.
+If one were to talk about the crude oil options, then you need to remember the following -
+1. The underlying for Crude oil option is Crude oil Futures
+2. The underlying for crude oil futures is the price of Crude Oil on NYMEX
+**All clear for commodity options; Sebi notifies criterion, fixes limits**
+@ Hasiedu.com | Lisbonne. Jan 15, 2017, 08:30 PM 357
+
+So in a sense, this can be considered a derivative on a derivative. For all practical purpose, this should not really matter to you while trading. The only technical difference between an regular option (with spot as underlying) and option on futures is the way in which the premium is calculate. For the former, the premium can be calculated by using a regular Black & Scholes model and for the latter a model called Black 76 is used.
+The difference between these two models is the way in which the continuous compounded risk-free rate is treated. I will not get into the details at this point. But do remember this - there are plenty of Black & Scholes calculators online, so don’t be in a hurry to punch in the commodities variables in a standard B&S calculator to extract the premium value and Greeks. It simply won’t work
+
+## ## 17.3 - Contract Specifications
+
+We still do not know how the exchanges will set up the framework for these options. However, we did take a look at the mock framework and I’m guessing it won’t be too different from that.
+To begin with, exchanges may roll out Gold options, and would slowly but for surely introduce options on other commodities. Here are the highlight.
+**Option Type** - Call and Puts
+**Lot size** - Since these are options on futures, the lot size will be similar to the futures lot size
+**Order Types** - All order types would be permitted (IOC, SL, SLM, GTC, Regular, Limit)
+**Exercise style** - Options are likely to be European in nature
+**Margins** - SPAN + Exposure margin applicable for option writing and full premium to be paid for option buying. A concept of devilment margin will come into play, I’ve discussed this towards the end
+**Last trading day (for Gold)** – 3 days prior to the last tender day
+
+**Strikes cost** outcome Norms this work, change the public time, and the prize of the author, which can be made with named parties to aggregate businesses as a set of third party assets.
+This is where it gets a little tricky. Equity option traders are used to the following ‘Option Moneyness’ convention -
+1. At the Money (ATM) Options = This is when the spot is in and around the strike. So in a given series, only 1 strike is considered ATM
+2. In the Money (ITM) = All call option strike below the ATM and all put option strikes above the ATM are considered ITM options
+3. Out of the Money (OTM) = All call option strike above the ATM and all put option strikes below the ATM are considered Out of the Money (OTM) options
+However, the commodities options will introduce us to a new terminology - ‘Close to Money’ (CTM) and this is how it will work -
+1. ATM - The strikes closest to the settlement price is considered ATM
+2. CTM - Two strikes above and two strikes below ATM are considered CTM
+3. OTM and ITM - The definition remains the same as in Equity.
+**Settlement** - For daily M2M settlement in Futures, the exchange considers the commodities daily settlement price (DSP) as the reference value. The DSP of the commodity on the expiry day will therefore be the reference value for the options series as well.
+Let’s quickly understand how the settlement works. Consider this example - Assume the DSP of a commodity is 100. Assume this commodity has a strike interval at every 10 points. Given this, let’s identify the moneyness of strikes -
+1. ATM = 100
+2. CTM = 80, 90, 100, 110, and 120. Note, we have included two strikes above and below ATM
+3. OTM = All Call option above 100 and all Put options below 100 are considered OTM and therefore worthless
+4. ITM = Call Call options below 100 (including 80 and 90, which are CTM) are ITM, and all Put options above 100 (including 110 and 120, which are CTM) are ITM.
+
+All long option holders which are ‘CTM’, will have to give something called as an ‘explicit instruction’. An explicit instruction will devolve the option into a futures contract. The futures contract will be at the strike. For example if I hold 80 call option, then upon an ‘explicit instruction’, the call option will be devolved into a long futures position at 80. I’m guessing the ‘explicit instruction’, will be tendered via the trading terminal.
+Now, here is an important thing that you need to remember – If you do not give an explicit instruction to devolve your CTM option, then the option will be deemed worthless.
+All ITM option, except CTM, will get automatically settled. You need to be aware that settlement in options market is by means of devolving the option into an equivalent futures position. If you are holding a non-CTM, ITM option and you wish not to settle this automatically, then you need to give a ‘Contrary instruction’. In the absence of which, the contract will be automatically settled by means of devolvement.
+Now, the question is why would you not want to exercise an ITM option?
+There could be an instance where the ITM option that you have may not be worth exercising given the taxation and other applicable charges. So in this case, you are better off not exercising your ITM option rather than exercising it. So, this is when you use the ‘Contrary instruction’, privilege and opt not to exercise your ITM option.
+
+## ## 17.4 – Devolvement into Futures contract
+
+So assume you have an ITM (including CTM) option, and upon expiry the option will be converted (or devolved) into a Futures position. Now, we all know that a futures position requires margins to be parked with the broker. How do we account for this? I mean, when I go long on option, I just have to pay for the premium right? Naturally, at the time of buying the option, I would not park additional margin anticipating that the option ‘might’ get devolved into a futures position.
+To circumvent this, there is a concept of ‘Devolvement Margin’. I will cut through the technicalities and let you know what you should know and expect –
+
+Commodity options will expire few days before the first tender date of the futures contract. This means, there will be few days gap between the expiry of the futures contract and the options contract.
+Few days before the options can expire, exchanges will conduct a ‘What if scenario’ and generates a ‘Sensitivity Report’ to identify strikes which are likely to be ITM and CTM
+For all such options, exchanges will start assigning ‘Devolvement Margin’, this means you will have to fund your account with enough margin money to carry forward the option position. Half of the required margin needs to be available a day before the expiry and the remaining half on the day of expiry of the options contract to convert the position to a futures contract For example, The Expiry of the Gold option contract is on 28 November 2017 and the futures contract expires on 5 December 2017. Half of the margin needs to be added to the account on 27 November and the remaining on 28 November
+If you holding a deep ITM option, then the profits arising out of this position will be considered to offset a portion of the margins required
+Given the above point, the deeper the option, lesser would be the margin required. This also means CTM options will attract higher margins
+In simpler words, if you are holding a commodity option, and it’s likely to expire ITM, and you intend to carry to expiry, then you need ensure you bring in margin money as you approach expiry
+How much margin, expiry dates, tender date etc will vary based on the commodity Here is a quick note on how the options position will be devolved.
+
+| **Option Position** | **Devolved into** |
+|---|---|
+| Long Call | Long Futures |
+
+I guess as and when the option contracts roll out, we will have greater insight into the structure. I will update this chapter when the commodity options roll out with the exact information.
+Stay tuned.
+
+## **Key takeaways from this chapter**
+
+1. Options on commodities will be on Futures as underlying
+2. One cannot use the regular Black & Scholes Calculator for identifying the premium and Greeks
+3. Black 76 is the model used for Options on futures
+4. Upon exercising the option devolves into a futures position
+5. CTM options are two strikes above and below ATM
+6. If a CTM option holder does not give an explicit instruction, then the option is deemed worthless
+7. An ITM option holder can give a ‘contrary instruction’, to choose not to exercise the option. You would opt for this if you know that the position is not going to be profitable owing to taxes and applicable charges
+
+| Short Call | Short Futures |
+|---|---|
+| Long Put | Short Futures |
+| Short Put | Long Futures. |
+

@@ -5,20 +5,54 @@ never writes, never locks, and never touches the hot path - the scanner does not
 know it exists. State is assembled per request; the probe that computes
 distance-to-profitable is throttled so a refreshing browser cannot drive it.
 """
+import glob
 import json
 import os
+import subprocess
 import threading
 import time
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from arb import history as hist
-from arb.instruments import market_phase, now_ist, years_to_expiry
+from arb.instruments import IST, market_phase, now_ist, years_to_expiry
 from arb.mathview import chain_math, term_structure
 from arb.settlement import LegMarker, SettlementBook
+from arb.fileio import write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "dashboard.html")
-STATIC = os.path.join(HERE, "static")
+REPO_ROOT = os.path.dirname(HERE)
+LOG_PATH = os.path.join(REPO_ROOT, "engine.log")
+
+
+def _log_source():
+    """The engine's log: production's systemd-redirected engine.log
+    (deployment/trading-engine.service), or the newest local dev session log
+    (./run.sh writes logs/session_*.log) when that file does not exist."""
+    if os.path.isfile(LOG_PATH):
+        return LOG_PATH
+    sessions = sorted(glob.glob(os.path.join(REPO_ROOT, "logs", "session_*.log")))
+    return sessions[-1] if sessions else None
+
+
+def _tail_lines(path, n=400, chunk=65536, max_bytes=8_000_000):
+    """Last ``n`` lines of ``path`` without reading the whole file - a
+    long-running engine.log can grow to hundreds of MB over weeks."""
+    with open(path, "rb") as fh:
+        fh.seek(0, os.SEEK_END)
+        pos = fh.tell()
+        data = b""
+        read = 0
+        while pos > 0 and data.count(b"\n") <= n and read < max_bytes:
+            step = min(chunk, pos)
+            pos -= step
+            fh.seek(pos)
+            data = fh.read(step) + data
+            read += step
+    text = data.decode("utf-8", errors="replace")
+    return text.splitlines()[-n:]
 
 
 class DashboardState:
@@ -33,11 +67,21 @@ class DashboardState:
         self.margin = margin
         self.settlements = settlements or SettlementBook()
         # Exit price and P&L per leg: live mid before expiry, intrinsic at the
-        # recorded settlement level after it.
-        self.marker = LegMarker(feed.store, self.settlements, candles)
+        # recorded settlement level after it. None only for the placeholder
+        # state built before any trading day has run yet (see intraday_mode).
+        self.marker = LegMarker(feed.store, self.settlements, candles) \
+            if feed is not None else None
         # Set by the intraday runner; when present the snapshot, the
-        # history feed and the page all switch to that strategy.
+        # history feed and the page all switch to that strategy. This can be
+        # True while `intraday` (the engine) is still None - the process is
+        # up and idling between trading days, with no engine/feed attached
+        # yet - so the page must not fall back to the arb layout meant for
+        # an always-attached engine.
+        self.intraday_mode = False
         self.intraday = None
+        # Why today's live start was refused ("" when it was not): shown as the
+        # halt reason, with a Retry LIVE button, while the process holds.
+        self.start_refused = ""
         self._hist = None
         self._hist_at = 0.0
         self.started = time.time()
@@ -47,6 +91,8 @@ class DashboardState:
         self._probe_at = 0.0
         self._math = None
         self._math_at = 0.0
+        self._cons = None
+        self._cons_at = 0.0
         self._lock = threading.Lock()
 
     def live_spot(self, name):
@@ -62,6 +108,51 @@ class DashboardState:
             except Exception:
                 pass
         return float(self.spots.get(name, 0.0))
+
+    def constraints(self):
+        """Every entry check against its current value (arb/constraints.py).
+        Computed only when the page asks, and at most every 2 s however often
+        it does, so an open tab cannot load the trading loop."""
+        now = time.time()
+        if self._cons is not None and now - self._cons_at < 2.0:
+            return self._cons
+        from arb import constraints
+        e = getattr(self, "intraday", None)
+        saved_path = os.path.join(REPO_ROOT, ".cache", "constraints_last.json")
+        if e is None:
+            # No session: thresholds from config, pace from cached candles, and
+            # the per-instrument table as the last session left it on disk.
+            saved = None
+            try:
+                with open(saved_path) as fh:
+                    saved = json.load(fh)
+            except (OSError, ValueError):
+                pass
+            try:
+                from arb.config import IntradayLimits
+                out = constraints.offline(self.cfg, IntradayLimits.load(), saved)
+            except Exception as exc:
+                out = {"waiting": True, "now": now_ist().strftime("%H:%M:%S"),
+                       "session_start": self.cfg.session_start,
+                       "error": f"{type(exc).__name__}: {exc}"}
+        else:
+            try:
+                out = constraints.snapshot(e, self.cfg)
+            except Exception as exc:
+                # The engine mutates these dicts on its own thread; a read that
+                # races it is retried on the next poll rather than trusted.
+                out = {"error": f"{type(exc).__name__}: {exc}"}
+            # Kept on disk (at most every 30 s, and only while the market is
+            # open) so a restart after the close still has the day's last table.
+            if "error" not in out and out.get("phase") == "open" \
+                    and now - getattr(self, "_cons_saved_at", 0.0) >= 30.0:
+                self._cons_saved_at = now
+                try:
+                    write_json(saved_path, dict(out, saved_at=now_ist().strftime("%Y-%m-%d %H:%M:%S")))
+                except OSError:
+                    pass
+        self._cons, self._cons_at = out, now
+        return out
 
     def mathematics(self):
         if getattr(self, 'intraday', None) is not None:
@@ -237,10 +328,95 @@ class DashboardState:
                 "target_est": round(est, 2) if est else None,
                 "extensions": p.extensions}
 
+    def _last_day(self):
+        """The most recent trading day's closed trades, from the journal the
+        engine writes - so an idle process (after the close, or restarted
+        before the next session) shows that day's figures instead of zeros.
+        They stay up until the next day's session_start, then clear.
+
+        Returns (day, records) or (None, []). Re-read every few seconds, not
+        on every page poll."""
+        now = time.time()
+        if getattr(self, "_last_day_at", 0.0) and now - self._last_day_at < 3.0:
+            return self._last_day_cache
+        self._last_day_at = now
+        self._last_day_cache = (None, [])
+        jdir = os.path.join(REPO_ROOT, "journal", "live" if self.mode == "live" else "")
+        for path in sorted(glob.glob(os.path.join(jdir, "trades_*.jsonl")), reverse=True):
+            day = os.path.basename(path)[len("trades_"):-len(".jsonl")]
+            try:
+                with open(path) as fh:
+                    recs = [json.loads(l) for l in fh if l.strip()]
+            except (OSError, ValueError):
+                continue
+            recs = [r for r in recs if "exit_reason" in r]
+            if not recs:
+                continue
+            try:
+                hh, mm = (int(x) for x in self.cfg.session_start.split(":"))
+                reset = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)) \
+                    .replace(hour=hh, minute=mm, tzinfo=IST)
+            except ValueError:
+                break
+            if now_ist() < reset:
+                self._last_day_cache = (day, recs)
+            break
+        return self._last_day_cache
+
+    def _idle_day_stats(self):
+        """Dashboard figures for the last day, rebuilt from its journal."""
+        cap = round(getattr(self, "boot_capital", 0.0), 2)
+        day, recs = self._last_day()
+        try:
+            from arb.config import IntradayLimits
+            pct = IntradayLimits.load().daily_target_pct
+        except Exception:
+            pct = 0.0
+        if not recs:
+            tgt = round(cap * pct / 100.0, 2)
+            return {"capital": cap, "day_pnl": 0.0, "day_pct": 0.0,
+                    "target_inr": tgt, "target_pct": pct, "target_hit": False,
+                    "progress_pct": 0.0, "trades": 0, "wins": 0, "losses": 0,
+                    "recent_trades": []}
+        # The day's opening capital, as the engine showed it all day - not the
+        # post-close figure that already has the day's P&L folded in.
+        cap = round(float(recs[0].get("capital") or cap), 2)
+        pnl = round(sum(float(r.get("net_inr") or 0.0) for r in recs), 2)
+        wins = sum(1 for r in recs if float(r.get("net_inr") or 0.0) >= 0)
+        tgt = round(cap * pct / 100.0, 2)
+        return {"capital": cap, "day_pnl": pnl,
+                "day_pct": round(100.0 * pnl / cap, 3) if cap else 0.0,
+                "target_inr": tgt, "target_pct": pct, "target_hit": pnl >= tgt > 0,
+                "progress_pct": round(100.0 * pnl / tgt, 1) if tgt else 0.0,
+                "trades": len(recs), "wins": wins, "losses": len(recs) - wins,
+                "recent_trades": recs[-12:][::-1], "stats_day": day}
+
     def intraday_snapshot(self):
         """State for the intraday strategy. The arbitrage figures - implied
         rates, the return band, stake, capital utilisation - have no meaning
         here and are deliberately absent rather than shown as zero."""
+        if self.intraday is None:
+            # Idling between trading days: no engine/feed exists yet (either
+            # this process has not run a single day yet, or it is between
+            # yesterday's close and the next session_start). The page shows
+            # the same shape as a normal day - last known spots, capital,
+            # controls - just with everything at rest, instead of crashing on
+            # a None engine or hiding the whole page.
+            return {"strategy": "intraday", "waiting": True,
+                    "now": now_ist().strftime("%H:%M:%S"),
+                    "phase": market_phase(start=self.cfg.session_start,
+                                          end=self.cfg.session_end),
+                    "mode": self.mode, "session_start": self.cfg.session_start,
+                    "connected": False, "uptime_s": 0,
+                    "spots": {k: round(v, 2) for k, v in (self.spots or {}).items()},
+                    "indices": sorted((self.spots or {}).keys()),
+                    "ticks": 0, "tick_rate": 0.0, "passes": 0,
+                    "minutes_to_close": 0.0,
+                    **self._idle_day_stats(),
+                    "open_positions": [],
+                    "halted": False, "halt_reason": "",
+                    "rejects": {}, "structures": {}, "confluence": {},
+                    "limits": {}}
         e, f = self.intraday, self.feed
         up = time.time() - self.started
         s = e.summary()
@@ -299,11 +475,24 @@ class DashboardState:
                 "squareoff_minutes": e.L.squareoff_minutes,
             },
             "recent_trades": e.records[-12:][::-1],
+            "lhm": self._lhm(e),
         }
 
+    @staticmethod
+    def _lhm(e):
+        """The day's last_half_hour decision - the rule, the AI, the outcome."""
+        try:
+            return e.lhm_status() if hasattr(e, "lhm_status") else None
+        except Exception as ex:
+            return {"error": repr(ex)[:200]}
+
     def snapshot(self):
-        if getattr(self, "intraday", None) is not None:
-            return self.intraday_snapshot()
+        if getattr(self, "intraday_mode", False):
+            d = self.intraday_snapshot()
+            if self.start_refused:
+                d.update(halted=True, halt_reason=self.start_refused,
+                         start_refused=self.start_refused)
+            return d
         e, f, r = self.engine, self.feed, self.risk
         st = e.stats.summary()
         h = e.quote_health
@@ -359,6 +548,15 @@ class DashboardState:
         }
 
 
+def switch_target(path, mode):
+    """The mode a switch request asks for: ?to=paper|live when given (Retry
+    LIVE after a refused start is live -> live), else the other mode."""
+    to = (parse_qs(urlparse(path).query).get("to") or [""])[0]
+    if to in ("paper", "live"):
+        return to
+    return "paper" if mode == "live" else "live"
+
+
 def make_handler(state):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -385,26 +583,24 @@ def make_handler(state):
                 elif self.path.startswith("/api/candles"):
                     rows = state.candles.all(180) if state.candles else {}
                     self._send(json.dumps(rows).encode(), "application/json")
-                elif self.path.startswith("/static/"):
-                    # Fonts are served locally rather than from a CDN so the
-                    # dashboard renders identically with no network.
-                    name = os.path.basename(self.path)
-                    fp = os.path.join(STATIC, name)
-                    if os.path.isfile(fp) and os.path.dirname(fp) == STATIC:
-                        ct = "font/woff2" if name.endswith(".woff2") else "application/octet-stream"
-                        with open(fp, "rb") as fh:
-                            body = fh.read()
-                        self.send_response(200)
-                        self.send_header("Content-Type", ct)
-                        self.send_header("Cache-Control", "public, max-age=604800")
-                        self.send_header("Content-Length", str(len(body)))
-                        self.end_headers()
-                        self.wfile.write(body)
-                    else:
-                        self.send_response(404); self.end_headers()
+                elif self.path.startswith("/api/logs"):
+                    q = parse_qs(urlparse(self.path).query)
+                    n = max(50, min(5000, int(q.get("lines", ["400"])[0])))
+                    src = _log_source()
+                    body = {"path": src or "", "available": bool(src),
+                            "lines": _tail_lines(src, n) if src else []}
+                    self._send(json.dumps(body).encode(), "application/json")
+                elif self.path in ("/logs", "/logs.html"):
+                    with open(os.path.join(HERE, "logs.html"), "rb") as fh:
+                        self._send(fh.read(), "text/html; charset=utf-8")
+                elif self.path.startswith("/api/constraints"):
+                    self._send(json.dumps(state.constraints()).encode(), "application/json")
+                elif self.path in ("/constraints", "/constraints.html"):
+                    with open(os.path.join(HERE, "constraints.html"), "rb") as fh:
+                        self._send(fh.read(), "text/html; charset=utf-8")
                 elif self.path in ("/", "/index.html"):
                     page = PAGE
-                    if getattr(state, "intraday", None) is not None:
+                    if getattr(state, "intraday_mode", False):
                         alt = os.path.join(os.path.dirname(PAGE), "intraday.html")
                         if os.path.isfile(alt):
                             page = alt
@@ -419,6 +615,89 @@ def make_handler(state):
                 try:
                     self._send(json.dumps({"error": str(exc)}).encode(),
                                "application/json")
+                except Exception:
+                    pass
+
+        def _control(self, body):
+            self._send(json.dumps(body).encode(), "application/json")
+
+        def _control_intraday(self, fn, action):
+            e = getattr(state, "intraday", None)
+            if e is None:
+                msg = ("no trading session running right now (market closed / "
+                       "idle between sessions)" if getattr(state, "intraday_mode", False)
+                       else "no intraday engine running (arb strategy is active)")
+                return self._control({"ok": False, "action": action, "error": msg})
+            fn(e)
+            self._control({"ok": True, "action": action})
+
+        def _switch_mode(self):
+            """Flip .trading_mode and restart the single trading-engine unit.
+
+            Runs as a detached transient unit (systemd-run), not a child of this
+            process: the switch script restarts the very unit this process may
+            be running under, so it must sit outside this unit's cgroup to
+            survive that restart.
+            """
+            target = switch_target(self.path, state.mode)
+            # The script must restart the unit THIS process runs under: prod
+            # (trading-engine) and dev (trading-engine-dev) share this code, and
+            # switch_mode.sh on dev would rewrite dev's mode but restart prod.
+            name = "switch_mode.sh"
+            try:
+                with open("/proc/self/cgroup") as fh:
+                    if "trading-engine-dev.service" in fh.read():
+                        name = "switch_mode_dev.sh"
+            except OSError:
+                pass
+            script = os.path.join(os.path.dirname(HERE), "deployment", name)
+            unit = f"trading-switch-{int(time.time() * 1000)}"
+            try:
+                # systemd-run returns once the transient unit is started; a
+                # failure there used to be discarded and the page said
+                # "Switching..." while nothing happened.
+                r = subprocess.run(
+                    ["systemd-run", "--collect", f"--unit={unit}",
+                     "/bin/bash", script, target],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    text=True, timeout=15)
+            except FileNotFoundError:
+                return self._control({"ok": False,
+                    "error": "systemd-run not found - mode switching only works "
+                             "on the deployed host (systemd), not this environment"})
+            except subprocess.TimeoutExpired:
+                return self._control({"ok": False,
+                    "error": f"systemd-run did not answer in 15 s; check: journalctl -u {unit}"})
+            if r.returncode != 0:
+                return self._control({"ok": False,
+                    "error": f"systemd-run failed ({r.returncode}): {(r.stderr or '').strip()[:300]}"})
+            self._control({"ok": True, "switching_to": target})
+
+        def do_POST(self):
+            # A web page on another site can make the browser POST here (the
+            # controls include switching to LIVE); the dashboard's own buttons
+            # send an Origin naming this host. Tools without an Origin pass.
+            origin = urlparse(self.headers.get("Origin") or "").netloc
+            if origin and origin != (self.headers.get("Host") or ""):
+                self.send_response(403)
+                self.end_headers()
+                return
+            try:
+                if self.path == "/api/control/exit_all":
+                    self._control_intraday(lambda e: e.manual_exit_all(), "exit_all")
+                elif self.path == "/api/control/stop_trading":
+                    self._control_intraday(
+                        lambda e: e.manual_stop("manual stop (dashboard)"), "stop_trading")
+                elif urlparse(self.path).path == "/api/control/switch_mode":
+                    self._switch_mode()
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as exc:
+                try:
+                    self._control({"ok": False, "error": str(exc)})
                 except Exception:
                     pass
     return Handler

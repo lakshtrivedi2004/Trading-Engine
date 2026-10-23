@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% from "macros.html" import chart %}
+{% block title %}Forecast lab{% endblock %}{% block heading %}Forecast lab{% endblock %}
+{% macro badge(v) -%}
+<span class="verdict-badge {{ 'good' if v.startswith('Beats') else ('bad' if v.startswith('WORSE') else 'meh') }}">{{ v }}</span>
+{%- endmacro %}
+{% block content %}
+<p class="lead">Next-session forecasts — always shown next to how they actually performed on data the model had never seen.</p>
+
+<div class="tablewrap"><table><thead><tr><th class="l">Index</th><th>P(up) next session</th><th>Direction hit rate</th><th>Baseline hit rate</th>
+<th class="l">Direction verdict</th><th>Expected move</th><th class="l">Move-size verdict</th></tr></thead><tbody>
+{% for n, x in fc.items() %}
+<tr><td class="l"><a href="?mode={{ mode }}&index={{ n|urlencode }}"><b>{{ n }}</b></a></td>
+<td class="{{ '' if x.direction.verdict.startswith('Beats') else 'muted' }}">{{ (x.direction.tomorrow|pct(0, False)) if x.direction.tomorrow is defined else '–' }}</td>
+<td>{{ x.direction.hit_rate|pct(1, False) }}</td><td>{{ x.direction.baseline_hit_rate|pct(1, False) }}</td>
+<td class="l">{{ badge(x.direction.verdict) }}</td>
+<td><b class="grad-text">±{{ '%.2f'|format(x.size.tomorrow * 100) if x.size.tomorrow is defined else '–' }}%</b></td>
+<td class="l">{{ badge(x.size.verdict) }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+
+<form class="bar autosubmit" method="get"><input type="hidden" name="mode" value="{{ mode }}">
+<label>Index<select name="index">{% for a in names %}<option {% if a == name %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label></form>
+
+<div class="grid2">
+  <div class="card">
+    <div class="label">Direction · {{ name }} · next session</div>
+    {% if f.direction.tomorrow is defined %}
+    <div class="big {{ ('up' if f.direction.tomorrow > 0.5 else 'down') if f.direction.verdict.startswith('Beats') else 'muted' }}">{{ f.direction.tomorrow|pct(0, False) }} <span style="font-size:1rem" class="muted">chance of an up close</span></div>
+    <div class="meter"><i style="width:{{ (f.direction.tomorrow * 100)|round(0) }}%"></i></div>
+    <p class="note">Plain base rate (share of up days in history): {{ f.direction.tomorrow_base|pct(0, False) }}.</p>
+    {% endif %}
+    <p>{{ badge(f.direction.verdict) }}</p>
+    <ul class="note">
+      <li>Right {{ f.direction.hit_rate|pct(1, False) }} of the time on {{ '{:,}'.format(f.direction.n) }} unseen sessions; the baseline was right {{ f.direction.baseline_hit_rate|pct(1, False) }}.</li>
+      <li>Forecast skill vs baseline (Brier): {{ '%+.2f'|format(f.direction.skill * 100) }}% · Diebold-Mariano t = {{ '%+.2f'|format(f.direction.dm_t) }}.</li>
+      <li>Trading it (long when P(up) &gt; 50%, after costs) vs simply holding: {{ f.direction.trade_excess|pct(1) }}/yr, t = {{ '%+.2f'|format(f.direction.trade_t) }}.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="label">Move size · {{ name }} · next session</div>
+    {% if f.size.tomorrow is defined %}
+    <div class="big grad-text">±{{ '%.2f'|format(f.size.tomorrow * 100) }}%</div>
+    <p class="note">Typical size of the next move, up or down. Naive estimate (20-day average): ±{{ '%.2f'|format(f.size.tomorrow_base * 100) }}%.
+    For {{ name }} at {{ ctx.indices[name]['Close'].iloc[-1]|num(0) }} that is about ±{{ (ctx.indices[name]['Close'].iloc[-1] * f.size.tomorrow)|num(0) }} points.</p>
+    {% endif %}
+    <p>{{ badge(f.size.verdict) }}</p>
+    <ul class="note">
+      <li>Average error {{ '%.3f'|format(f.size.mae * 100) }}% vs {{ '%.3f'|format(f.size.baseline_mae * 100) }}% for the naive estimate, on {{ '{:,}'.format(f.size.n) }} unseen sessions (Diebold-Mariano t = {{ '%+.2f'|format(f.size.dm_t) }}).</li>
+      <li>The actual move stayed within 2x the forecast on {{ f.size.within_2x|pct(0, False) }} of days — the rest are the surprises a stop-loss must survive.</li>
+    </ul>
+  </div>
+</div>
+{{ chart(size_chart, 320) }}
+{{ chart(dir_chart, 280) }}
+
+<div class="warnbox"><b>Read this before using a forecast.</b> {{ note }}</div>
+<details><summary>How the models work (and why you can trust the accuracy numbers)</summary><ul>
+<li><b>Direction</b>: regularised logistic regression on information available at the close — the index's 1/5/20-day returns, 20-day volatility, distance from its 200-day average, day range, India VIX change and the US session that closed <i>before</i> the Indian close. The evening US session is not used: it hasn't happened when the forecast is made.</li>
+<li><b>Move size</b>: HAR model (Corsi 2009) — the next session's absolute move from the last day's, week's and month's average absolute moves plus the day's high-low range. Volatility clusters, which is why this part is forecastable.</li>
+<li><b>Walk-forward</b>: the models are refit every month using only data that existed at that time; every scored forecast was made without seeing its outcome.</li>
+<li><b>Baselines and test</b>: direction vs "past share of up days"; move size vs "last 20 days' average". The Diebold-Mariano test (1995, Newey-West errors) decides: |t| below 2 means no better than the baseline.</li>
+</ul></details>
+{% endblock %}

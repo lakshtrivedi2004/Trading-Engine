@@ -86,7 +86,7 @@ def bench_engine():
                     ExecutionEngine(PaperBroker(CM), CM, risk, j, None, 65),
                     j, None, log=lambda *_: None)
 
-    fn = lambda: eng.scan_once(65, 0.05)
+    fn = lambda: eng.scan_once(0.05)
     print(f"\nArbEngine.scan_once (25 strikes, all scanners): {timeit(fn, 400):.1f} µs")
 
     pr = cProfile.Profile()

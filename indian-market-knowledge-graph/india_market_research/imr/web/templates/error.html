@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Problem{% endblock %}{% block heading %}Something needs your attention{% endblock %}
+{% block content %}
+<div class="errbox"><b>Problem:</b> {{ problem }}</div>
+<div class="warnbox"><b>What to do next:</b> {{ next_step }}</div>
+{% endblock %}

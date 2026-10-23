@@ -226,6 +226,14 @@ DEFAULT_UNDERLYINGS = [
     # SENSEX: BSE, weekly Thursday expiries, lot 20, 100-point strikes.
     dict(name="SENSEX", spot_token="99919000", spot_exchange="BSE",
          spot_exchange_type=3, segment="BFO", option_exchange_type=4),
+    # FINNIFTY: monthly only (weeklies withdrawn same as BANKNIFTY), lot 60.
+    dict(name="FINNIFTY", spot_token="99926037", spot_exchange="NSE",
+         spot_exchange_type=1, segment="NFO", option_exchange_type=2,
+         num_expiries=2),
+    # MIDCPNIFTY: monthly only, lot 120, the most volatile of the five.
+    dict(name="MIDCPNIFTY", spot_token="99926074", spot_exchange="NSE",
+         spot_exchange_type=1, segment="NFO", option_exchange_type=2,
+         num_expiries=2),
 ]
 
 
@@ -306,7 +314,7 @@ class IntradayLimits:
     # ── what may be bought ──────────────────────────────────────────────────
     # Only strikes this far either side of the money. Beyond it the option is a
     # lottery ticket: cheap because it will most likely expire worthless.
-    max_strike_offset: int = 4
+    max_strike_offset: int = 5
     # Delta floor, measured off the chain (dPremium/dStrike), not a model. Below
     # this the contract barely responds to the index and the structure read that
     # justified the trade cannot express itself in the premium.
@@ -386,6 +394,12 @@ class IntradayLimits:
     # trade's direction (move to the next level, lock the stop within
     # extend_giveback_r of the old target), otherwise take it. "exit" always takes it.
     on_target: str = "extend"
+    # Owner's trailing rule (1 Oct 2026): trail to each new higher low (lower
+    # high on a short) from the first one after entry, not only after +1R.
+    trail_from_first_swing: bool = False
+    # Never set a target closer than this many R; 0 leaves the momentum target
+    # as it is. Distinct from min_target_r, which SKIPS a trade instead.
+    target_floor_r: float = 0.0
     max_target_extensions: int = 2
     extend_min_r: float = 1.0
     extend_giveback_r: float = 0.75
@@ -423,6 +437,10 @@ class IntradayLimits:
     # ...but never tighter than this many index ATRs: inside one bar's noise a
     # stop is hit by the spread's own wobble. 0 disables.
     min_stop_atr: float = 1.0
+    # Stop at the NEARER of the setup's level (zone edge) and the last swing,
+    # when both are on the right side of price (owner, 19 Oct 2026). Off until
+    # research/pace_stop_test.py says otherwise.
+    stop_nearest_swing: bool = False
     # The day stops here. Not a target - a hard halt.
     max_daily_loss_pct: float = 15.0
     max_open_positions: int = 1
@@ -628,18 +646,10 @@ class IntradayLimits:
     # flat-count behaviour and is not recommended: a count is order-blind, and
     # order is most of what distinguishes a setup from a coincidence.
     require_playbook: bool = True
-    # How many named setups must have completed. One is a setup; raising this
-    # to 2 demands two different models agree on the same bar, which is far
-    # stricter and will cut the trade count hard - choose it deliberately, and
-    # remember that a smaller sample is also a weaker basis for believing any
-    # of this works.
-    min_setups: int = 1
     # Which playbooks are live. Empty means every registered one. Names come
     # from arb/playbooks.py:PLAYBOOKS, and an unrecognised name is reported at
     # startup rather than silently ignored.
     playbooks: tuple = ()
-    # Kept for older configs; with min_confirmations = 1 it has no effect.
-    setups_that_stand_alone: int = 2
     # How recent a structural event may be and still count as part of a live
     # sequence. On a 1-minute series 40 bars is roughly the last three quarters
     # of an hour - long enough for CHoCH-then-BOS to complete, short enough
@@ -649,6 +659,23 @@ class IntradayLimits:
     # this many bars after that break. The sequence window says how far apart
     # the steps may be; this says how stale the trigger may be. 0 disables.
     trigger_fresh_bars: int = 5
+    # Retest horizon for ob_fvg_retest: maximum bars after the break within which
+    # the retest must occur. Research (Bulkowski 2021, Zarattini et al. 2024,
+    # Brock et al. 1992, Cont et al. 2014) shows fast retests in next 2-3 candles
+    # retain institutional momentum; stale retests (> 3 bars) degrade into drift.
+    retest_max_bars: int = 3
+    retest_min_bars: int = 1
+    # Refuse an ob_fvg_retest entry once price has closed past the zone's far
+    # edge (still inside active_zone's tolerance pad). Off, the entry takes the
+    # swing as its stop, or no trade if that is on the wrong side too.
+    retest_refuse_breached: bool = True
+    # 13 Oct 2026 strategy review, each OFF until the year test says otherwise
+    # (research/PAPERS.md section 22): see arb/smc.py:analyse, arb/regime.py:
+    # atr_ratio and arb/playbooks.py:_own_zone.
+    retest_own_zone: bool = False
+    smc_consume_swings: bool = False
+    smc_today_only: bool = False
+    pace_no_gap: bool = False
     # The breaking bar's body, in ATR, for choch_bos. 0 disables.
     displacement_body_atr: float = 0.8
     # How far back a liquidity sweep may have completed. This must be WIDER
@@ -699,7 +726,8 @@ class IntradayLimits:
     # setups are exempt - a retest is a pullback, and on the lower timeframe a
     # pullback is a counter move by definition.
     ltf_must_agree: bool = True
-    # Per playbook and side, at most this many entries a day. A model that has
+    # Per index, playbook and side (as tools/backtest.py:run tested it), at
+    # most this many entries a day. A model that has
     # already been tried twice today in the same direction is not a new idea.
     # 0 disables.
     max_per_playbook_per_day: int = 2
@@ -746,9 +774,9 @@ class IntradayLimits:
     # ── session ─────────────────────────────────────────────────────────────
     # Nothing is carried overnight: every position is closed this many minutes
     # before session_end, whatever it is worth.
-    squareoff_minutes: float = 15.0
+    squareoff_minutes: float = 1.0
     # No new position inside this window - not enough time left to reach target.
-    no_new_trades_minutes: float = 30.0
+    no_new_trades_minutes: float = 15.0
     # Let the open settle before reading structure off it.
     warmup_minutes: float = 15.0
     # How long an index may go without usable candles before the engine says so
@@ -769,10 +797,37 @@ class IntradayLimits:
     # broker may give less on a given stock, and a live order above its limit
     # is refused, not resized.
     stocks_leverage: float = 5.0
+    # Per-trade risk cap for a STOCK trade, % of capital, costs inside. 0 = the
+    # same cap as the indices (max_risk_pct_per_trade). Owner, 6 Oct 2026:
+    # "7% or below, the same as the index" - never above
+    # STOCKS_RISK_CEILING_PCT whatever the file says.
+    stocks_max_risk_pct: float = 0.0
     # The scan: how many names to trade, when to pick them, how often to re-pick.
-    stocks_top_k: int = 3
+    stocks_top_k: int = 5
     stocks_pick_at: str = "09:30"
     stocks_rescan_min: float = 30.0
+    # Per-minute spike watch over every subscribed stock (arb/stockspike.py,
+    # owner 6 Oct 2026): "on" adds a spiking stock to the picks for
+    # stocks_spike_hold_min (traded by the same gates, stops and risk cap as
+    # any pick), "shadow" only logs it, anything else is off. Spike = mean true
+    # range of the last stocks_spike_fast closed 1-minute bars over the median
+    # of up to stocks_spike_base_bars before them.
+    stocks_spike_watch: str = "off"
+    stocks_spike_ratio: float = 5.0          # 2.5 fired 1,000-2,500 times a day on real bars; 5 fires 11-34
+    stocks_spike_fast: int = 5
+    stocks_spike_base_bars: int = 120
+    stocks_spike_k: int = 3
+    stocks_spike_hold_min: float = 15.0
+    # NSE's live top gainers/losers (F&O), refreshed this often (minutes; 0 = off).
+    stocks_movers_min: float = 5.0
+    # The stock's own option (CE long / PE short) priced off NSE's chain for
+    # every stock setup: "shadow" logs and journals what it would buy, or why
+    # it cannot (one lot above capital, loss at the stop above the risk cap).
+    # Never sends an order; anything else is off.
+    stocks_options: str = "off"
+    # Stock option strikes either side of the money: shown on the constraints
+    # page (ATM +/- this) and searched out of the money for a buy (owner: +/- 4).
+    stocks_option_strikes: int = 4
     # Universe filters. Liquidity is what makes a scalp possible at all: a
     # stock that trades Rs 50 crore a day has a one-tick spread on a Rs 50k
     # order; a thin one does not.
@@ -788,11 +843,168 @@ class IntradayLimits:
     stocks_w_rvol: float = 1.0
     stocks_w_move: float = 0.5
     stocks_w_range: float = 0.5
+    # Relative volume is scored over this many recent minutes, not since the
+    # open, so a morning spike that has gone quiet rotates out at the next
+    # rescan. Falls back to since-open until the desk has this much history.
+    # 0 = since the open only.
+    stocks_rvol_window_min: float = 15.0
+    # Tradability. The scan prices each stock's round trip at a stop of
+    # stocks_scan_stop_atr one-minute ATRs against the entry gate's
+    # max_cost_frac_of_risk (arb/scanner.py:scan_cost_ratio). Above
+    # stocks_max_cost_ratio the name is dropped - costs alone would refuse it -
+    # and below it cheaper names score higher (weight stocks_w_cost).
+    # 2.0 ATRs is a judgment call for a typical structural stop, not a fitted
+    # value; watch stock:cost_too_large_for_stop in the rejects to tune it.
+    stocks_scan_stop_atr: float = 2.0
+    stocks_max_cost_ratio: float = 1.0
+    stocks_w_cost: float = 1.0
     # A stock trade must clear its round trip by at least this many rupees at
     # the target (the equity analogue of min_net_points), and a spread
     # allowance (fraction of price) is charged in the replay.
     stocks_min_net_inr: float = 100.0
     stocks_spread_frac: float = 0.0003
+
+    # ── 30 Sep 2026 settings (research/PAPERS.md 0k) ──────────────────────────
+    # Trading capital is min(capital_ceiling, the account's real equity): a
+    # profit stays in the account but is not traded, a loss shrinks what is.
+    # 0 = no ceiling (the day's P&L compounds, the old behaviour).
+    capital_ceiling: float = 0.0
+    # Pace gate per index: {"NIFTY": [first_half, second_half], ...}, halves
+    # split at atr_half_split. A listed index uses these instead of
+    # min_atr_ratio and the midday rule; "STOCKS" covers the stock desk.
+    atr_by_index: dict = field(default_factory=dict)
+    atr_half_split: str = "12:15"
+    # Enter only with the last N completed 4-hour index bars (09:15-13:14,
+    # 13:15-close). 0 = off. Daily 3-5 day trends tested worse (0k).
+    trend_4h_bars: int = 0
+    # On an index's expiry day buy the NEXT expiry, not the 0DTE contract.
+    expiry_trade_next: bool = False
+    # Entries and exits as marketable limits: the touch +/- protection, IOC.
+    # A plain MARKET order is refused for API orders on NSE F&O
+    # (NSE/FAOP/69296) and by Angel on BFO, so this is the fill-now order.
+    market_orders: bool = False
+    market_protection_pct: float = 2.5
+    # ./run.sh_real holds a systemd-inhibit sleep/lid lock for as long as the
+    # LIVE engine runs (./run.sh always does for paper). Off = no lock.
+    live_block_sleep: bool = False
+
+    # ── the 1 Oct 2026 live-loss review (owner-approved fixes) ─────────────
+    # F1. Decide on COMPLETED bars only, within entry_window_sec of the close,
+    # and skip when price has already moved max_chase_atr from that close. Live
+    # used to read the still-forming bar, so it traded a rule tools/backtest.py
+    # never tested (a 23-second-old "rejection wick" on 1 Oct).
+    decide_on_closed_bars: bool = False
+    entry_window_sec: float = 15.0
+    max_chase_atr: float = 0.5
+    # F2. No entry once the index has already run max_run_atr ATRs in the
+    # trade's direction over the last run_bars completed bars. 0 disables.
+    max_run_atr: float = 0.0
+    run_bars: int = 30
+    # F3. No put right after a reclaimed sell-side sweep, no call after a
+    # buy-side one (arb/regime.py:swept_against).
+    sweep_against_veto: bool = False
+    # F4. After a losing index trade, no new trade on the same side on any index
+    # for this many minutes. 0 disables.
+    same_side_cooldown_min: float = 0.0
+    # F5. Count the round trip and the expected exit slippage (exit_slip_spreads
+    # spreads + exit_slip_frac of the premium) INSIDE max_risk_pct_per_trade,
+    # so a stop-out loses at most the cap. Stocks: fees, slippage and spread.
+    risk_includes_costs: bool = False
+    # Price a trade's round trip with the exact BUY + SELL charges (the cost
+    # the journal books), not the arbitrage scanner's worst-case bound. See
+    # IntradayEngine._round_trip_points.
+    exact_trade_costs: bool = False
+    # Last-half-hour momentum (Gao et al. 2018; Baltussen et al. 2021), owner's
+    # momentum request of 5 Oct 2026. At the 14:59 close, if the index has moved
+    # lhm_adr_frac x ADR from the previous close and the 4-hour trend agrees,
+    # buy in that direction with a stop lhm_stop_atr ATRs away, out at the
+    # square-off. A year of NIFTY (research_out/momentum/l1_feasible_result.txt):
+    # 84 trades, +26,040 / +13,007, t 2.4 - after ~80 variants, so unproven.
+    # "off" | "shadow" (log what it would have done, send nothing) | "on"
+    # (owner, 6 Oct 2026, on research/portfolio_result.txt: real orders through
+    # enter() at max_risk_pct_per_trade - lhm_risk_pct is the shadow's cap
+    # only - managed by the backtest's exits: the index stop, the premium stop,
+    # the +1R cost-covered breakeven, the square-off; no target, no trail).
+    # Any other value is off.
+    last_half_hour: str = "off"
+    lhm_indices: tuple = ("NIFTY",)
+    lhm_entry_at: str = "15:00"
+    lhm_adr_frac: float = 0.5
+    lhm_adr_days: int = 10
+    lhm_stop_atr: float = 1.5
+    lhm_risk_pct: float = 4.0
+    # AI cross-check of the last_half_hour entry (owner, 22 Oct 2026;
+    # arb/ai_verify.py). The rule is unchanged; the model is shown the rule's
+    # numbers, the bars, structure, the option chain with OI / PCR / Greeks
+    # (Angel's), the future, the other indices - and calls CALL, PUT or
+    # NO_TRADE on its own. "off" never asks. "shadow" asks and journals but
+    # never blocks. "on" sends the order only when the model calls the rule's
+    # side at lhm_ai_min_confidence or more; no answer within
+    # lhm_ai_timeout_sec, an error or NO_TRADE is no trade. The entry waits
+    # for the answer (the chase guard still applies); each question and answer
+    # is journaled (ai_lhm_YYYY-MM-DD.jsonl). No evidence yet that it helps.
+    lhm_ai_verify: str = "off"
+    # Where the model is reached (owner, 22 Oct 2026):
+    #   "gemini_api" (default) the Gemini Developer API with GEMINI_API_KEY
+    #                from .angel.env (GEMINI_API_PROJECT_NAME / _NUMBER: logs only)
+    #   "vertex"     Vertex AI with the GCP service account lhm_ai_credentials,
+    #                in lhm_ai_location
+    # Any other value is "gemini_api".
+    lhm_ai_provider: str = "gemini_api"
+    # gemini-3-pro-preview is retired on the Gemini API (22 Oct 2026, a 404
+    # naming gemini-3.1-pro-preview as its successor). Pro models have no free
+    # tier there: the key's project needs billing. gemini-3-flash-preview does.
+    lhm_ai_model: str = "gemini-3.1-pro-preview"
+    lhm_ai_credentials: str = ""          # vertex: service-account JSON, relative to the repo root
+    lhm_ai_location: str = "global"       # vertex only
+    lhm_ai_thinking: str = "high"         # Gemini 3 thinking level: "low" answers sooner
+    lhm_ai_timeout_sec: float = 90.0
+    lhm_ai_min_confidence: float = 0.0
+    # Noise-area breakout (Zarattini, Aziz & Barbon 2024), owner's approval of
+    # 5 Oct 2026 for SHADOW only: on the nb_grid_min grid between nb_lo and
+    # nb_hi (bar end time), a close outside max(open, prev close) x (1 + nb_vm x
+    # sigma(t)) / min(...) x (1 - ...), sigma from the last nb_sigma_days
+    # sessions (need nb_sigma_min_days; fetched once a day, arb/noise_sigma.py);
+    # stop at the band (or nb_minr ATRs), trailed on the grid. A year with the
+    # 4h trend + pace gates (research/noise_breakout_result.txt): n=65,
+    # +9,385 / +14,108 - but it loses out of sample on a 5- or 4-session sigma.
+    # "off" | "shadow" (log and journal what it would do, send nothing). Any
+    # other value, "on" included, is off: real orders need a separate approval.
+    noise_breakout: str = "off"
+    nb_indices: tuple = ("NIFTY", "BANKNIFTY", "SENSEX")
+    nb_vm: float = 1.0
+    nb_minr: float = 1.5
+    nb_grid_min: int = 30
+    nb_lo: str = "09:45"
+    nb_hi: str = "14:45"
+    nb_sigma_days: int = 14
+    nb_sigma_min_days: int = 10
+    nb_history_days: int = 28           # calendar days fetched (Angel ONE_MINUTE: <= 30 a call)
+    nb_gap_hold_sec: float = 180.0      # a missing minute holds the shadow trail this long, then is marked
+    exit_slip_spreads: float = 1.0
+    exit_slip_frac: float = 0.01
+    # Exit safety (Phase A C3). With exit_safety_fixes an exit order that is
+    # not known final at Angel (still working, or the place call raised) is
+    # remembered on the position, and no second exit is sent until it is
+    # resolved; the unknown-status reconcile reads the sign of what is held;
+    # cancels use the order's own variety; a partial fill can trip the daily
+    # loss halt. Off = today's behaviour.
+    exit_safety_fixes: bool = False
+    # Send an "ordertag" (TE...) with every order, so the start guard can tell
+    # the engine's leftovers from orders placed by hand. Off until a probe
+    # shows Angel accepts it.
+    order_tags: bool = False
+    # Duration of the limit orders the live broker sends: "IOC" (as before)
+    # or "DAY". Angel bars IOC for algo orders; a DAY order still working
+    # after confirm_timeout is cancelled by the broker. Paper ignores it.
+    order_duration: str = "IOC"
+    # An entry whose status could not be read but which the broker shows
+    # held is adopted as a position under the software stop (entries stay
+    # halted). Off = halt only, with nothing protecting it. Options only.
+    adopt_unknown_entry: bool = False
+    # Place, modify and cancel calls held to this many a second, together
+    # (Angel: 9/s combined per client). 0 = no gate.
+    order_rate_per_sec: float = 0.0
 
     @classmethod
     def load(cls, path=None):
@@ -809,3 +1021,13 @@ class IntradayLimits:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as fh:
             json.dump(self.__dict__, fh, indent=2)
+
+
+STOCKS_RISK_CEILING_PCT = 7.0
+
+
+def stock_risk_pct(L):
+    """The per-trade risk cap for a stock trade, % of capital: stocks_max_risk_pct
+    when set, else max_risk_pct_per_trade; never above 7% (owner, 6 Oct 2026)."""
+    pct = float(getattr(L, "stocks_max_risk_pct", 0.0) or 0.0) or float(L.max_risk_pct_per_trade)
+    return min(pct, STOCKS_RISK_CEILING_PCT)

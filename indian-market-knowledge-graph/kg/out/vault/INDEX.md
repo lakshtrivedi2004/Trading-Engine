@@ -1,0 +1,414 @@
+# Knowledge Graph Index
+
+## CandlestickPattern (16)
+- [[bearish_engulfing]] — Bearish Engulfing
+- [[bearish_harami]] — Bearish Harami
+- [[bearish_marubozu]] — Bearish Marubozu
+- [[bullish_engulfing]] — Bullish Engulfing
+- [[bullish_harami]] — Bullish Harami
+- [[bullish_marubozu]] — Bullish Marubozu
+- [[dark_cloud_cover]] — Dark Cloud Cover
+- [[doji]] — Doji
+- [[evening_star]] — Evening Star (and Evening Doji Star)
+- [[hammer]] — Hammer
+- [[hanging_man]] — Hanging Man
+- [[morning_star]] — Morning Star (and Morning Doji Star)
+- [[paper_umbrella]] — Paper Umbrella
+- [[piercing_pattern]] — Piercing Pattern
+- [[shooting_star]] — Shooting Star
+- [[spinning_top]] — Spinning Top
+
+## ChartPattern (3)
+- [[double_top_bottom]] — Double / Triple Top and Bottom
+- [[flag_pattern]] — Flag Formation
+- [[trading_range]] — Trading Range (Sideways Market)
+
+## Concept (109)
+- [[week52_high_low]] — 52-Week High / Low and All-Time High / Low
+- [[agri_commodities]] — Agri Commodities and Monsoons
+- [[annual_report]] — Annual Report
+- [[arbitrage]] — Arbitrage
+- [[asset_allocation]] — Asset Allocation
+- [[asset_class]] — Asset Class
+- [[balance_sheet]] — Balance Sheet
+- [[base_metals]] — Base Metals (Copper, Aluminium, Lead, Nickel)
+- [[benchmarking_tri]] — Benchmarking and Total Return Index (TRI)
+- [[bid_ask]] — Bid, Ask and Market Depth
+- [[bull_bear_market]] — Bull / Bear Market
+- [[capex]] — Capital Expenditure (Capex)
+- [[cash_flow_statement]] — Cash Flow Statement
+- [[chart_types]] — Chart Types (Line, Bar, Candlestick)
+- [[close_price_importance]] — Closing Price is Most Important
+- [[co_payment]] — Co-payment Clause
+- [[compounding]] — Compounding Effect
+- [[consumables_cover]] — Consumables / Non-medical Expenses Add-on
+- [[contract_note]] — Contract Note
+- [[crude_oil]] — Crude Oil - Drivers and Ecosystem
+- [[currency_basics]] — Currency Market Basics (Forex)
+- [[currency_pair]] — Currency Pairs, Quotes and Pips
+- [[demat_account]] — DEMAT Account
+- [[delta_neutral]] — Delta Neutral Position
+- [[derivatives]] — Derivatives
+- [[diversification]] — Diversification
+- [[dow_theory]] — Dow Theory
+- [[drhp]] — Draft Red Herring Prospectus (DRHP)
+- [[economic_moat]] — Economic Moat
+- [[equity_curve]] — Equity Curve
+- [[european_vs_american]] — European vs American Options
+- [[expense_ratio]] — Expense Ratio (TER) and Direct vs Regular Plans
+- [[expiry]] — Expiry, Contract Months and Rollover
+- [[product_types_fo]] — F&O Product Types (NRML, MIS, CO, BO)
+- [[face_value]] — Face Value (Par Value)
+- [[financial_ratios]] — Financial Ratios (overview)
+- [[fundamental_analysis]] — Fundamental Analysis (FA)
+- [[currency_drivers]] — Fundamental Drivers of Currencies
+- [[gdp]] — GDP, Real vs Nominal Growth, and Market Cap
+- [[gaps]] — Gap Up / Gap Down
+- [[gold_drivers]] — Gold - Pricing and Drivers
+- [[fiscal_deficit]] — Government Finances and Fiscal Deficit
+- [[greek_interactions]] — Greek Interactions
+- [[hedging]] — Hedging
+- [[holding_period]] — Holding Period
+- [[inflation]] — Inflation (CPI / WPI)
+- [[insurance_basics]] — Insurance (Risk Transfer) - basics
+- [[interest_rates]] — Interest Rates
+- [[tax_shield]] — Interest Tax Shield / Effective Cost of Debt
+- [[intraday_position]] — Intraday Position
+- [[investing]] — Investing
+- [[candlestick]] — Japanese Candlestick Anatomy
+- [[leading_lagging_indicators]] — Leading vs Lagging Indicators; Oscillators; Momentum
+- [[leverage]] — Leverage
+- [[liquidity]] — Liquidity
+- [[long_position]] — Long Position
+- [[margin]] — Margins (Initial, SPAN, Exposure, Maintenance)
+- [[market_phases]] — Market Phases (Accumulation, Mark-up, Distribution, Mark-down)
+- [[market_segment]] — Market Segments
+- [[mean_reversion]] — Mean Reversion
+- [[momentum]] — Momentum
+- [[moneyness]] — Moneyness (ITM / ATM / OTM)
+- [[natural_gas]] — Natural Gas
+- [[no_claim_bonus]] — No Claim Bonus (NCB)
+- [[normal_distribution]] — Normal Distribution and Price Ranges
+- [[ohlc]] — OHLC and Volume
+- [[open_interest]] — Open Interest (OI)
+- [[opportunity_universe]] — Opportunity Universe
+- [[option_greeks]] — Option Greeks
+- [[option_jargon]] — Option Jargon (strike, underlying, premium, expiry, exercise, settlement, option chain)
+- [[order_types]] — Order Types (Limit, Market, SL, SL-M)
+- [[overnight_risk]] — Overnight Risk
+- [[insurance_exclusions]] — Permanent Exclusions, Sub-limits, Non-medical Items, Blacklisted Hospitals
+- [[point_of_view]] — Point of View (POV) and Instrument Selection
+- [[pre_existing_disease]] — Pre-existing Disease (PED) Waiting Period and Loading
+- [[primary_market]] — Primary vs Secondary Market
+- [[product_types]] — Product Types (CNC, MIS, NRML)
+- [[profit_and_loss]] — Profit & Loss Statement (Income Statement)
+- [[quantitative_analysis]] — Quantitative Analysis
+- [[restoration_benefit]] — Restoration Benefit
+- [[risk_management]] — Risk Management (overview)
+- [[room_rent_cap]] — Room Rent Cap / Proportionate Deduction
+- [[equity_fund_categories]] — SEBI Equity Fund Categories
+- [[sectoral_index]] — Sectoral Index
+- [[short_position]] — Short Position (Shorting)
+- [[silver]] — Silver
+- [[smart_beta]] — Smart Beta / Factor Investing
+- [[speculator_trader_investor]] — Speculator vs Trader vs Investor
+- [[spot_market]] — Spot Market vs Futures Market
+- [[square_off]] — Square Off
+- [[stationarity]] — Stationarity, Cointegration and the ADF Test
+- [[market_index]] — Stock Market Index (Nifty / Sensex)
+- [[support_resistance]] — Support and Resistance (S&R)
+- [[systematic_risk]] — Systematic vs Unsystematic Risk
+- [[technical_analysis]] — Technical Analysis (TA)
+- [[timeframe]] — Timeframes and Look-back Period
+- [[trader_types]] — Trader and Investor Types
+- [[trading_account]] — Trading Account
+- [[trading_system]] — Trading System
+- [[transaction_charges]] — Transaction Charges (brokerage, STT, exchange fees, GST, SEBI fees, stamp duty)
+- [[trend]] — Trend
+- [[valuation_methods]] — Valuation Approaches (Relative, Option-based, Absolute)
+- [[valuation_ratios]] — Valuation Ratios
+- [[volatility]] — Volatility (standard deviation of returns)
+- [[volatility_smile]] — Volatility Smile
+- [[implied_volatility]] — Volatility Types - Historical, Forecast, Implied, Realised; India VIX
+- [[volume]] — Volume and the Volume-Price Trend Table
+- [[policy_waiting_periods]] — Waiting Periods (Initial, Specific Illness, PED)
+- [[price_drivers]] — What Moves Stock Prices
+
+## Contract (3)
+- [[commodity_options]] — Commodity Options (options on futures)
+- [[currency_futures_india]] — Indian Currency Derivatives (USDINR, EURINR, GBPINR, JPYINR)
+- [[mcx_commodity_futures]] — MCX Commodity Futures (general rules)
+
+## Event (13)
+- [[bonus_issue]] — Bonus Issue
+- [[corporate_actions]] — Corporate Actions
+- [[dividend]] — Dividend
+- [[iip]] — Index of Industrial Production (IIP)
+- [[market_events]] — Key Macro Events
+- [[margin_call]] — Margin Call
+- [[pmi]] — Purchasing Managers Index (PMI)
+- [[earnings_announcement]] — Quarterly Earnings Announcement
+- [[monetary_policy]] — RBI Monetary Policy (Repo, Reverse Repo, CRR)
+- [[rights_issue]] — Rights Issue
+- [[buyback]] — Share Buyback
+- [[stock_split]] — Stock Split
+- [[union_budget]] — Union Budget
+
+## Formula (35)
+- [[absolute_return]] — Absolute Return
+- [[beta]] — Beta
+- [[capm]] — CAPM - Cost of Equity
+- [[cagr]] — Compounded Annual Growth Rate (CAGR)
+- [[correlation]] — Correlation
+- [[discount_rate_opportunity_cost]] — Discount Rate = Risk-free + Risk Premium
+- [[dupont]] — DuPont Model
+- [[enterprise_value]] — Enterprise Value and Equity Value
+- [[error_ratio]] — Error Ratio (choose X vs Y)
+- [[expectancy]] — Expectancy
+- [[expected_return]] — Expected Portfolio Return
+- [[free_cash_flow]] — Free Cash Flow (FCF)
+- [[fcff_fcfe]] — Free Cash Flow to Firm (FCFF) and to Equity (FCFE)
+- [[free_float_market_cap]] — Free Float Market Capitalisation
+- [[futures_pricing]] — Futures Pricing (Spot-Futures Parity)
+- [[impact_cost]] — Impact Cost
+- [[indexation]] — Indexation (Cost Inflation Index)
+- [[interest_rate_parity]] — Interest Rate Parity, Forward Premia and the 'Fairy' Carry Trade
+- [[working_capital_days]] — Inventory and Receivable Days
+- [[kelly_criterion]] — Kelly Criterion (and capped Kelly)
+- [[market_capitalisation]] — Market Capitalisation
+- [[portfolio_variance]] — Portfolio Variance (Risk)
+- [[option_premium_decomposition]] — Premium = Intrinsic Value + Time Value
+- [[put_call_parity]] — Put-Call Parity
+- [[recovery_trauma]] — Recovery Trauma (drawdown recovery math)
+- [[return_measurement]] — Return Measurement (Absolute, CAGR, XIRR, Rolling)
+- [[reward_risk_ratio]] — Reward-to-Risk Ratio (RRR)
+- [[performance_metrics]] — Risk-Adjusted Performance Metrics (Beta, Alpha, SD, Sharpe, Sortino, Capture Ratios)
+- [[simple_vs_compound_interest]] — Simple vs Compound Interest
+- [[standard_deviation]] — Standard Deviation and Variance
+- [[terminal_value]] — Terminal Value (Gordon Growth)
+- [[time_value_of_money]] — Time Value of Money (FV, PV, NPV)
+- [[value_at_risk]] — Value at Risk (VaR) and CVaR (historical)
+- [[covariance_correlation_matrix]] — Variance, Covariance and Correlation Matrices
+- [[wacc]] — Weighted Average Cost of Capital (WACC)
+
+## Greek (4)
+- [[delta]] — Delta
+- [[gamma]] — Gamma
+- [[theta]] — Theta (Time Decay)
+- [[vega]] — Vega
+
+## Indicator (15)
+- [[adx]] — ADX / +DI / -DI (Directional Movement)
+- [[atr_bands]] — ATR Bands
+- [[alligator]] — Alligator (Bill Williams)
+- [[aroon]] — Aroon and Aroon Oscillator
+- [[atr]] — Average True Range (ATR)
+- [[bollinger_bands]] — Bollinger Bands
+- [[fibonacci_retracement]] — Fibonacci Retracements
+- [[macd]] — MACD (Moving Average Convergence Divergence)
+- [[max_pain]] — Max Pain (Option Pain)
+- [[moving_average]] — Moving Averages (SMA / EMA)
+- [[pivot_points]] — Pivot Points
+- [[put_call_ratio]] — Put-Call Ratio (PCR)
+- [[rsi]] — Relative Strength Index (RSI)
+- [[supertrend]] — Supertrend
+- [[vwap]] — VWAP (Volume Weighted Average Price)
+
+## Instrument (14)
+- [[arbitrage_fund]] — Arbitrage Funds
+- [[bonds]] — Bonds and Yield to Maturity
+- [[call_option]] — Call Option (long and short)
+- [[debt_funds]] — Debt Funds and Debt Risks
+- [[equity]] — Equity (Shares)
+- [[etf]] — Exchange Traded Funds (ETFs)
+- [[fixed_income]] — Fixed Income Instruments
+- [[forward_contract]] — Forward Contract
+- [[futures_contract]] — Futures Contract
+- [[index_funds]] — Index Funds (passive investing)
+- [[mutual_fund]] — Mutual Funds (structure, NAV, factsheet)
+- [[index_futures]] — Nifty (Index) Futures
+- [[options]] — Options (overview)
+- [[put_option]] — Put Option (long and short)
+
+## Model (9)
+- [[black_scholes]] — Black-Scholes Option Pricing
+- [[dcf]] — Discounted Cash Flow (DCF) Valuation
+- [[financial_model]] — Integrated Financial Model
+- [[linear_regression]] — Linear Regression (for pairs)
+- [[portfolio_optimization]] — Portfolio Optimisation and Efficient Frontier
+- [[retirement_planning]] — Retirement Corpus Planning
+- [[revenue_model]] — Revenue Sub-model
+- [[seasonality_test]] — Seasonality Test (Holt-Winters) on USDINR
+- [[volatility_cone]] — Volatility Cone
+
+## Module (13)
+- [[module_m01]] — M01 - Introduction to Stock Markets
+- [[module_m02]] — M02 - Technical Analysis
+- [[module_m03]] — M03 - Fundamental Analysis
+- [[module_m04]] — M04 - Futures Trading
+- [[module_m05]] — M05 - Options Theory for Professional Trading
+- [[module_m06]] — M06 - Option Strategies
+- [[module_m07]] — M07 - Markets and Taxation
+- [[module_m08]] — M08 - Currency and Commodity Futures
+- [[module_m09]] — M09 - Risk Management and Trading Psychology
+- [[module_m10]] — M10 - Trading Systems
+- [[module_m11]] — M11 - Personal Finance
+- [[module_m13]] — M13 - Integrated Financial Modelling
+- [[module_m14]] — M14 - Personal Finance - Insurance
+
+## Participant (8)
+- [[clearing_corporation]] — Clearing Corporation (NSCCL / ICCL)
+- [[depository]] — Depository (NSDL / CDSL) and Depository Participant
+- [[fii]] — Foreign Institutional Investors (FII/FPI)
+- [[market_participants]] — Market Participants
+- [[merchant_banker]] — Merchant Banker (BRLM / Lead Manager)
+- [[sebi]] — SEBI (Securities and Exchange Board of India)
+- [[stock_broker]] — Stock Broker
+- [[stock_exchange]] — Stock Exchange (NSE / BSE)
+
+## Process (22)
+- [[equity_research_process]] — 3-Stage Equity Research
+- [[fund_analysis_process]] — Analysing Equity and Debt Mutual Funds
+- [[asset_schedule]] — Asset Schedule (Gross Block, CAPEX, Depreciation, Net Block)
+- [[model_assumptions]] — Assumption Sheet - Ratio/Growth Drivers with Rolling Averages
+- [[backtesting]] — Backtesting
+- [[clearing_and_settlement]] — Clearing and Settlement (T+2 per source)
+- [[company_funding_lifecycle]] — Company Funding Lifecycle
+- [[dcf_model_implementation]] — DCF Implementation in the Model
+- [[debt_schedule]] — Debt Schedule
+- [[reserves_schedule]] — Equity / Reserves Schedule
+- [[fpo]] — Follow-on Public Offer (FPO)
+- [[indirect_cash_flow]] — Indirect Cash Flow and Balance Check
+- [[ipo]] — Initial Public Offering (IPO)
+- [[mark_to_market]] — Mark to Market (M2M)
+- [[ofs]] — Offer for Sale (OFS)
+- [[porting]] — Porting a Health Policy
+- [[rbi_reference_rate]] — RBI Reference Rate and Cross Rates
+- [[stock_idea_generation]] — Stock Idea Generation
+- [[swing_scan_process]] — Swing Trade Scanning Process
+- [[execution]] — Trade Execution
+- [[trader_books]] — Trader's Balance Sheet, P&L and Books of Account
+- [[trading_journal]] — Trading Journal
+
+## Product (9)
+- [[critical_illness_cover]] — Critical Illness Policy
+- [[family_floater]] — Family Floater Policy
+- [[group_health_insurance]] — Group and Employer Health Insurance
+- [[health_insurance]] — Health Insurance (Indemnity)
+- [[mis_product]] — MIS (Margin Intraday Square-off)
+- [[super_top_up]] — Super Top-up Health Plan
+- [[term_insurance]] — Term Life Insurance
+- [[top_up]] — Top-up Health Plan
+- [[trading_terminal]] — Trading Terminal / Market Watch
+
+## Psychology (9)
+- [[anchoring_bias]] — Anchoring Bias (Focalism)
+- [[attribution_bias]] — Attribution Bias
+- [[confirmation_bias]] — Confirmation Bias
+- [[functional_fixedness]] — Functional Fixedness
+- [[gamblers_fallacy]] — Gambler's Fallacy
+- [[illusion_of_control]] — Illusion of Control
+- [[perverse_incentives_agents]] — Perverse Incentives of Agents
+- [[recency_bias]] — Recency Bias
+- [[trading_biases]] — Trading and Investing Biases
+
+## Ratio (18)
+- [[asset_turnover]] — Asset Turnover
+- [[claim_settlement_ratio]] — Claim Settlement Ratio (CSR) and Incurred Claims Ratio (ICR)
+- [[debt_to_asset]] — Debt to Asset Ratio
+- [[debt_to_equity]] — Debt to Equity Ratio
+- [[dividend_yield]] — Dividend Yield
+- [[ebitda]] — EBITDA and EBITDA Margin
+- [[eps]] — Earnings Per Share (EPS)
+- [[financial_leverage_ratio]] — Financial Leverage Ratio
+- [[gross_profit_margin]] — Gross Profit Margin
+- [[interest_coverage]] — Interest Coverage Ratio
+- [[operating_ratios]] — Operating (Activity / Management) Ratios
+- [[pat_margin]] — PAT Margin (Net Profit Margin)
+- [[pb_ratio]] — Price to Book Value (P/BV)
+- [[pe_ratio]] — Price to Earnings (P/E)
+- [[ps_ratio]] — Price to Sales (P/S)
+- [[roa]] — Return on Assets (RoA)
+- [[roce]] — Return on Capital Employed (ROCE)
+- [[roe]] — Return on Equity (RoE)
+
+## Rule (34)
+- [[fa_checklist]] — 10-Point Fundamental Checklist
+- [[asset_allocation_advanced]] — Asset Allocation, Sequence Risk and Diversification Vectors
+- [[capital_allocation_author]] — Author's Capital Allocation
+- [[averaging_down]] — Averaging Down
+- [[base_rule]] — Base Rule (Roll-forward)
+- [[candlestick_rules]] — Candlestick Trading Rules (3 assumptions)
+- [[cover_amount_sizing]] — Choosing the Sum Insured
+- [[commodity_risk_lessons]] — Commodity Blow-ups (Sumitomo copper, Amaranth natural gas)
+- [[emergency_fund]] — Emergency Corpus
+- [[equity_estimation_models]] — Equity Estimation Models (Van Tharp)
+- [[options_payoff_summary]] — Four Option Positions Summary
+- [[insurance_disclosure]] — Full Medical Disclosure (Non-disclosure risk)
+- [[ta_checklist]] — Grand 6-Point TA Checklist
+- [[insurance_feature_verdicts]] — Health Insurance Features - Gimmick or Not
+- [[investable_grade_attributes]] — Investable-Grade Attributes (Qualitative + Quantitative)
+- [[investing_principles]] — Investing Principles (Finale)
+- [[margin_of_safety]] — Margin of Safety
+- [[model_layout_hygiene]] — Model Layout and Format Hygiene
+- [[mf_portfolio_construction]] — Mutual Fund Portfolio Construction
+- [[index_valuation]] — Nifty Index Valuation (P/E bands)
+- [[portfolio_size]] — Number of Stocks in a Portfolio
+- [[option_strategy_principles]] — Option Strategy Principles
+- [[option_case_lessons]] — Options Trading Lessons from Case Studies
+- [[position_sizing]] — Position Sizing Techniques
+- [[prior_trend]] — Prior Trend Requirement
+- [[short_selling_mechanics]] — Shorting - Spot vs Futures
+- [[start_saving_early]] — Start Saving Early (time > amount)
+- [[stop_loss]] — Stop Loss
+- [[strike_selection]] — Strike Selection by Series Half and Target Time
+- [[ta_on_currencies_commodities]] — TA Applies Equally to Currencies and Commodities
+- [[trailing_stop]] — Trailing Stop Loss
+- [[strategy_selector]] — View -> Option Strategy Map
+- [[volatility_stop_loss]] — Volatility-Based Stop Loss
+- [[when_to_sell]] — When to Sell (Investing)
+
+## Strategy (31)
+- [[btst]] — BTST / ATST
+- [[bear_call_ladder]] — Bear Call Ladder (actually bullish)
+- [[bear_call_spread]] — Bear Call Spread (credit)
+- [[bear_put_spread]] — Bear Put Spread (debit)
+- [[bull_call_spread]] — Bull Call Spread (debit)
+- [[bull_put_spread]] — Bull Put Spread (credit)
+- [[calendar_spread]] — Calendar Spread (Futures)
+- [[call_ratio_back_spread]] — Call Ratio Back Spread
+- [[cash_and_carry]] — Cash & Carry Arbitrage
+- [[core_satellite]] — Core-Satellite Capital Allocation
+- [[momentum_portfolio]] — Cross-Sectional Momentum Portfolio
+- [[crude_arbitrage]] — Crude Big vs Mini Arbitrage
+- [[systematic_deduction_example]] — Event Overreaction Short Strangle (example of 'systematic deduction')
+- [[iv_crush]] — Event Volatility Play (short straddle before event, exit before announcement)
+- [[futures_bull_bear_spread]] — Futures Bull / Bear Calendar Spread (currency)
+- [[straddle]] — Long / Short Straddle
+- [[strangle]] — Long / Short Strangle
+- [[ma_crossover_system]] — Moving Average Crossover System
+- [[pair_trading]] — Pair Trading (Relative Value / Statistical Arbitrage) - concept
+- [[pair_trading_ratio_method]] — Pair Trading Method 1 - Ratio z-score / Density Curve (Mark Whistler)
+- [[pair_trading_regression_method]] — Pair Trading Method 2 - Regression Residual z-score (Stat Arb)
+- [[portfolio_hedge]] — Portfolio Hedge with Nifty Futures
+- [[ma_price_crossover_system]] — Price vs 50-day EMA System
+- [[put_ratio_back_spread]] — Put Ratio Back Spread
+- [[breakout]] — Range Breakout / Breakdown
+- [[sd_option_writing]] — SD-Based OTM Option Writing (author's method)
+- [[scalping]] — Scalping
+- [[statistical_calendar_spread]] — Statistical Futures Calendar Spread
+- [[synthetic_long]] — Synthetic Long (and PCP Arbitrage)
+- [[sip]] — Systematic Investment Plan (SIP)
+- [[tax_loss_harvesting]] — Tax Loss Harvesting
+
+## Tax (10)
+- [[advance_tax]] — Advance Tax
+- [[btst_tax]] — BTST Tax Treatment
+- [[tax_audit]] — Business Turnover and Tax Audit (44AB / 44AD)
+- [[capital_gains_tax]] — Capital Gains Tax on Equity and Mutual Funds (source era)
+- [[market_income_classification]] — Classifying Market Income (Investor vs Trader)
+- [[itr_forms]] — ITR Forms
+- [[income_tax_basics]] — Income Tax Basics (FY, AY, slabs)
+- [[loss_set_off_rules]] — Loss Set-off and Carry-forward Rules
+- [[stt]] — Securities Transaction Tax (STT)
+- [[business_income_tax]] — Taxation of Trading as Business Income

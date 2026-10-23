@@ -22,16 +22,14 @@ import json
 import os
 import threading
 import time
+from collections import deque
 
-from arb.instruments import IST, now_ist
-from arb.scanner import daily_stat, rank, same_time_volume
+from arb.instruments import now_ist
+from arb.scanner import InPlay, daily_stat, rank
+from arb.stockspike import spike
 
 HIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     ".cache", "history", "stocks")
-
-
-def _minute(iso):
-    return int(iso[11:13]) * 60 + int(iso[14:16])
 
 
 class StockDesk:
@@ -45,7 +43,15 @@ class StockDesk:
         self.nse = nse
         self.log = log
         self.stats = {}
-        self.same_time = {}
+        self._same_key = None
+        self._same = ({}, {})
+        self._vol_day, self._vol_prof, self._vol_busy = None, {}, False
+        # Once-a-minute snapshots of every stock's cumulative day volume, so
+        # relative volume can be measured over a recent window, not only since
+        # the open. Kept just long enough to reach one window back.
+        window = float(getattr(L, "stocks_rvol_window_min", 15.0))
+        self._vol_snaps = deque(maxlen=max(0, int(window)) + 5)
+        self._last_snap = 0.0
         self.banned = set()
         self.active = []            # [InPlay], best first
         self.last_pick = 0.0
@@ -57,6 +63,21 @@ class StockDesk:
         # them. Not "seeded": today's bars are still missing, so the next
         # rescan asks the API again rather than leaving the gap all session.
         self._disk_only = set()
+        # Per-minute spike watch over EVERY subscribed stock (owner, 6 Oct 2026):
+        # a stock whose range explodes between two 30-minute rescans joins the
+        # picks at once and stays for stocks_spike_hold_min.
+        self._picks = []            # the last rescan's top K
+        self._spikes = {}           # symbol -> (InPlay, expires_at)
+        self._spike_minute = ""
+        self.last_spikes = []       # [(symbol, ratio, move)] of the last scan, for the log/page
+        # NSE's live top gainers / losers (F&O), refreshed in the background.
+        self.movers = {}            # symbol -> (list, % change, rank)
+        # NSE option chains of the active stocks (stocks_options on/shadow):
+        # symbol -> (fetched_at, chain), refreshed on a background thread.
+        self.chains = {}
+        self._chains_busy = False
+        self._movers_at = 0.0
+        self._movers_busy = False
 
     # ── reference data ──────────────────────────────────────────────────────
     def load(self):
@@ -136,7 +157,8 @@ class StockDesk:
                 o, h, lo = float(st.day_open[slot]), float(st.day_high[slot]), float(st.day_low[slot])
                 px, vol = float(st.ltp[slot]), float(st.volume[slot])
                 if min(o, h, lo, px) > 0 and vol > 0:
-                    out[sym] = {"open": o, "high": h, "low": lo, "ltp": px, "volume": vol}
+                    out[sym] = {"open": o, "high": h, "low": lo, "ltp": px, "volume": vol,
+                                "recent_volume": self._recent_volume(sym, vol)}
                     continue
             rows = [r for r in self.candles.get(sym, limit=400) if r[0][:10] == today]
             if not rows:
@@ -146,62 +168,331 @@ class StockDesk:
                         "volume": sum(r[5] for r in rows)}
         return out
 
+    def _snap(self, t=None):
+        """Record every stock's cumulative day volume, at most once a minute."""
+        t = time.time() if t is None else t
+        if t - self._last_snap < 60.0:
+            return
+        st = getattr(self.candles, "_store", None)
+        if st is None or not hasattr(st, "volume"):
+            return
+        self._last_snap = t
+        self._vol_snaps.append((t, {s: float(st.volume[slot]) for s, slot in self.slots.items()}))
+
+    def _recent_volume(self, sym, cumulative, t=None):
+        """Volume over the last `stocks_rvol_window_min` minutes, or None when
+        there is no snapshot that old yet (just started) or it was taken before
+        the stock's first tick - an unknown, never a zero."""
+        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
+        if window <= 0:
+            return None
+        t = time.time() if t is None else t
+        cutoff = t - 60.0 * window
+        past = None
+        for ts, vols in self._vol_snaps:
+            if ts > cutoff:
+                break
+            past = vols
+        v0 = (past or {}).get(sym, 0.0)
+        if v0 <= 0 or cumulative < v0:
+            return None
+        return cumulative - v0
+
     def due(self, now=None):
+        # The engine calls due() outside its stock-scan error handling, on the
+        # same pass that hunts the indices: nothing stock-side may raise here.
+        try:
+            self._snap()
+        except Exception:
+            pass
+        try:
+            self.refresh_chains()
+        except Exception:
+            pass
         n = now or now_ist()
         hh, mm = (int(x) for x in str(self.L.stocks_pick_at).split(":"))
         if n.hour * 60 + n.minute < hh * 60 + mm:
             return False
         return time.time() - self.last_pick >= 60.0 * float(self.L.stocks_rescan_min)
 
-    def pick(self, now=None, index_moves=None):
-        """Re-rank the universe and keep the top K. Returns the new picks."""
+    def pick(self, now=None, index_moves=None, cost_ratio=None):
+        """Re-rank the universe and keep the top K. Returns the new picks.
+
+        `cost_ratio` is a callable symbol -> scan_cost_ratio (or None), supplied
+        by the engine, which holds the capital and cost model it needs."""
         n = now or now_ist()
         if not self._ready.is_set():
             return self.active
         m = n.hour * 60 + n.minute
         with self._lock:
             stats = dict(self.stats)
-        ranked = rank(stats, self._live(), m, self.L, banned=self.banned,
-                      index_moves=index_moves, same_time=self.same_time_for(stats, m))
+        live = self._live()
+        costs = {}
+        if cost_ratio is not None:
+            for sym in live:
+                try:
+                    c = cost_ratio(sym)
+                except Exception:
+                    c = None
+                if c is not None:
+                    costs[sym] = c
+            if live and not costs:
+                # No stock has the 10 live bars its cost needs yet (just
+                # started): picking now ranks every name as if it passed, and
+                # the five picks' history seeding hit the broker's rate limit
+                # on 21 Oct. Look again in a minute.
+                self.last_pick = time.time() - max(0.0, 60.0 * float(self.L.stocks_rescan_min) - 60.0)
+                return self.active
+        same, same_recent = self.same_time_for(stats, m)
+        ranked = rank(stats, live, m, self.L, banned=self.banned,
+                      index_moves=index_moves, same_time=same,
+                      same_time_recent=same_recent, cost_ratio=costs)
         self.last_rank = ranked[:15]
-        self.active = ranked[:int(self.L.stocks_top_k)]
+        self._picks = ranked[:int(self.L.stocks_top_k)]
+        self._merge_spikes()
         self.last_pick = time.time()
         if not ranked:
             # Probably no quotes yet (just started): look again in a minute,
             # not at the next half-hour rescan.
             self.last_pick -= max(0.0, 60.0 * float(self.L.stocks_rescan_min) - 60.0)
-        if self.active:
+        if self._picks:
             self.log("[stocks] in play: " + "; ".join(
                 f"{r.symbol} {r.bias} {100 * r.from_open:+.1f}% rvol {r.rvol:.1f} "
-                f"ATR {100 * r.atr_pct:.1f}%" for r in self.active))
-            want = [r.symbol for r in self.active if r.symbol not in self._seeded]
+                f"ATR {100 * r.atr_pct:.1f}%"
+                + (f" cost {r.cost_ratio:.2f}" if r.cost_ratio is not None else "")
+                for r in self._picks))
+            want = [r.symbol for r in self._picks if r.symbol not in self._seeded]
             if want:
                 threading.Thread(target=self._seed_all, args=(want,),
                                  name="stock-seed", daemon=True).start()
         else:
-            self.log("[stocks] nothing passes the scan filters")
+            f = getattr(rank, "last_funnel", None) or {}
+            self.log("[stocks] nothing passes the scan filters"
+                     + (" (" + ", ".join(f"{k} {v}" for k, v in f.items()) + ")" if f else ""))
         return self.active
 
-    def same_time_for(self, stats, minute):
-        """Average volume by this minute on recent sessions, where a stock has
-        1-minute history on disk (tools/fetch_stocks.py minute)."""
-        key = minute
-        if self.same_time.get("_minute") == key:
-            return self.same_time
-        today = now_ist().strftime("%Y-%m-%d")
-        out = {"_minute": key}
-        for sym in stats:
-            p = os.path.join(HIST, f"{sym}_1m.json")
-            if not os.path.exists(p):
-                continue
+    # ── the per-minute spike watch ──────────────────────────────────────────
+    def _merge_spikes(self, now=None):
+        """active = the rescan's picks + live spikes not already among them."""
+        t = time.time() if now is None else now
+        self._spikes = {s: v for s, v in self._spikes.items() if v[1] > t}
+        names = {r.symbol for r in self._picks}
+        self.active = list(self._picks) + [v[0] for s, v in sorted(
+            self._spikes.items(), key=lambda kv: -kv[1][0].score) if s not in names]
+
+    def _closed_rows(self, sym, n, limit=200):
+        """This stock's CLOSED one-minute bars (the bar of minute `n` is still forming)."""
+        cur = n.strftime("%Y-%m-%dT%H:%M")
+        return [r for r in self.candles.get(sym, limit=limit) if r[0][:16] < cur]
+
+    def refresh_movers(self):
+        """NSE's top gainers and losers (F&O), on a background thread, at most
+        every stocks_movers_min. Abstains (keeps the last list) on any failure."""
+        every = 60.0 * float(getattr(self.L, "stocks_movers_min", 5.0) or 0.0)
+        if self.nse is None or every <= 0 or self._movers_busy or time.time() - self._movers_at < every:
+            return
+
+        def work():
             try:
-                v = same_time_volume(json.load(open(p)), today, minute)
-            except (OSError, ValueError):
+                out = {}
+                for side in ("gainers", "losers"):
+                    for k, x in enumerate(self.nse.movers(side) or []):
+                        sym = x.get("symbol")
+                        if sym:
+                            out[sym] = (side, float(x.get("perChange") or 0.0), k + 1)
+                if out:
+                    self.movers = out
+            except Exception:
+                pass
+            finally:
+                self._movers_at = time.time()
+                self._movers_busy = False
+
+        self._movers_busy = True
+        threading.Thread(target=work, name="nse-movers", daemon=True).start()
+
+    CHAIN_TTL = 180.0
+
+    def refresh_chains(self):
+        """Keep the NSE option chain of every active stock at most CHAIN_TTL old,
+        one background thread at a time (NSE is paced by arb/nse.py). Only when
+        stocks_options is on or shadow."""
+        if str(getattr(self.L, "stocks_options", "off")) not in ("on", "shadow") \
+                or self.nse is None or self._chains_busy or not hasattr(self.nse, "option_chain"):
+            return
+        t = time.time()
+        want = [r.symbol for r in list(self.active)
+                if t - self.chains.get(r.symbol, (0.0, None))[0] > self.CHAIN_TTL]
+        if not want:
+            return
+
+        def work():
+            try:
+                for sym in want:
+                    try:
+                        self.chains[sym] = (time.time(), self.nse.option_chain(sym) or {})
+                    except Exception:
+                        self.chains[sym] = (time.time(), {})
+            finally:
+                self._chains_busy = False
+
+        self._chains_busy = True
+        threading.Thread(target=work, name="nse-chains", daemon=True).start()
+
+    def spike_tick(self, now=None, cost_ratio=None):
+        """Once a minute (just after the bar closes): every subscribed stock's
+        short-window ATR against its own recent normal. A stock at or above
+        stocks_spike_ratio joins the active picks for stocks_spike_hold_min -
+        NSE top gainers/losers first, then the biggest spikes. Returns the new
+        spike names. stocks_spike_watch: "on" feeds the engine, "shadow" only
+        logs, anything else is off."""
+        mode = str(getattr(self.L, "stocks_spike_watch", "off"))
+        if mode not in ("on", "shadow") or not self._ready.is_set():
+            return []
+        n = now or now_ist()
+        key = n.strftime("%H:%M")
+        if key == self._spike_minute or n.second < 3:
+            return []
+        m = n.hour * 60 + n.minute
+        hh, mm = (int(x) for x in str(self.L.stocks_pick_at).split(":"))
+        if m < hh * 60 + mm or m >= 15 * 60:          # no new stock entries from 15:00
+            return []
+        self._spike_minute = key
+        self.refresh_movers()
+        L = self.L
+        thr = float(getattr(L, "stocks_spike_ratio", 2.5))
+        fast = int(getattr(L, "stocks_spike_fast", 5))
+        base = int(getattr(L, "stocks_spike_base_bars", 120))
+        max_cost = float(getattr(L, "stocks_max_cost_ratio", 1.0))
+        with self._lock:
+            stats = dict(self.stats)
+        found = []
+        for sym in self.slots:
+            st = stats.get(sym)
+            if st is None or sym in self.banned:
                 continue
+            if st.prev_close < float(getattr(L, "stocks_min_price", 100.0)) \
+                    or st.turnover_cr < float(getattr(L, "stocks_min_turnover_cr", 50.0)):
+                continue
+            rows = self._closed_rows(sym, n, limit=base + fast + 2)
+            r = spike(rows, fast=fast, base=base)
+            if r is None or r[0] < thr:
+                continue
+            cr = None
+            if cost_ratio is not None:
+                try:
+                    cr = cost_ratio(sym)
+                except Exception:
+                    cr = None
+                if cr is not None and max_cost > 0 and cr > max_cost:
+                    continue
+            found.append((sym, r[0], r[1], cr, rows[-1][4], st))
+        # NSE's movers first (the owner's "most positive / most negative"), then size of spike.
+        found.sort(key=lambda f: (f[0] not in self.movers, -f[1]))
+        self.last_spikes = [(f[0], round(f[1], 2), round(f[2], 4)) for f in found[:15]]
+        k = int(getattr(L, "stocks_spike_k", 3))
+        hold = 60.0 * float(getattr(L, "stocks_spike_hold_min", 15.0))
+        picks = {r.symbol for r in self._picks}
+        new = []
+        for sym, ratio, move, cr, px, st in found:
+            if len(new) >= k:
+                break
+            if sym in picks:
+                continue
+            mv = self.movers.get(sym)
+            tag = f" NSE {mv[0][:-1]} #{mv[2]} {mv[1]:+.1f}%" if mv else ""
+            ip = InPlay(sym, ratio, px, st.atr_pct, 0.0, px / st.prev_close - 1 if st.prev_close else 0.0,
+                        move, 0.0, 0.0, cost_ratio=cr, reasons=[f"spike {ratio:.1f}x" + tag])
+            fresh = sym not in self._spikes
+            if mode == "on":
+                self._spikes[sym] = (ip, time.time() + hold)
+            if fresh:
+                new.append(sym)
+                self.log(f"[stocks] spike{' (shadow)' if mode != 'on' else ''}: {sym} "
+                         f"{ratio:.1f}x its normal 1-min range, {100 * move:+.2f}% in {fast} min"
+                         f"{tag}" + (f" cost {cr:.2f}" if cr is not None else ""))
+        if mode == "on":
+            self._merge_spikes()
+            want = [s for s in new if s not in self._seeded]
+            if want:
+                threading.Thread(target=self._seed_all, args=(want,),
+                                 name="stock-seed", daemon=True).start()
+        return new
+
+    def same_time_for(self, stats, minute):
+        """Average volume on recent sessions, where a stock has 1-minute history
+        on disk (tools/fetch_stocks.py minute): from the open to this minute,
+        and over the recent window ending at it. Returns (since_open, window).
+
+        The ~450 MB of history is read ONCE a day, on a background thread, into
+        per-stock minute profiles; until that is done relative volume is simply
+        unknown. Reading it here on every rescan froze the engine loop - and
+        with it every open position's software stop - for 12-20 s a minute
+        (stock-desk review, 21 Oct 2026)."""
+        if self._same_key == minute:
+            return self._same
+        today = now_ist().strftime("%Y-%m-%d")
+        if self._vol_day != today:
+            if not self._vol_busy:
+                self._vol_busy = True
+                threading.Thread(target=self._load_profiles, args=(list(stats), today),
+                                 name="stock-volume", daemon=True).start()
+            return ({}, {})
+        window = float(getattr(self.L, "stocks_rvol_window_min", 15.0))
+        cum, rec = {}, {}
+        for sym, prof in self._vol_prof.items():
+            v = prof(0, minute)
             if v > 0:
-                out[sym] = v
-        self.same_time = out
-        return out
+                cum[sym] = v
+            if window > 0:
+                w = prof(minute - window, minute)
+                if w > 0:
+                    rec[sym] = w
+        self._same_key, self._same = minute, (cum, rec)
+        return self._same
+
+    def _load_profiles(self, syms, today, sessions=14):
+        """Per stock: the last `sessions` sessions' minute volumes before
+        `today` as prefix sums, so any [from, upto) average is two lookups -
+        the same number same_time_volume computes from the raw rows."""
+        import numpy as np
+        out = {}
+        try:
+            for sym in syms:
+                p = os.path.join(HIST, f"{sym}_1m.json")
+                if not os.path.exists(p):
+                    continue
+                try:
+                    rows = json.load(open(p))
+                except (OSError, ValueError):
+                    continue
+                per = {}
+                for r in rows:
+                    d = r[0][:10]
+                    if d >= today:
+                        break
+                    m = int(r[0][11:13]) * 60 + int(r[0][14:16])
+                    a = per.setdefault(d, (np.zeros(1441), np.zeros(1441)))
+                    a[0][m + 1] += float(r[5])
+                    a[1][m + 1] = 1.0
+                days = [per[d] for d in sorted(per)[-sessions:]]
+                if not days:
+                    continue
+                vol = np.array([np.cumsum(v) for v, _ in days])
+                has = np.array([np.cumsum(h) for _, h in days])
+                need = max(3, sessions // 2)
+
+                def prof(lo, hi, vol=vol, has=has, need=need):
+                    lo, hi = max(0, int(lo)), min(1440, int(hi))
+                    if hi <= lo:
+                        return 0.0
+                    ok = (has[:, hi] - has[:, lo]) > 0
+                    n = int(ok.sum())
+                    return float((vol[ok, hi] - vol[ok, lo]).sum() / n) if n >= need else 0.0
+                out[sym] = prof
+            self._vol_prof, self._vol_day = out, today
+        finally:
+            self._vol_busy = False
 
     def _seed_all(self, syms, gap_sec=2.0, tries=4, backoff_sec=20.0):
         """Seed picks off the engine thread, spaced and retried: the broker's
@@ -225,7 +516,8 @@ class StockDesk:
         try:
             end = now_ist()
             from datetime import timedelta
-            r = self.api.getCandleData({
+            from arb.candles import candle_data
+            r = candle_data(self.api, {
                 "exchange": "NSE", "symboltoken": info.get("eq_token"),
                 "interval": "ONE_MINUTE",
                 "fromdate": (end - timedelta(days=4)).strftime("%Y-%m-%d 09:15"),
@@ -273,9 +565,16 @@ class StockDesk:
         return {"active": [dict(symbol=r.symbol, bias=r.bias, score=round(r.score, 2),
                                 move_pct=round(100 * r.move, 2),
                                 from_open_pct=round(100 * r.from_open, 2),
-                                rvol=round(r.rvol, 2), atr_pct=round(100 * r.atr_pct, 2),
-                                range_atr=round(r.range_atr, 2), reasons=r.reasons)
+                                rvol=round(r.rvol, 2), rvol_day=round(r.rvol_day, 2),
+                                atr_pct=round(100 * r.atr_pct, 2),
+                                range_atr=round(r.range_atr, 2),
+                                cost_ratio=(round(r.cost_ratio, 2)
+                                            if r.cost_ratio is not None else None),
+                                reasons=r.reasons)
                            for r in self.active],
                 "ranked": [r.symbol for r in self.last_rank],
+                "spikes": list(self.last_spikes),
+                "movers": sorted(([s, v[0], v[1]] for s, v in self.movers.items()),
+                                 key=lambda x: -abs(x[2]))[:10],
                 "universe": len(self.slots), "with_stats": len(self.stats),
                 "banned": sorted(self.banned)}

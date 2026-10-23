@@ -1,0 +1,8 @@
+[Unit]
+Description=Trading-Engine AI market watch every 15 min, Mon-Fri 09:00-15:45 IST
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 09..15:00,15,30,45:00 Asia/Kolkata
+
+[Install]
+WantedBy=timers.target

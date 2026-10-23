@@ -185,7 +185,7 @@ check("a tiny purse buys nothing rather than something silly",
       sel.select(cv, 24000.0, BULL, 500.0, 400.0, 1.0) is None, sel.last_reject)
 
 far = sel.select(cv, 24000.0, BULL, capital=10_000.0, max_age_ms=400.0, min_depth_mult=1.0)
-check("never strays beyond ATM +/- 4 strikes",
+check("never strays beyond ATM +/- 5 strikes",
       far is not None and abs(far.offset) <= L.max_strike_offset,
       f"offset {far.offset:+d}" if far else "-")
 
@@ -200,6 +200,39 @@ check("insufficient depth is refused",
 wide = FakeCV(ladder, ce, pe, lot=65, spread=25.0)
 check("an unaffordably wide spread is refused",
       sel.select(wide, 24000.0, BULL, 10_000.0, 400.0, 1.0) is None, sel.last_reject)
+
+# 11 Oct 2026: live sizes from the account's funds. A purse too small for any
+# lot read "no strike at delta <= 1.95 fits the risk cap" - the delta ceiling
+# hunt() always passes was blamed for a refusal that was the purse's.
+sel.select(cv, 24000.0, BULL, 1_500.0, 400.0, 1.0, max_delta=1.95)
+check("a purse too small for any lot is named as such, not as the risk cap",
+      sel.last_reject_kind == "cost" and "no affordable strike" in sel.last_reject
+      and "risk cap" not in sel.last_reject, sel.last_reject)
+check("...with the cheapest lot it could not pay for",
+      sel.last_cheapest == (25.0 * 65, 24400.0) and "1,625" in sel.last_reject, sel.last_reject)
+sel.select(stale, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=1.95)
+check("stale quotes are named as stale quotes, not as the risk cap",
+      sel.last_reject_kind == "stale" and "quote older than" in sel.last_reject
+      and "risk cap" not in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.17)
+check("the risk cap is still named when a strike reached it",
+      sel.last_reject_kind == "delta_ceiling" and "fits the risk cap" in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0)
+check("a successful selection clears the refusal", sel.last_reject == "" and sel.last_reject_kind == "")
+
+import types as _types                                             # noqa: E402
+from arb.intraday_engine import IntradayEngine as _IE0             # noqa: E402
+_said, _sent = [], []
+_eng = _types.SimpleNamespace(_unaffordable_said=set(), broker=_types.SimpleNamespace(mode="live"),
+                              capital=_types.SimpleNamespace(capital=5_000.0),
+                              log=_said.append,
+                              notifier=_types.SimpleNamespace(send=_sent.append))
+for _ in range(3):
+    _IE0._unaffordable(_eng, "NIFTY", 5_000.0, (7_800.0, 24100.0))
+_IE0._unaffordable(_eng, "SENSEX", 5_000.0, (12_000.0, 72000.0))
+check("no affordable strike is said once per index per day, in the log and on Telegram",
+      len(_said) == 2 and len(_sent) == 2 and "NO AFFORDABLE STRIKE" in _said[0]
+      and "7,800" in _said[0] and "available funds" in _said[0], _said[:1])
 
 # ─────────────────────────────────────────────────────────────────────────────
 section("4. The plan: stop where the idea dies, target a multiple of it")
@@ -232,6 +265,73 @@ if plan:
 tiny = IntradayLimits(min_net_points=500.0)
 check("a move too small to be worth it is refused",
       plan_trade(pick, st_bull, BULL, tiny, cost_rt) is None)
+
+# F5 (1 Oct 2026 review): costs inside the cap. A stop-out may then lose at
+# most the cap, the round trip and the exit slippage included.
+if plan:
+    lot = pick.lot_size
+    extra = 3.0
+    exact = (plan["risk_points"] + extra) * lot
+    p_in = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=exact, extra_risk_points=extra)
+    check("F5: a plan whose stop plus costs fits the cap exactly is taken, and says what it costs",
+          p_in is not None and abs(p_in["planned_risk_inr"] - exact) < 1e-6,
+          f"{p_in['planned_risk_inr'] if p_in else None} vs {exact:.2f}")
+    p_out = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=exact - 1.0,
+                       extra_risk_points=extra)
+    check("F5: one rupee over the cap with costs counted is refused (no 5% allowance)",
+          p_out is None)
+    p_old = plan_trade(pick, st_bull, BULL, L, cost_rt, max_risk_inr=plan["risk_inr"] * 1.02)
+    check("F5 off: today's 5% rounding allowance is unchanged",
+          p_old is not None and p_old["planned_risk_inr"] == p_old["risk_inr"])
+    # With costs inside the cap, friction is measured against the whole bet
+    # (stop + costs + slippage), not the stop alone - otherwise the cost is
+    # counted twice and almost nothing can trade (2 Oct 2026 replay).
+    fr = IntradayLimits(max_cost_frac_of_risk=0.20)
+    pr = plan["risk_points"]
+    cost_mid = 0.2 * pr * 1.2                      # over 20% of the stop alone...
+    xtra = cost_mid + 1.0                          # ...under 20% of stop + extra
+    big = (pr + xtra) * lot + 1.0
+    if 2 * pr - cost_mid >= fr.min_net_points and cost_mid <= 0.2 * (pr + xtra):
+        check("friction with costs inside: judged on stop + costs, so this plan stands",
+              plan_trade(pick, st_bull, BULL, fr, cost_mid, max_risk_inr=big,
+                         extra_risk_points=xtra) is not None)
+    check("friction without costs inside: unchanged, the same cost is refused",
+          plan_trade(pick, st_bull, BULL, fr, cost_mid, max_risk_inr=big) is None)
+
+from arb.intraday_engine import IntradayEngine as _IE
+from arb.costs import leg_cost as _leg_cost
+_e = _IE.__new__(_IE)
+_e.cm = CostModel()
+_e.L = IntradayLimits(exact_trade_costs=True)
+_exact = (_leg_cost(190.0, 65, "BUY", "OPT", _e.cm) + _leg_cost(190.0, 65, "SELL", "OPT", _e.cm)) / 65
+check("exact_trade_costs: the planned round trip is the exact BUY + SELL charge the journal books",
+      abs(_e._round_trip_points(190.0, 65) - _exact) < 1e-9, f"{_exact * 65:.2f} rupees a lot")
+_e.L = IntradayLimits()
+check("exact_trade_costs off: the scanner's upper bound, as before (and never below exact)",
+      _e._round_trip_points(190.0, 65) == 2.0 * per_unit_cost_points(190.0, 1, 0, 65, _e.cm)
+      and _e._round_trip_points(190.0, 65) >= _exact)
+
+fn_hits = []
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: fn_hits.append((px, spr)) or 0.0)
+check("F5: the per-candidate delta ceiling is asked for each contract and applied",
+      len(fn_hits) > 0 and sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+                                      max_delta_fn=lambda px, spr: 0.0) is None,
+      f"{len(fn_hits)} contracts asked")
+
+# Review D-L4 (2 Oct 2026): the refusal quotes the ceiling the candidates were
+# held to, not the cost-free max_delta hunt() also passes.
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: 0.17 if px > 50.0 else 0.18)
+check("D-L4: the reject text quotes the largest per-contract ceiling, not the cost-free max_delta",
+      "0.18" in sel.last_reject and "0.90" not in sel.last_reject, sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.9,
+           max_delta_fn=lambda px, spr: 0.10)
+check("D-L4: costs that push every ceiling under min_delta say the stop is too wide",
+      sel.last_reject == "chart stop too wide for the risk cap even at min_delta", sel.last_reject)
+sel.select(cv, 24000.0, BULL, 10_000.0, 400.0, 1.0, max_delta=0.17)
+check("D-L4: without max_delta_fn the text is unchanged",
+      sel.last_reject == "no strike at delta <= 0.17 fits the risk cap", sel.last_reject)
 
 # ─────────────────────────────────────────────────────────────────────────────
 section("5. Managing the position: stop, target, trail, square-off")
@@ -273,7 +373,7 @@ check("the index breaking structure exits even while premium is fine",
 
 p = fresh()
 check("square-off beats every other rule",
-      bk.review(p, 118.0, minutes_to_close=5.0) == (EXIT, "squareoff"),
+      bk.review(p, 118.0, minutes_to_close=0.5) == (EXIT, "squareoff"),
       "even sitting on profit")
 
 p = fresh()
@@ -623,7 +723,94 @@ check("reward:risk is at least 1:2", IntradayLimits().reward_risk >= 2.0)
 check("the daily target is a goal, never a halt - only loss halts",
       hasattr(IntradayLimits(), "max_daily_loss_pct")
       and IntradayLimits().daily_target_pct == 10.0)
-check("strike range is ATM +/- 4", IntradayLimits().max_strike_offset == 4)
+check("strike range is ATM +/- 5", IntradayLimits().max_strike_offset == 5)
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("12. Per-index pace, 4-hour trend, expiry, capital ceiling (PAPERS.md 0k)")
+import tempfile
+from types import SimpleNamespace
+from arb.regime import trend_4h
+from arb.intraday_engine import IntradayEngine
+from arb.instruments import now_ist as _now
+
+ar_calm = atr_ratio(calm)
+Lh = IntradayLimits(sideways_bars=0, min_atr_ratio=5.0, midday_mode="strict", midday_min_atr_ratio=5.0,
+                    atr_by_index={"NIFTY": [ar_calm - 0.1, ar_calm + 0.5]})
+check("a listed index uses its first-half pace, and the midday rule does not apply",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 10, 30, tzinfo=IST), name="NIFTY") == "",
+      f"ratio {ar_calm:.2f}")
+check("after the half-day split the second-half pace applies",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 13, 0, tzinfo=IST), name="NIFTY") == "regime_too_quiet")
+check("an index not in the map keeps the global pace",
+      regime_gate(calm, Lh, now=datetime(2026, 9, 22, 10, 30, tzinfo=IST), name="SENSEX") == "regime_too_quiet")
+
+def sessions(closes_per_day, start="2026-09-21"):
+    from datetime import date as _d, timedelta as _td
+    rows, d = [], _d.fromisoformat(start)
+    for c in closes_per_day:
+        t0 = datetime(d.year, d.month, d.day, 9, 15, tzinfo=IST)
+        for m in range(375):
+            px = c + m * 0.01
+            rows.append([(t0 + _td(minutes=m)).isoformat(), px, px + 1, px - 1, px, 0])
+        d += _td(days=1)
+    return rows
+up4 = sessions([100, 110, 120, 130])
+check("four rising sessions read as a rising 4-hour trend", trend_4h(up4, 5) == 1)
+check("four falling sessions read as a falling 4-hour trend", trend_4h(sessions([130, 120, 110, 100]), 5) == -1)
+check("too little history is 0 (unknown), never a direction", trend_4h(sessions([100, 110]), 5) == 0)
+crash = up4 + [[up4[-1][0][:11] + "15:29:00+05:30", 50.0, 51.0, 49.0, 50.0, 0]]
+check("the 4-hour bar still forming is left out", trend_4h(up4[:-60] + crash[-1:], 5) == 1)
+
+today = _now().strftime("%d%b%Y").upper()
+b0 = SimpleNamespace(underlying="NIFTY", expiry=today, T=0.0005)
+b1 = SimpleNamespace(underlying="NIFTY", expiry="31DEC2099", T=0.02)
+eng = SimpleNamespace(bindings=[b1, b0], L=IntradayLimits(expiry_trade_next=True))
+check("on expiry day the NEXT expiry is traded when expiry_trade_next is on",
+      IntradayEngine._binding_for(eng, "NIFTY") is b1)
+eng.L = IntradayLimits()
+check("by default the nearest expiry is traded, 0DTE included", IntradayEngine._binding_for(eng, "NIFTY") is b0)
+eng.bindings = [b0]; eng.L = IntradayLimits(expiry_trade_next=True)
+check("with only today's expiry subscribed it is still traded rather than nothing",
+      IntradayEngine._binding_for(eng, "NIFTY") is b0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    cb = CapitalBook(13466.9, path=os.path.join(tmp, "c.json"), ceiling=13466.9)
+    cb.open_day("2026-10-01"); cb.record(+500.0); cb.close_day()
+    check("a profit stays in the equity but the traded capital stays at the ceiling",
+          abs(cb.capital - 13466.9) < 1e-6 and abs(cb.equity - 13966.9) < 1e-6, f"{cb.capital} / {cb.equity}")
+    cb.open_day("2026-10-02"); cb.record(-1000.0); cb.close_day()
+    check("a loss below the ceiling shrinks the traded capital to the equity",
+          abs(cb.capital - 12966.9) < 1e-6, f"{cb.capital}")
+    check("the day's target and risk cap use the traded capital",
+          abs(cb.daily_target(10.0) - 1296.69) < 1e-6)
+    cc = CapitalBook(10000.0, path=os.path.join(tmp, "d.json"))
+    cc.open_day("2026-10-01"); cc.record(+500.0); cc.close_day()
+    check("without a ceiling the day's profit still compounds", abs(cc.capital - 10500.0) < 1e-6)
+
+from arb import trailing as _trailing
+tp = fresh()
+tp.index_entry, tp.index_risk, tp.index_target, tp.index_invalidation = 24000.0, 50.0, 24100.0, 23950.0
+tp.target = tp.entry * 100.0                       # parked, as live does with an index target
+note = _trailing.try_extend(tp, [], 24100.0, IntradayLimits(on_target="trail", extend_giveback_r=0.25))
+check("on_target=trail: the target is dropped, not taken, and the stop locks 0.25R behind it",
+      note and tp.index_target == 0.0 and abs(tp.index_invalidation - 24087.5) < 1e-6
+      and bk.review(tp, 130.0, index_px=24101.0)[0] == HOLD, f"{note} / {tp.index_invalidation}")
+
+tq = fresh()
+tq.side, tq.index_target, tq.index_invalidation = -1, 0.0, 24050.0
+check("a premium target (no index target) is never extended or trailed - a put's stop "
+      "is not locked at +g*R index points",
+      _trailing.try_extend(tq, [], 24000.0, IntradayLimits(on_target="trail")) == ""
+      and tq.index_invalidation == 24050.0, f"{tq.index_invalidation}")
+
+rc = SimpleNamespace(capital=SimpleNamespace(capital=11000.0), L=IntradayLimits(max_daily_loss_pct=15.0),
+                     _opening_capital=lambda: 11000.0, realised_pnl=0.0)
+check("a fresh day's trade may risk the full 15% cap", abs(IntradayEngine._risk_cap(rc, 15.0) - 1650.0) < 1e-6)
+rc.realised_pnl = -1600.0
+check("after a Rs 1,600 loss the next trade may risk only the Rs 50 left of the daily limit",
+      abs(IntradayEngine._risk_cap(rc, 15.0) - 50.0) < 1e-6, f"{IntradayEngine._risk_cap(rc, 15.0)}")
+rc.realised_pnl = +900.0
+check("a profit does not enlarge the per-trade cap", abs(IntradayEngine._risk_cap(rc, 8.0) - 880.0) < 1e-6)
 
 print("\n" + "=" * 64)
 print(f"  {PASS} passed, {FAIL} failed")

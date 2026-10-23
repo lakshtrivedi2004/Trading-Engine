@@ -1,0 +1,141 @@
+module: M07
+title: Markets and Taxation
+summary: Indian income tax basics for market participants (as of FY 2014-15/2015-16) - FY vs AY, slabs, classifying income (LTCG, STCG, speculative and non-speculative business income), investor taxation incl. indexation and FIFO, trader taxation, loss set-off/carry-forward, tax-loss harvesting, BTST treatment, advance tax, business turnover and tax audit (44AB/44AD), personal balance sheet/P&L/books, ITR forms.
+global_caveat: "ALL RATES/THRESHOLDS ARE FROM THE SOURCE ERA (FY2014-16). Indian tax law has changed materially since (e.g. LTCG on listed equity reintroduced in 2018; STCG/LTCG rates revised in July 2024; debt MF and indexation rules changed 2023-24; business-income ITR is now ITR-3; audit thresholds changed). Treat as conceptual framework; verify current law before use."
+nodes:
+  - id: income_tax_basics
+    type: Tax
+    name: Income Tax Basics (FY, AY, slabs)
+    chapter: 2
+    summary: Tax on income under Income-tax Act 1961; FY = year income earned (Apr 1 - Mar 31); AY = following year in which it is filed; IT dept sees all PAN-linked market activity.
+    facts:
+      - "FY14-15 individual slabs (<60) - 0-2.5L nil; 2.5-5L 10%; 5-10L 25k + 20%; >10L 1.25L + 30%."
+      - Only ~2.9% of Indians paid tax (2015).
+    caveats: [Slabs and regimes have changed (new tax regime introduced 2020).]
+    links: [{to: market_income_classification, rel: RELATED_TO}]
+
+  - id: market_income_classification
+    type: Tax
+    name: Classifying Market Income (Investor vs Trader)
+    chapter: 3
+    summary: Heads - LTCG, STCG, speculative business income (intraday equity), non-speculative business income (all F&O - equity, currency, commodity - and frequent delivery trading). You can be both investor and trader; keep portfolios demarcated and classification consistent across years.
+    facts:
+      - CBDT 2007 circular - buy for dividends = investor; buy and sell to profit = trader (vague, AO discretion).
+      - F&O trading and intraday equity must be declared as business income (losses too) - non-declaration triggers scrutiny.
+      - If markets are your only income, classify equity trades as business income; salaried people can more easily treat delivery trades as capital gains.
+      - Intraday is speculative (no delivery intent); F&O is non-speculative by definition (hedging/delivery possible).
+    conditions:
+      ltcg: "equity delivery held > 1 year"
+      stcg: "equity delivery held 1 day to 1 year, low frequency"
+      speculative_business: "intraday equity"
+      non_speculative_business: "F&O (any segment) or high-frequency delivery trading (e.g. several times a week)"
+    links: [{to: capital_gains_tax, rel: RELATED_TO}, {to: business_income_tax, rel: RELATED_TO}]
+
+  - id: capital_gains_tax
+    type: Tax
+    name: Capital Gains Tax on Equity and Mutual Funds (source era)
+    aliases: [LTCG, STCG]
+    chapter: [3, 4]
+    summary: LTCG on listed equity/equity MFs via exchange (STT paid) 0%; STCG 15%. Off-market - LTCG 10% listed / 20% unlisted, STCG at slab. Debt/non-equity MFs - long-term after 3 years at 20% with indexation, else slab.
+    facts:
+      - Equity-oriented MF = >= 65% in domestic equity.
+      - Holding period computed FIFO across multiple purchases.
+      - STT cannot be added to cost for capital gains; brokerage and other charges can.
+      - Short-term capital losses carry forward 8 years against capital gains; long-term equity losses (when LTCG was exempt) were dead losses.
+    example: "Buy 100 Reliance 10-Apr-14 @800 and 100 on 1-Jun-14 @820; sell 150 on 1-May-15 @920 -> 100 sh LTCG 12,000 (0%), 50 sh STCG 5,000 (15%)."
+    caveats: ["Current law differs (verify): LTCG on listed equity taxable above an exemption limit since 2018; STCG and LTCG rates revised in 2024."]
+    bot_use: Tax-aware exit timing (holding-period counter); after-tax backtest returns.
+    links: [{to: indexation, rel: USES}, {to: stt, rel: RELATED_TO}, {to: holding_period, rel: RELATED_TO}]
+
+  - id: indexation
+    type: Formula
+    name: Indexation (Cost Inflation Index)
+    chapter: 4
+    summary: Inflates purchase cost by CII to tax only real gains on debt funds, property, gold etc.
+    formula: {indexed_cost: "purchase_value * CII_sale_year / CII_purchase_year", ltcg: "sale_value - indexed_cost"}
+    example: "Debt fund 1L (2005, CII 497) -> 3L (2015, CII 1024): indexed cost 2,06,036; LTCG 93,964; tax 18,792 vs 40,000 unindexed."
+    caveats: [Indexation benefit removed for many assets in 2023-24 changes - verify.]
+    links: [{to: capital_gains_tax, rel: PART_OF}, {to: inflation, rel: RELATED_TO}]
+
+  - id: stt
+    type: Tax
+    name: Securities Transaction Tax (STT)
+    aliases: [STT]
+    chapter: [4, 5]
+    summary: Tax on exchange-traded securities transactions (0.1% on equity delivery in source); not on off-market transfers; not deductible for capital gains but deductible as business expense.
+    links: [{to: transaction_charges, rel: PART_OF}]
+
+  - id: business_income_tax
+    type: Tax
+    name: Taxation of Trading as Business Income
+    chapter: [3, 5]
+    summary: Speculative and non-speculative business income is added to other income and taxed at slab rates; expenses can be claimed.
+    facts:
+      - Pros - low tax if total income low; claim expenses (brokerage, STT, charges, proportional internet/phone/rent, computer depreciation, staff salary, advisory, books); set off non-speculative losses against other non-salary income same year; carry forward.
+      - Cons - up to 30% slab on profits; ITR-4 (now ITR-3) needs CA; books and possible audit.
+    example: "Salary 10L + F&O 1L + intraday 1L -> slab tax on 12L = 1.85L; plus STCG 1L @15% = 15k."
+    links: [{to: loss_set_off_rules, rel: RELATED_TO}, {to: tax_audit, rel: RELATED_TO}, {to: advance_tax, rel: RELATED_TO}]
+
+  - id: loss_set_off_rules
+    type: Tax
+    name: Loss Set-off and Carry-forward Rules
+    chapter: [3, 4, 5]
+    summary: Must file on time to carry forward. Non-speculative (F&O) loss - same year vs any income except salary; carried forward 8 years vs non-speculative business income only. Speculative (intraday) loss - only vs speculative gains, carried 4 years. STCL - vs capital gains, 8 years.
+    conditions:
+      speculative_loss_vs_fno_gain: "NOT allowed"
+      fno_loss_vs_speculative_gain: "allowed (same year)"
+    links: [{to: business_income_tax, rel: PART_OF}, {to: tax_loss_harvesting, rel: RELATED_TO}]
+
+  - id: tax_loss_harvesting
+    type: Strategy
+    name: Tax Loss Harvesting
+    chapter: 5
+    summary: Near financial year-end, book unrealised losses (and re-enter the position) to offset realised gains and defer tax outgo.
+    bot_use: Year-end (March) routine to realise losses against realised gains, respecting wash-trade/regulatory concerns.
+    links: [{to: loss_set_off_rules, rel: USES}]
+
+  - id: btst_tax
+    type: Tax
+    name: BTST Tax Treatment
+    chapter: 5
+    summary: Debated - author treats BTST as STCG/non-speculative (STT charged like delivery) if infrequent; if frequent, show as speculative business income.
+    links: [{to: btst, rel: RELATED_TO}]
+
+  - id: advance_tax
+    type: Tax
+    name: Advance Tax
+    chapter: [4, 5]
+    summary: Business income or realised STCG requires advance tax instalments - 30% by 15 Sep, 60% by 15 Dec, 100% by 15 Mar (source; a 15 June instalment now also exists); ~12% p.a. interest on shortfall; pay on profits realised to date, claim refund if overpaid.
+    links: [{to: business_income_tax, rel: RELATED_TO}]
+
+  - id: tax_audit
+    type: Tax
+    name: Business Turnover and Tax Audit (44AB / 44AD)
+    chapter: [5, 6, 7]
+    summary: Audit if trading business turnover > Rs 1 Cr, or (44AD) turnover < 1 Cr but profit < 8% of turnover (unless total income below taxable limit). Trading turnover is not contract value.
+    formula:
+      delivery_turnover: "sell value (only if delivery trades declared as business)"
+      intraday_turnover: "sum of absolute profits and losses"
+      fno_turnover: "sum of absolute favourable/unfavourable differences + premium received on option sales"
+    facts:
+      - Trade-wise computation is most compliant; scrip-wise uses average prices.
+      - Presumptive scheme (ITR-4S, 44AD) - declare 8% of turnover as income to avoid audit (only non-speculative income; no expenses, no loss carry-forward).
+      - Due dates (source) - July 31 non-audit, Sept 30 audit; belated return within 1 yr of AY end with interest/penalty (Rs 5,000 u/s 271F); revised returns allowed if original filed on time.
+    example: "Futures buy 8000 sell 7900 x25 -> turnover 2,500; options buy 20 sell 30 x100 -> 1,000 + premium 3,000 = 4,000."
+    caveats: [Thresholds changed (e.g. higher audit limits for mostly-digital receipts; ICAI guidance on F&O turnover revised in 2022) - verify.]
+    links: [{to: business_income_tax, rel: RELATED_TO}, {to: itr_forms, rel: RELATED_TO}]
+
+  - id: trader_books
+    type: Process
+    name: Trader's Balance Sheet, P&L and Books of Account
+    chapter: 6
+    summary: Personal balance sheet (assets - liabilities = net worth), P&L (trading revenue minus trading expenses; salary excluded), and two books - bank book (annotated statements + bills) and trading book (broker P&L, ledger, contract notes); update quarterly.
+    links: [{to: tax_audit, rel: RELATED_TO}, {to: trading_journal, rel: RELATED_TO}]
+
+  - id: itr_forms
+    type: Tax
+    name: ITR Forms
+    chapter: 7
+    summary: (Source era) ITR-1 salary/interest/one house; ITR-2 adds capital gains (investors); ITR-4 adds business income (traders - F&O/intraday); ITR-4S presumptive. Filing is mandatory even if tax was paid via TDS; file losses on time to carry forward.
+    caveats: [Current mapping - business income is ITR-3, presumptive is ITR-4 (Sugam).]
+    links: [{to: tax_audit, rel: RELATED_TO}]

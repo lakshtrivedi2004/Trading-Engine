@@ -564,6 +564,372 @@ finally:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+section("8b. 1 Oct 2026 review: closed bars only, no chasing, no trap, one idea")
+
+from arb.regime import run_in_direction, swept_against
+
+
+def _eng_closed(**kw):
+    c = _Candles(day)
+    c.live = {"NIFTY": list(day[-1])}            # the fixture's last bar is the forming one
+    c.interval = "1m"
+    e = IntradayEngine(_Feed(day[-1][4]), [_Binding()], _Cfg(), CostModel(),
+                       IntradayLimits(max_risk_pct_per_trade=25.0, target_mode="structure",
+                                      sideways_bars=0, premium_rise_bars=0, min_atr_ratio=0.7,
+                                      **kw),
+                       PaperBroker(CostModel()), _Journal(), _Cap(), c)
+    e.book.time_to_close = lambda *_: 200.0
+    return e
+
+
+_real_time = time.time
+ie.now_ist = rg.now_ist = lambda: fixed
+brk_close = datetime.fromisoformat(day[-2][0]).timestamp() + 60
+try:
+    e0 = _eng_closed()
+    e0.hunt()
+    check("flags off: today's behaviour, the entry still happens", e0.book.count() == 1,
+          f"rejects {e0.rejects}")
+    time.time = lambda: brk_close + 120
+    e1 = _eng_closed(decide_on_closed_bars=True)
+    e1.hunt()
+    check("closed bars: two minutes after the bar closed, no entry - not chased, "
+          "and the wait is not counted as a refusal",
+          e1.book.count() == 0 and "waiting_for_bar_close" not in e1.rejects
+          and not e1.verdicts, f"rejects {e1.rejects}")
+    time.time = lambda: brk_close + 2
+    e2 = _eng_closed(decide_on_closed_bars=True)
+    e2.hunt()
+    check("closed bars: 2 s after the break bar closed, the entry is taken",
+          e2.book.count() == 1, f"rejects {e2.rejects}")
+    e3 = _eng_closed(decide_on_closed_bars=True, max_chase_atr=0.01)
+    e3.feed.store.ltp = [day[-2][4] + 40.0]
+    e3.hunt()
+    check("closed bars: price already moved away from the close -> refused",
+          e3.book.count() == 0 and e3.rejects.get("price_moved_since_close", 0) > 0,
+          f"rejects {e3.rejects}")
+    e4 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    e4._loss_side, e4._loss_side_ts = BULL, time.time() - 600
+    e4.hunt()
+    check("F4: ten minutes after a losing CE trade, another CE is refused",
+          e4.book.count() == 0 and e4.rejects.get("same_side_after_loss", 0) > 0,
+          f"rejects {e4.rejects}")
+    e4b = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    # A CE index loss 40 minutes ago, and a stock loss 10 minutes ago: the
+    # stock loss must not stretch the index block past its 30 minutes.
+    e4b._loss_side, e4b._loss_side_ts = BULL, time.time() - 2400
+    e4b.last_loss_ts = time.time() - 600
+    e4b.hunt()
+    check("F4: a later stock loss does not extend the index side's block",
+          e4b.book.count() == 1, f"rejects {e4b.rejects}")
+    e5 = _eng_closed(decide_on_closed_bars=True, same_side_cooldown_min=30)
+    e5._loss_side, e5._loss_side_ts = BEAR, time.time() - 600
+    e5.hunt()
+    check("F4: a losing PE does not block a CE", e5.book.count() == 1, f"rejects {e5.rejects}")
+    e6 = _eng_closed(decide_on_closed_bars=True, max_run_atr=0.5)
+    e6.hunt()
+    check("F2: a move already run past the limit is refused",
+          e6.book.count() == 0 and e6.rejects.get("move_already_run", 0) > 0,
+          f"rejects {e6.rejects}")
+finally:
+    time.time = _real_time
+    ie.now_ist, rg.now_ist = _real_ie, _real_rg
+
+fall = mk([(24100.0 - 10 * i, 24102.0 - 10 * i, 24088.0 - 10 * i, 24090.0 - 10 * i)
+           for i in range(40)])
+check("run_in_direction: a steady fall is a long run for a put",
+      run_in_direction(fall, BEAR) > 5.0 and run_in_direction(fall, BULL) < 1.0,
+      f"{run_in_direction(fall, BEAR):.1f} / {run_in_direction(fall, BULL):.1f}")
+check("run_in_direction: too little history says 0", run_in_direction(fall[:10], BEAR) == 0.0)
+flat = [(24000.0, 24004.0, 23996.0, 24001.0)] * 40
+swp = mk(flat + [(24000.0, 24001.0, 23985.0, 23999.0), (23999.0, 24003.0, 23998.0, 24002.0)])
+check("swept_against: a reclaimed sell-side sweep warns a put",
+      swept_against(swp, BEAR) == "sellside_swept")
+check("...and does not warn a call", swept_against(swp, BULL) == "")
+lost = mk(flat + [(24000.0, 24001.0, 23985.0, 23999.0), (23999.0, 24000.0, 23980.0, 23982.0)])
+check("...nor a put once price is back below the swept pool", swept_against(lost, BEAR) == "")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("8c. 2 Oct 2026 review: _closed_rows fails closed (D-M1)")
+
+from types import SimpleNamespace as _NS
+
+
+def _cr_engine(live=None):
+    e = IntradayEngine.__new__(IntradayEngine)
+    e.L = IntradayLimits(decide_on_closed_bars=True, entry_window_sec=15.0)
+    e.candles = _NS(interval="1m", live=dict(live or {}))
+    return e
+
+
+def _closed(e, rows, t0=None, now=None):
+    """_closed_rows at a fixed clock; (rows, reason), or (None, error) when the
+    engine cannot take the call at all."""
+    saved = time.time
+    if now is not None:
+        time.time = lambda: now
+    try:
+        return e._closed_rows("NIFTY", rows, t0) if t0 is not None else e._closed_rows("NIFTY", rows)
+    except Exception as ex:
+        return None, repr(ex)
+    finally:
+        time.time = saved
+
+
+_m = datetime.fromisoformat("2026-10-01T10:05:00+05:30")
+_cr = [[(_m + timedelta(minutes=k)).isoformat(), 1.0, 2.0, 0.5, 1.5, 0.0] for k in (-2, -1, 0)]
+t_in = _m.timestamp() + 5.0                       # 5 s into the 10:05 minute
+rows_f, why_f = _closed(_cr_engine(), list(_cr), now=t_in)
+check("no live bar for the index: the minute still forming is dropped, not decided on",
+      rows_f is not None and rows_f[-1][0] == _cr[1][0] and why_f == "",
+      f"rows[-1] {rows_f[-1][0][11:16] if rows_f else '-'} reason {why_f!r}")
+rows_f2, why_f2 = _closed(_cr_engine(), list(_cr), now=_m.timestamp() + 30.0)
+check("...and 30 s into it the last closed bar is 30 s old: wait, never act on the forming one",
+      rows_f2 is not None and why_f2 == "waiting_for_bar_close" and rows_f2[-1][0] == _cr[1][0],
+      f"reason {why_f2!r}")
+# The get()/live race: the rows were copied 0.5 s before 10:06 (10:05 still
+# forming in the copy), the sampler rolled the minute, then _closed_rows ran.
+t_copy = _m.timestamp() + 59.5
+live_next = [(_m + timedelta(minutes=1)).isoformat(), 1.0, 1.0, 1.0, 1.0, 0.0]
+rows_r, why_r = _closed(_cr_engine({"NIFTY": live_next}), list(_cr), t0=t_copy,
+                        now=_m.timestamp() + 60.05)
+check("rows copied before the bar closed: the copy's forming bar is not the decision bar, "
+      "even after the live bar rolled",
+      rows_r is not None and not (why_r == "" and rows_r and rows_r[-1][0] == _cr[2][0]),
+      f"rows[-1] {rows_r[-1][0][11:16] if rows_r else '-'} reason {why_r!r}")
+rows_ok, why_ok = _closed(_cr_engine({"NIFTY": live_next}), list(_cr), t0=_m.timestamp() + 60.02,
+                          now=_m.timestamp() + 60.05)
+check("...while rows copied after the close decide on the completed bar at once",
+      rows_ok is not None and why_ok == "" and rows_ok[-1][0] == _cr[2][0],
+      f"reason {why_ok!r}")
+rows_live, why_live = _closed(_cr_engine({"NIFTY": list(_cr[2])}), list(_cr), now=t_in)
+check("the live bucket is still dropped by name",
+      rows_live is not None and rows_live[-1][0] == _cr[1][0] and why_live == "")
+bad = [list(_cr[0]), ["10:05?", 1.0, 2.0, 0.5, 1.5, 0.0]]
+rows_b, why_b = _closed(_cr_engine(), bad, now=t_in)
+check("an unreadable bar time is a refusal, not a go",
+      why_b == "bar_time_unparseable", f"reason {why_b!r}")
+check("flag off: rows pass through untouched",
+      IntradayEngine._closed_rows(_NS(L=IntradayLimits(), candles=None), "NIFTY", list(_cr))
+      == (list(_cr), ""))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("8d. 2 Oct 2026 review: the loss cooldowns survive a restart (D-L1)")
+
+with tempfile.TemporaryDirectory() as _d:
+    from arb.journal import Journal as _J
+    _j = _J(directory=_d)
+    _now = datetime.now(IST)
+    _base = {"strategy": "INTRADAY_PE", "mode": "paper", "strike": 24000.0, "underlying": "NIFTY",
+             "expiry": "06OCT2026", "qty": 65, "entry": 100.0, "exit": 90.0, "points": -10.0,
+             "r_multiple": -1.0, "gross_inr": -650.0, "cost_inr": 80.0, "held_sec": 300.0,
+             "legs": [], "opportunity": {}}
+    pe_ts = (_now - timedelta(minutes=5)).isoformat()
+    _j.record_trade(dict(_base, trade_id=1, symbol="NIFTY24000CE", opt="CE", exit_reason="target",
+                         net_inr=400.0, ts_ist=(_now - timedelta(minutes=20)).isoformat()))
+    _j.record_trade(dict(_base, trade_id=2, symbol="NIFTY24000PE", opt="PE",
+                         exit_reason="stop_loss", net_inr=-730.0, ts_ist=pe_ts))
+    _feed = _Feed(24000.0)
+
+    def _boot(**kw):
+        return IntradayEngine(_feed, [_Binding()], _Cfg(), CostModel(),
+                              IntradayLimits(same_side_cooldown_min=30.0,
+                                             cooldown_after_loss_sec=600.0, **kw),
+                              PaperBroker(CostModel()), _j, _Cap(), _Candles(day),
+                              log=lambda *_: None)
+
+    r1 = _boot()
+    want_ts = datetime.fromisoformat(pe_ts).timestamp()
+    check("restart 5 min after a losing PE: the same-side block is restored",
+          r1._loss_side == BEAR and abs(r1._loss_side_ts - want_ts) < 1e-3
+          and r1._same_idea_blocked(BEAR) and not r1._same_idea_blocked(BULL),
+          f"side {r1._loss_side} ts {r1._loss_side_ts:.0f} vs {want_ts:.0f}")
+    check("...and so is the cooldown after a loss",
+          abs(r1.last_loss_ts - want_ts) < 1e-3 and r1._gates() == "cooldown_after_loss",
+          f"gate {r1._gates()!r}")
+    # A later STOCK loss moves the loss cooldown, never the index side.
+    eq_ts = (_now - timedelta(minutes=1)).isoformat()
+    _j.record_trade(dict(_base, trade_id=3, symbol="RELIANCE-EQ", opt="EQ", strategy="INTRADAY_EQ_LONG",
+                         underlying="RELIANCE", exit_reason="stop_loss", net_inr=-120.0, ts_ist=eq_ts))
+    r2 = _boot()
+    check("a later stock loss restores the loss cooldown but not the index side",
+          abs(r2.last_loss_ts - datetime.fromisoformat(eq_ts).timestamp()) < 1e-3
+          and r2._loss_side == BEAR and abs(r2._loss_side_ts - want_ts) < 1e-3,
+          f"last_loss {r2.last_loss_ts:.0f} side {r2._loss_side}")
+    _j.record_trade(dict(_base, trade_id=4, symbol="NIFTY24000CE", opt="CE", exit_reason="target",
+                         net_inr=300.0, ts_ist=_now.isoformat()))
+    r3 = _boot()
+    check("a win afterwards does not clear the last loss's side or time",
+          r3._loss_side == BEAR and abs(r3._loss_side_ts - want_ts) < 1e-3)
+    # D-ADV-1: F4 off (default flags; the latest loss, a stock, was 1 min ago,
+    # inside the default 180 s cooldown): a restart restores no loss state, as before D-L1.
+    r5 = IntradayEngine(_feed, [_Binding()], _Cfg(), CostModel(), IntradayLimits(),
+                        PaperBroker(CostModel()), _j, _Cap(), _Candles(day), log=lambda *_: None)
+    check("flags off: a restart restores neither the loss cooldown nor the side",
+          r5.last_loss_ts == 0.0 and r5._loss_side == 0 and r5._loss_side_ts == 0.0
+          and r5._gates() != "cooldown_after_loss",
+          f"last_loss {r5.last_loss_ts:.0f} side {r5._loss_side} gate {r5._gates()!r}")
+
+with tempfile.TemporaryDirectory() as _d:
+    from arb.journal import Journal as _J
+    _j = _J(directory=_d)
+    _j.record_trade({"trade_id": 1, "symbol": "NIFTY24000CE", "opt": "CE", "exit_reason": "target",
+                     "net_inr": 50.0, "ts_ist": datetime.now(IST).isoformat(), "legs": [],
+                     "opportunity": {}, "strategy": "INTRADAY_CE", "qty": 65})
+    r4 = IntradayEngine(_Feed(24000.0), [_Binding()], _Cfg(), CostModel(), IntradayLimits(),
+                        PaperBroker(CostModel()), _j, _Cap(), _Candles(day), log=lambda *_: None)
+    check("a day with no loss restores nothing", r4._loss_side == 0 and r4.last_loss_ts == 0.0)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("8e. 2 Oct 2026 review: the constraints page mirrors the engine (D-L3)")
+
+from arb import constraints as _cons
+from arb.intraday import Candidate as _Cd, chain_delta, plan_trade as _plan
+
+
+def _cons_engine(capital, **kw):
+    c = _Candles(day)
+    e = IntradayEngine(_Feed(24000.0), [_Binding()], _Cfg(), CostModel(),
+                       IntradayLimits(**kw), PaperBroker(CostModel()), _Journal(), _Cap(), c,
+                       log=lambda *_: None)
+    e.capital = _NS(capital=capital, daily_target=lambda pct: 0.0)
+    e.book.time_to_close = lambda *_: 200.0
+    st = _NS(bias=BULL, closes=[24000.0], active_zone=lambda spot, side: None,
+             invalidation=lambda side: 23960.0)          # a 40-point index stop
+    e.structures["NIFTY"] = st
+    e.verdicts["NIFTY"] = _NS(side=BULL, setups=[], tradable=True, plays=lambda: ["x"],
+                              veto="", count=1)
+    e.evaluated_at["NIFTY"] = e.verdict_at["NIFTY"] = time.time()
+    return e
+
+
+_kw = dict(risk_includes_costs=True, exact_trade_costs=True, max_cost_frac_of_risk=0.0,
+           max_risk_pct_per_trade=5.0, min_net_points=0.0)
+_probe = _cons_engine(10_000.0, **_kw)
+_cv = _CV()
+_i = list(_cv.strikes).index(24100.0)
+_px, _spr = float(_cv.ce_ask[_i]), float(_cv.ce_ask[_i] - _cv.ce_bid[_i])
+_d = chain_delta(_cv.ce_ask, list(_cv.strikes), _i, "CE")
+_prem = min(max(40.0 * _d, 2 * _spr), _px * _probe.L.max_risk_frac_of_premium)
+_extra = _probe._extra_risk_points(_px, _spr, 65)
+# A capital whose 5% cap holds the premium stop but not the stop plus its costs.
+_cap_inr = (_prem + 0.5 * _extra) * 65
+ec = _cons_engine(_cap_inr / 0.05, **_kw)
+_row = [r for r in _cons._index_rows(ec, "NIFTY", time.time())
+        if r["instrument"]["v"].startswith("NIFTY 24100")][0]
+_cand = _Cd(symbol="NIFTY24100CE", token="1003", strike=24100.0, opt="CE", ask=_px,
+            bid=_px - _spr, lot_size=65, lot_cost=_px * 65, delta=_d, cheapness=0.0, offset=1,
+            depth=500.0, age_ms=50.0, expiry="29SEP2026", underlying="NIFTY", segment="NFO",
+            detail={"spread": _spr})
+_pl = _plan(_cand, ec.structures["NIFTY"], BULL, ec.L, ec._round_trip_points(_px, 65),
+            max_risk_inr=_cap_inr, extra_risk_points=_extra)
+check("risk_includes_costs: a contract whose stop fits but whose stop + costs does not is red, "
+      "as plan_trade refuses it",
+      _pl is None and _row["risk"]["ok"] is False,
+      f"plan {'refused' if _pl is None else 'taken'}; page {_row['risk']['v']} ok={_row['risk']['ok']}")
+check("...and the delta cell shows the selector's ceiling with costs inside",
+      _row["delta"]["ok"] is False and "for this stop" in _row["delta"]["note"],
+      f"{_row['delta']}")
+_both = _cons._index_rows(ec, "NIFTY", time.time())
+_ce = [r for r in _both if r["instrument"]["v"].endswith(" CE")]
+_pe = [r for r in _both if r["instrument"]["v"].endswith(" PE")]
+check("both sides of the index chain are shown (owner, 6 Oct): as many PE rows as CE, CE first when bullish",
+      len(_ce) == len(_pe) > 0 and _both[0]["instrument"]["v"].endswith(" CE"), f"{len(_ce)} CE / {len(_pe)} PE")
+check("...the other side is marked against the direction, with no stop-based risk",
+      all("against it" in r["instrument"]["note"] and r["risk"]["v"] in ("—", "no quote") for r in _pe),
+      _pe[0]["instrument"]["note"] if _pe else "")
+ec2 = _cons_engine(_cap_inr / 0.05, max_risk_pct_per_trade=5.0, max_cost_frac_of_risk=0.0,
+                   min_net_points=0.0)
+_row2 = [r for r in _cons._index_rows(ec2, "NIFTY", time.time())
+         if r["instrument"]["v"].startswith("NIFTY 24100")][0]
+check("...while with costs outside the cap the same contract is green, as plan_trade takes it",
+      _row2["risk"]["ok"] is True and _plan(_cand, ec2.structures["NIFTY"], BULL, ec2.L,
+                                             ec2._round_trip_points(_px, 65),
+                                             max_risk_inr=_cap_inr) is not None,
+      f"{_row2['risk']}")
+# Friction on the whole bet: cost / (stop + extra), the figure plan_trade tests.
+ec3 = _cons_engine(10_000.0 * 20, risk_includes_costs=True, exact_trade_costs=True,
+                   max_risk_pct_per_trade=5.0, max_cost_frac_of_risk=0.2, min_net_points=0.0)
+_row3 = [r for r in _cons._index_rows(ec3, "NIFTY", time.time())
+         if r["instrument"]["v"].startswith("NIFTY 24100")][0]
+_cost = ec3._round_trip_points(_px, 65)
+check("costs / risk is measured against the stop plus its costs, as plan_trade measures it",
+      abs(float(_row3["costfrac"]["v"]) - round(_cost / (_prem + _extra), 2)) < 1e-9,
+      f"page {_row3['costfrac']['v']} vs {_cost / (_prem + _extra):.2f} (stop alone {_cost / _prem:.2f})")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("8f. last_half_hour in shadow mode: notes the trade, never sends one")
+
+import arb.positions as _pos_mod
+from arb.intraday_engine import IntradayEngine as _IEng
+
+
+def _lhm_rows():
+    out = []
+    for d, base in (("2026-09-28", 23800.0), ("2026-09-29", 23870.0), ("2026-09-30", 23940.0)):
+        t0 = datetime.fromisoformat(f"{d}T09:15:00+05:30")
+        for i in range(375):
+            px = base + 60.0 * i / 374
+            out.append([(t0 + timedelta(minutes=i)).isoformat(), px, px + 20.0, px - 20.0, px, 0.0])
+    t0 = datetime.fromisoformat("2026-10-01T09:15:00+05:30")
+    for i in range(345):                           # 09:15 .. 14:59
+        px = 24000.0 + 100.0 * i / 344
+        out.append([(t0 + timedelta(minutes=i)).isoformat(), px, px + 3.0, px - 3.0, px, 0.0])
+    return out
+
+
+class _LhmJournal(_Journal):
+    def __init__(self, d):
+        super().__init__()
+        self.dir = d
+
+
+_jd = tempfile.mkdtemp(prefix="lhm_shadow_")
+_rows_l = _lhm_rows()
+_real_t, _real_ie2, _real_pos = time.time, ie.now_ist, _pos_mod.now_ist
+
+
+def _at(hh, mm, ss):
+    dt = datetime(2026, 10, 1, hh, mm, ss, tzinfo=IST)
+    time.time = lambda: dt.timestamp()
+    ie.now_ist = _pos_mod.now_ist = rg.now_ist = lambda: dt
+
+
+try:
+    for mode in ("off", "shadow"):
+        lg = []
+        el = _IEng(_Feed(24100.0), [_Binding()], _Cfg(), CostModel(),
+                   IntradayLimits(last_half_hour=mode, max_risk_pct_per_trade=25.0),
+                   PaperBroker(CostModel()), _LhmJournal(_jd), _Cap(), _Candles(_rows_l),
+                   log=lg.append)
+        el.book.time_to_close = lambda *_: 15.0
+        _at(15, 0, 2)
+        el._shadow_lhm()
+        if mode == "off":
+            check("last_half_hour off: nothing noted", not any("[shadow]" in x for x in lg))
+            continue
+        would = [x for x in lg if "WOULD BUY" in x]
+        check("shadow: at 15:00 a 0.5-ADR move with the 4h trend is noted as a CE it would buy",
+              len(would) == 1 and "CE" in would[0] and "NO ORDER SENT" in would[0], str(lg[-2:]))
+        sh = next(iter(el._lhm.values()))
+        el.feed.store.slot_of_token = {sh.get("token", ""): 0}
+        el.feed.store.bid = [sh.get("entry", 0.0) + 5.0]
+        el.book.time_to_close = lambda *_: 0.5
+        _at(15, 14, 30)
+        el._shadow_lhm()
+        ex = [x for x in lg if "would EXIT" in x]
+        check("shadow: at the square-off its exit is noted with a net, and journalled",
+              len(ex) == 1 and os.path.exists(os.path.join(_jd, "shadow_2026-10-01.jsonl")), str(ex))
+        check("shadow: no order was ever placed and no position opened",
+              el.book.count() == 0 and el.trades_today == 0)
+finally:
+    time.time, ie.now_ist, _pos_mod.now_ist, rg.now_ist = _real_t, _real_ie2, _real_pos, _real_rg
+
+# ═════════════════════════════════════════════════════════════════════════════
 section("9. Trailing on the index: the owner's 1:1 -> last opposite swing rule")
 
 from arb import trailing as tr
@@ -607,6 +973,29 @@ ps2 = short_pos()
 check("below 1:1 nothing moves",
       tr.update(ps2, mk(pre + after[:3]), LT, index_px=23989.0) == ""
       and ps2.index_invalidation == 24020.0)
+
+# Owner's rule (1 Oct 2026): follow the first lower high (higher low on a long)
+# as soon as it confirms, not only after 1:1.
+LE = IntradayLimits(tighten_on_reversal=False, trail_from_first_swing=True)
+pe0 = short_pos()
+check("default: at +0.5R the lower high is ignored",
+      tr.update(pe0, rows_s, LT, index_px=23990.0) == "" and pe0.index_invalidation == 24020.0)
+pe1 = short_pos()
+note_e = tr.update(pe1, rows_s, LE, index_px=23990.0)
+check("first-swing trail: at +0.5R the stop already moves to that lower high",
+      23994.0 <= pe1.index_invalidation < 23996.0, note_e or f"{pe1.index_invalidation:.2f}")
+pe2 = short_pos()
+tr.update(pe2, mk(pre + [(24000.0 - 2 * i, 24001.0 - 2 * i, 23997.0 - 2 * i, 23998.0 - 2 * i)
+                         for i in range(8)]), LE, index_px=23986.0)
+check("first-swing trail: no swing and below 1:1 -> no breakeven jump",
+      pe2.index_invalidation == 24020.0, f"{pe2.index_invalidation:.2f}")
+from arb.trailing import initial_target
+flat_t = mk([(24000.0 + (i % 2) * 2, 24003.0 + (i % 2) * 2, 23999.0 + (i % 2) * 2,
+              24001.0 + (i % 2) * 2) for i in range(120)])
+t_floor = initial_target(flat_t, BULL, 24001.0, 20.0,
+                         IntradayLimits(target_mode="momentum", target_floor_r=2.0))
+check("target floor 2R: a quiet market's target is still at least 1:2",
+      t_floor - 24001.0 >= 40.0 - 1e-6, f"{t_floor - 24001.0:.1f} pts")
 
 frozen = ps.index_invalidation
 tr.update(ps, rows_s, LT, index_px=23990.0)

@@ -1,0 +1,14 @@
+{% macro chart(spec, height=300) -%}
+{% if spec %}<div class="chart" style="height:{{ height }}px"><canvas data-chart='{{ spec|tojson }}'></canvas></div>{% endif %}
+{%- endmacro %}
+
+{% macro health_table(rows) -%}
+<div class="tablewrap"><table>
+<thead><tr><th class="l">Status</th><th class="l">Series</th><th class="l">Message</th><th class="l">What to do</th></tr></thead>
+<tbody>
+{% for r in rows.itertuples() %}
+<tr><td class="l"><span class="dot {{ r.status }}"></span>{{ r.status }}</td><td class="l">{{ r.series }}</td>
+<td class="l">{{ r.message }}</td><td class="l">{{ r.detail if (r.detail or '').startswith('What to do') else '' }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{%- endmacro %}

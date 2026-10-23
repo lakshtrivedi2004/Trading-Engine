@@ -19,7 +19,7 @@ input silently sizes every stop wrong.
 """
 from dataclasses import dataclass, field
 
-from arb.smc import BULL, BEAR
+from arb.smc import BULL
 
 
 @dataclass
@@ -103,9 +103,14 @@ class ContractSelector:
         self.limits = limits
         self.log = log
         self.last_reject = ""
+        # Which check stopped the last refused selection ("cost", "stale",
+        # "thin", "spread", "delta_floor", "delta_ceiling", "no_quote", ...)
+        # and, for "cost", the cheapest lot that was out of reach.
+        self.last_reject_kind = ""
+        self.last_cheapest = None       # (lot_cost, strike) or None
 
     def select(self, cv, spot, side, capital, max_age_ms, min_depth_mult,
-               max_delta=None):
+               max_delta=None, max_delta_fn=None):
         """Best affordable contract for `side`, or None.
 
         `cv` is a ChainView (arb/strategies.py); `capital` is rupees available
@@ -114,8 +119,9 @@ class ContractSelector:
         L = self.limits
         opt = "CE" if side == BULL else "PE"
         strikes = list(cv.strikes)
+        self.last_reject_kind, self.last_cheapest = "", None
         if len(strikes) < 3:
-            self.last_reject = "chain too short"
+            self.last_reject, self.last_reject_kind = "chain too short", "chain"
             return None
 
         if opt == "CE":
@@ -135,36 +141,56 @@ class ContractSelector:
         if spot < strikes[0] - step or spot > strikes[-1] + step:
             self.last_reject = (f"spot {spot:,.0f} outside subscribed strikes "
                                 f"{strikes[0]:,.0f}-{strikes[-1]:,.0f} - restart to re-centre")
+            self.last_reject_kind = "chain"
             return None
         qty = cv.lot_size
         lo = max(0, a - L.max_strike_offset)
         hi = min(len(strikes) - 1, a + L.max_strike_offset)
 
         out, seen_any = [], False
+        top = None          # the largest per-candidate delta ceiling met (D-L4)
+        # The check that stopped each strike: the refusal names what actually
+        # bound, not the delta ceiling every time (a purse too small for one
+        # lot read "no strike at delta <= 1.95 fits the risk cap" - 11 Oct 2026).
+        fails = {}
+        cheapest = None
         for i in range(lo, hi + 1):
             px, dq, ag = float(ask[i]), float(askq[i]), float(age[i])
             if px <= 0 or float(bid[i]) <= 0:
                 continue
             seen_any = True
             if ag > max_age_ms:
+                fails["stale"] = fails.get("stale", 0) + 1
                 continue
             if dq < qty * min_depth_mult:
+                fails["thin"] = fails.get("thin", 0) + 1
                 continue
             lot_cost = px * qty
             if lot_cost > capital:
+                fails["cost"] = fails.get("cost", 0) + 1
+                if cheapest is None or lot_cost < cheapest[0]:
+                    cheapest = (lot_cost, float(strikes[i]))
                 continue
             # A spread wider than the edge we are hunting is a losing trade the
             # moment it is opened: we pay the ask and can only leave at the bid.
             spread = px - float(bid[i])
             if spread > L.max_spread_points:
+                fails["spread"] = fails.get("spread", 0) + 1
                 continue
             d = chain_delta(ask, strikes, i, opt)
             if d < L.min_delta:
+                fails["delta_floor"] = fails.get("delta_floor", 0) + 1
                 continue
             # Delta sizing: the most delta whose rupee risk at the chart's own
             # stop still fits the per-trade cap. The stop is not moved; the
             # contract is chosen to fit it.
-            if max_delta is not None and d > max_delta:
+            # With costs inside the cap the ceiling depends on the contract's
+            # own premium and spread, so it is asked per candidate.
+            ceiling = max_delta_fn(px, spread) if max_delta_fn is not None else max_delta
+            if ceiling is not None:
+                top = ceiling if top is None else max(top, ceiling)
+            if ceiling is not None and d > ceiling:
+                fails["delta_ceiling"] = fails.get("delta_ceiling", 0) + 1
                 continue
             out.append(Candidate(
                 symbol=syms[i], token=toks[i], strike=float(strikes[i]), opt=opt,
@@ -175,15 +201,35 @@ class ContractSelector:
                 detail={"spread": spread, "atm_strike": float(strikes[a])}))
 
         if not out:
-            if max_delta is not None and max_delta < L.min_delta:
-                self.last_reject = "chart stop too wide for the risk cap even at min_delta"
-            elif max_delta is not None and seen_any:
-                self.last_reject = (f"no strike at delta <= {max_delta:.2f} "
-                                    f"fits the risk cap")
+            # The ceiling the candidates were actually held to: with costs
+            # inside the cap (max_delta_fn) it is lower than the cost-free
+            # max_delta, and quoting that one misreported the refusal (D-L4).
+            limit = top if top is not None else max_delta
+            if not seen_any:
+                self.last_reject, self.last_reject_kind = "no strike quoting", "no_quote"
+            elif fails.get("delta_ceiling"):
+                # The risk cap is to blame only when a strike got as far as it.
+                self.last_reject_kind = "delta_ceiling"
+                if limit is not None and limit < L.min_delta:
+                    self.last_reject = "chart stop too wide for the risk cap even at min_delta"
+                else:
+                    self.last_reject = (f"no strike at delta <= {limit:.2f} "
+                                        f"fits the risk cap")
+            elif fails.get("cost") and set(fails) <= {"cost", "delta_floor"}:
+                # Every strike was either a lot the purse cannot pay for or one
+                # too far out of the money to count: the purse is the limit.
+                self.last_reject_kind, self.last_cheapest = "cost", cheapest
+                self.last_reject = (f"no affordable strike: cheapest lot Rs {cheapest[0]:,.0f} "
+                                    f"({cheapest[1]:,.0f}) > free capital Rs {capital:,.0f}")
             else:
-                self.last_reject = ("no strike quoting" if not seen_any else
-                                    f"none of ATM+/-{L.max_strike_offset} fits "
-                                    f"Rs {capital:,.0f} at >= {L.min_delta} delta")
+                names = {"stale": f"quote older than {max_age_ms:g} ms", "thin": "too thin",
+                         "cost": f"lot over Rs {capital:,.0f}",
+                         "spread": f"spread over {L.max_spread_points:g}",
+                         "delta_floor": f"delta under {L.min_delta:g}"}
+                self.last_reject_kind = max(fails, key=fails.get)
+                self.last_reject = (f"no tradable strike in ATM+/-{L.max_strike_offset}: "
+                                    + ", ".join(f"{n} {names[k]}" for k, n in
+                                                sorted(fails.items(), key=lambda kv: -kv[1])))
             return None
 
         # "Lot price nearest our capital": the most expensive contract we can
@@ -192,24 +238,29 @@ class ContractSelector:
         # to pay the same rupees. Cheapness breaks ties between neighbours.
         out.sort(key=lambda c: (c.lot_cost + 2.0 * c.cheapness * c.lot_size),
                  reverse=True)
-        self.last_reject = ""
+        self.last_reject, self.last_reject_kind = "", ""
         return out[0]
 
 
-def structural_invalidation(structure, side, invalidation=None):
+def structural_invalidation(structure, side, invalidation=None, nearest=False):
     """The index level where the idea dies: the setup's own, when it is on the
-    correct side of price, else the last swing. 0.0 when neither exists."""
-    invalid = structure.invalidation(side)
-    if invalidation:
-        ref = structure.closes[-1] if structure.closes else 0.0
-        if ref > 0 and ((side == BULL and invalidation < ref)
-                        or (side == BEAR and invalidation > ref)):
-            invalid = invalidation
-    return invalid or 0.0
+    correct side of price, else the last swing. 0.0 when neither exists.
+
+    nearest (stop_nearest_swing, owner 19 Oct 2026: "stop at the closest
+    swing"): when both are valid, the one nearer to price."""
+    ref = structure.closes[-1] if structure.closes else 0.0
+    ok = lambda lvl: lvl and ref > 0 and (lvl < ref if side == BULL else lvl > ref)
+    # A stop on the wrong side of price exits on the first tick: no level, no trade.
+    levels = [lvl for lvl in (invalidation, structure.invalidation(side)) if ok(lvl)]
+    if not levels:
+        return 0.0
+    if nearest:
+        return max(levels) if side == BULL else min(levels)
+    return levels[0]
 
 
 def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
-               max_risk_inr=None, atr=0.0):
+               max_risk_inr=None, atr=0.0, extra_risk_points=0.0):
     """Turn a chosen contract into an entry with a stop and a target.
 
     Risk is defined on the INDEX, where structure lives: the trade is wrong if
@@ -226,7 +277,8 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     on the correct side of spot; a stop above entry on a long is a bug in the
     setup, not a trade.
     """
-    invalid = structural_invalidation(structure, side, invalidation)
+    invalid = structural_invalidation(structure, side, invalidation,
+                                      nearest=bool(getattr(limits, "stop_nearest_swing", False)))
     if not invalid or invalid <= 0:
         return None
     spot_ref = structure.closes[-1] if structure.closes else 0.0
@@ -256,13 +308,17 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     #           on 7 real sessions it lost Rs 12,720 over 102 trades, because a
     #           stop pulled inside the structure is hit by ordinary noise.
     capped = False
+    # extra_risk_points (risk_includes_costs): the round trip and the expected
+    # exit slippage count inside the cap, with no rounding allowance - the cap
+    # is then the most a stopped-out trade can lose, costs included.
+    extra = float(extra_risk_points or 0.0)
     if max_risk_inr and cand.lot_size > 0:
         cap_pts = max_risk_inr / cand.lot_size
         # A few percent over is chain-delta rounding, not a wide stop.
-        if prem_risk > cap_pts * 1.05:
+        if prem_risk + extra > (cap_pts if extra else cap_pts * 1.05):
             if str(getattr(limits, "stop_policy", "delta")) != "cap":
                 return None
-            prem_risk = cap_pts
+            prem_risk = cap_pts - extra
             capped = True
             d = cand.delta if cand.delta > 0 else 0.5
             index_risk = prem_risk / d
@@ -285,8 +341,13 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
     # trip is a big slice of it is a trade the spread and fees mostly decide.
     # On 7 real sessions (15-24 Sep 2026, research/PAPERS.md section 0) the
     # tight-stop trades were where the whole after-cost loss came from.
+    # With costs inside the cap (extra > 0) the bet is the stop PLUS the costs
+    # and slippage it already carries, so friction is measured against that
+    # whole: measured against the stop alone, the same cost is counted twice
+    # and the window left between the friction floor and the cap is a few
+    # points wide on every index.
     frac = float(getattr(limits, "max_cost_frac_of_risk", 0.0) or 0.0)
-    if frac > 0 and cost_points > frac * prem_risk:
+    if frac > 0 and cost_points > frac * (prem_risk + extra):
         return None
     if stop <= 0.05:
         return None
@@ -300,6 +361,9 @@ def plan_trade(cand, structure, side, limits, cost_points, invalidation=None,
         "index_invalidation": invalid,
         "index_risk": index_risk,
         "risk_inr": prem_risk * cand.lot_size,
+        # What a stop-out is planned to cost in all: the premium stop plus the
+        # round trip and exit slippage when they count inside the cap.
+        "planned_risk_inr": (prem_risk + extra) * cand.lot_size,
         "reward_inr": limits.reward_risk * prem_risk * cand.lot_size,
         "cost_points_round_trip": cost_points,
         "delta": cand.delta,
