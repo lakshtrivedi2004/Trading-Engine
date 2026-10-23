@@ -153,7 +153,7 @@ LOGS_PAGE = r"""<!DOCTYPE html>
 <div class="wrap">
   <div class="head"><h1>BTST Log</h1><a class="btn" href="/">← BTST Desk</a></div>
   <p class="sub">Every step of the desk, newest first. <b>No trade today?</b> Pick <i>Signals</i>: each channel message
-  read in the scan window (15:15 – 15:40) and why it was or was not a signal, then why a signal was not traded. <i>Problems</i> shows the warnings
+  read in the scan window and why it was or was not a signal, then why a signal was not traded. <i>Problems</i> shows the warnings
   and errors (Telegram reader down, Angel login, refused orders).</p>
   <div class="bar">
     <span id="groups"></span>

@@ -1,6 +1,6 @@
 """BTST from a Telegram channel's signals (owner, 23 Oct 2026).
 
-Day D, scan_start - scan_end (15:15 - 15:40 IST): every channel message posted
+Day D, scan_start - scan_end (15:15 - 16:00 IST): every channel message posted
 in the window is read once. A signal read after market_close (15:30) is saved
 with its reading but not traded - no order can be placed until the next open
 (the channel posted every October 2026 signal at 15:33 - 15:39). A BTST signal (btst/signal.py) is entered at
@@ -15,7 +15,7 @@ Day D+1 (the next trading day), at decide_at:
                   the count nearest that amount), and target the new average
                   price + avg_target_pct (10%)
 The exchange cancels every order at the close. Live, the target goes back in
-at amo_at (16:01) on day D as an AMO for the next open, so an opening spike
+at amo_at (17:00) on day D as an AMO for the next open, so an opening spike
 fills it; it stays through the decision (averaging down cancels it first -
 never two sells at once), and an AMO the exchange rejects at the open is
 replaced by a normal target. Paper places the target again at decide_at. At
