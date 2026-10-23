@@ -17,6 +17,8 @@
   "market_protection_pct": 2.5,
   "poll_sec": 3,
   "ltp_poll_sec": 10,
+  "log_status_sec": 60,
+  "heartbeat_sec": 300,
   "read_last_messages": 50,
   "channel_poll_sec": 5,
   "notify_telegram": true

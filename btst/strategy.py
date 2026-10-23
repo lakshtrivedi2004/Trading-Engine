@@ -4,7 +4,8 @@ Day D, scan_start - scan_end (15:15 - 15:30 IST): every channel message posted
 in the window is read once. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
 `lots` lots, CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
-the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day.
+the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
+no trade (the day is still recorded, btst_days).
 
 Day D+1 (the next trading day), at decide_at:
     up, or down by avg_down_loss_pct (20%) or less: keep the target
@@ -15,18 +16,21 @@ The target is placed again each morning (the exchange cancels every order at
 the close). At exit_at (15:14) whatever is still open is cancelled and sold at
 market. Every step - the message, the signal, each order, the decision, the
 close with its metrics - is written to MongoDB (services/mongo.py) under the
-job's id. No stop-loss, by the owner's design.
+job's id, and logged ("LEVEL area | text", btst/logbook.py) with the reason
+for every trade not taken. No stop-loss, by the owner's design.
 
 Never more than one trade open; a job left half-entered by a crash is not
 retried - it is marked for a human to look at.
 """
-import json
 import queue
-from datetime import datetime, timedelta
+import time
+import traceback
+from datetime import datetime
 
 from arb.instruments import IST, holidays, market_phase, now_ist
 from btst import signal as S
-from btst.contracts import find_option, tick_round, days_left
+from btst.contracts import days_left, find_option, tick_round
+from btst.logbook import fmt
 
 
 def _hm(s):
@@ -38,6 +42,12 @@ def _secs(t):
     return t.hour * 3600 + t.minute * 60 + t.second
 
 
+def _first_line(text, n=90):
+    lines = [x.strip() for x in str(text or "").splitlines() if x.strip()]
+    s = " / ".join(lines[:2])
+    return s if len(s) <= n else s[:n] + "..."
+
+
 class BtstStrategy:
     def __init__(self, cfg, store, broker, master_fn, llm, channel, log=print, now=now_ist,
                  notifier=None, cost_model=None):
@@ -47,9 +57,11 @@ class BtstStrategy:
         self.cm = cost_model
         self.inbox = queue.Queue()
         self.last_ltp_at = 0.0
+        self.last_status_log = 0.0
+        self.window_said = {}           # day -> "open" / "closed" already logged
         self.status_note = "starting"
 
-    # ── settings ────────────────────────────────────────────────────────────
+    # ── settings and logging ────────────────────────────────────────────────
     def c(self, k, default=None):
         return self.cfg.get(k, default)
 
@@ -60,55 +72,102 @@ class BtstStrategy:
     def _ts(self):
         return self.now().isoformat(timespec="seconds")
 
-    def _say(self, text, job_id=None, notify=False):
-        self.log(f"[btst] {text}")
+    def _log(self, area, text, level="INFO"):
+        self.log(fmt(level, area, text))
+
+    def _say(self, text, job_id=None, notify=False, area="event", level="INFO"):
+        """Log it, keep it on the job in MongoDB, and (notify) send it to Telegram."""
+        self._log(area, text + (f" [{job_id}]" if job_id else ""), level)
         if job_id:
             try:
                 self.store.add_event(job_id, self._ts(), text)
             except Exception as e:
-                self.log(f"[btst] mongo event write failed: {e!r}")
+                self._log("mongo", f"event write for {job_id} failed: {e!r}", "ERROR")
         if notify and self.notifier:
             try:
                 self.notifier.send(f"🌙 <b>BTST</b> {text}")
-            except Exception:
-                pass
+            except Exception as e:
+                self._log("telegram", f"alert not sent: {e!r}", "WARN")
 
     # ── messages (the Telegram reader's thread puts, step() takes) ─────────
     def on_message(self, msg):
         text = getattr(msg, "raw_text", None) or getattr(msg, "text", None) or ""
         self.inbox.put({"id": int(msg.id), "date": msg.date, "text": text})
 
+    def _ist(self, when):
+        return when.astimezone(IST) if when.tzinfo else when.replace(tzinfo=IST)
+
     def _in_window(self, when):
         """A message posted today between scan_start and scan_end (IST)."""
-        t = when.astimezone(IST) if when.tzinfo else when.replace(tzinfo=IST)
-        now = self.now()
+        t, now = self._ist(when), self.now()
         return (t.date() == now.date()
                 and _hm(self.c("scan_start", "15:15")) <= _secs(t) < _hm(self.c("scan_end", "15:30")))
 
+    def _window_edges(self):
+        """Say once a day when the scan window opens and when it closes."""
+        now = self.now()
+        day = now.date().isoformat()
+        if now.weekday() >= 5 or day in holidays():
+            return
+        s, e, t = _hm(self.c("scan_start", "15:15")), _hm(self.c("scan_end", "15:30")), _secs(now)
+        said = self.window_said.setdefault(day, set())
+        if s <= t < e and "open" not in said:
+            said.add("open")
+            self._log("window", f"scan window OPEN {self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}: "
+                                f"reading {self.channel} for a BTST signal")
+        if t >= e and "closed" not in said and ("open" in said or t < e + 3600):
+            said.add("closed")
+            read = self.store.messages_on(day)
+            sigs = [m for m in read if m.get("is_signal")]
+            self._log("window", f"scan window CLOSED: {len(read)} message(s) read today, {len(sigs)} signal(s)")
+
     def _process_messages(self):
+        skipped = 0
         while True:
             try:
                 m = self.inbox.get_nowait()
             except queue.Empty:
-                return
+                break
+            posted = self._ist(m["date"])
             if not self._in_window(m["date"]):
-                continue                        # only the 15:15 - 15:30 messages of today
-            if self.store.message_seen(self.channel, m["id"]):
+                skipped += 1                    # not today's 15:15 - 15:30 - never read
                 continue
+            if self.store.message_seen(self.channel, m["id"]):
+                self._log("message", f"#{m['id']} ({posted:%H:%M:%S}) already read before - skipped")
+                continue
+            self._log("message", f"#{m['id']} posted {posted:%H:%M:%S}: {_first_line(m['text'])}")
+            if self.llm is not None and S.has_markers(m["text"], tuple(self.c("markers", ["BTST", "Disclaimer"]))):
+                self._log("ai", f"#{m['id']} has the markers - asking {self.c('ai_model') or 'the model'} to read it")
+            t0 = time.time()
             res = S.parse(m["text"], llm=self.llm, model=self.c("ai_model"),
                           markers=tuple(self.c("markers", ["BTST", "Disclaimer"])),
                           ai_fallback_regex=bool(self.c("ai_fallback_regex", True)),
                           thinking=self.c("ai_thinking", "low"))
-            doc = {"channel": self.channel, "msg_id": m["id"],
-                   "date": m["date"].astimezone(IST).isoformat(timespec="seconds"),
+            ai = res.get("ai") or {}
+            if "answer" in ai:
+                self._log("ai", f"#{m['id']} model answered in {time.time() - t0:.1f}s: {ai['answer']}")
+            elif "error" in ai:
+                self._log("ai", f"#{m['id']} model call failed: {ai['error']}", "WARN")
+            strict = S.strict_read(m["text"])
+            if strict:
+                self._log("signal", f"#{m['id']} strict read of the line: {strict}")
+            doc = {"channel": self.channel, "msg_id": m["id"], "date": posted.isoformat(timespec="seconds"),
                    "text": m["text"], "is_signal": res["is_signal"], "reason": res["reason"],
                    "parsed_by": res["parsed_by"], "signal": res["signal"], "ai": res["ai"],
                    "read_at": self._ts()}
-            self.store.save_message(doc)
+            try:
+                self.store.save_message(doc)
+            except Exception as e:
+                self._log("mongo", f"#{m['id']} could not be saved: {e!r}", "ERROR")
             if not res["is_signal"]:
-                self.log(f"[btst] message {m['id']}: not a signal - {res['reason']}")
+                self._log("signal", f"#{m['id']} NOT a signal - {res['reason']}",
+                          "WARN" if "refused" in res["reason"] or "unavailable" in res["reason"] else "INFO")
                 continue
+            self._log("signal", f"#{m['id']} SIGNAL ({res['parsed_by']}): {res['signal']} - {res['reason']}")
             self._on_signal(res, m)
+        if skipped:
+            self._log("message", f"{skipped} message(s) outside today's "
+                                 f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')} window - not read")
 
     def _on_signal(self, res, m):
         today = self.now().date().isoformat()
@@ -117,14 +176,17 @@ class BtstStrategy:
         done = self.store.job_for_trade_date(today)
         if done:
             self._say(f"signal {what} (message {m['id']}) ignored - one BTST a day, "
-                      f"today's is {done['job_id']}")
+                      f"today's is {done['job_id']} ({done.get('status')})", area="signal", level="WARN")
             return
-        if self.store.open_job():
-            self._say(f"signal {what} ignored - a trade is still open")
+        j = self.store.open_job()
+        if j:
+            self._say(f"signal {what} ignored - {j['job_id']} is still open", area="signal", level="WARN")
             return
         if _secs(self.now()) >= _hm(self.c("scan_end", "15:30")):
-            self._say(f"signal {what} ignored - the market has closed")
+            self._say(f"signal {what} ignored - the market has closed ({self.now():%H:%M:%S})",
+                      area="signal", level="WARN")
             return
+        self._log("entry", f"signal {what} accepted - entering ({self.broker.mode.upper()})")
         self._enter(sig, res, m)
 
     # ── entry ───────────────────────────────────────────────────────────────
@@ -134,81 +196,107 @@ class BtstStrategy:
         job = {"job_id": self.store.new_job_id(), "status": "entering", "mode": self.broker.mode,
                "trade_date": today.isoformat(), "created_at": now.isoformat(timespec="seconds"),
                "message": {"channel": self.channel, "msg_id": m["id"],
-                           "date": m["date"].astimezone(IST).isoformat(timespec="seconds"), "text": m["text"]},
+                           "date": self._ist(m["date"]).isoformat(timespec="seconds"), "text": m["text"]},
                "signal": dict(sig, parsed_by=res["parsed_by"]), "orders": [], "events": []}
         jid = self.store.insert_job(job)
+        self._log("entry", f"job {jid} created (status entering)")
         what = f"{sig['indices']} {sig['strike_price']:g} {sig['side']} @ {sig['price']:g}"
-        c = find_option(self.master_fn(), sig["indices"], sig["strike_price"], sig["side"], today)
+        try:
+            master = self.master_fn()
+        except Exception as e:
+            self.store.update_job(jid, set_={"status": "rejected", "reject_reason": f"scrip master: {e!r}"})
+            self._say(f"{what}: scrip master unavailable ({e!r}) - not traded", jid, True, "contract", "ERROR")
+            return
+        c = find_option(master, sig["indices"], sig["strike_price"], sig["side"], today)
         if c is None:
             self.store.update_job(jid, set_={"status": "rejected", "reject_reason": "no such contract"})
-            self._say(f"{what}: no {sig['indices']} {sig['strike_price']:g} {sig['side']} contract "
-                      f"after today in the scrip master - not traded", jid, notify=True)
+            self._say(f"{what}: no {sig['indices']} {sig['strike_price']:g} {sig['side']} contract after today "
+                      f"in the scrip master ({len(master)} rows) - not traded", jid, True, "contract", "WARN")
             return
+        self._log("contract", f"{c['symbol']} token {c['token']} on {c['exchange']}, expiry {c['expiry']} "
+                              f"({days_left(c, today)} days), lot {c['lot_size']}, tick {c['tick']}")
         lots = max(1, int(self.c("lots", 1)))
         qty = lots * c["lot_size"]
         ltp = self.broker.ltp(c)
+        self._log("entry", f"{c['symbol']}: {lots} lot(s) = {qty} qty, LTP {ltp} (signal {sig['price']:g})")
         self.store.update_job(jid, set_={"contract": c, "lots": lots, "ltp_at_signal": ltp,
                                          "days_to_expiry": days_left(c, today)})
         if ltp is None:
             self.store.update_job(jid, set_={"status": "rejected", "reject_reason": "no LTP"})
-            self._say(f"{what}: no price for {c['symbol']} - not traded", jid, notify=True)
+            self._say(f"{what}: no price for {c['symbol']} - not traded", jid, True, "entry", "ERROR")
             return
         need = ltp * qty * 1.05
         funds = self.broker.funds()
+        self._log("entry", f"funds check: need about Rs {need:,.0f} (LTP x qty + 5%), "
+                           f"available Rs {funds:,.0f}" if funds is not None else "funds unreadable")
         if funds is not None and funds < need:
             self.store.update_job(jid, set_={"status": "rejected",
                                              "reject_reason": f"funds Rs {funds:,.0f} < Rs {need:,.0f}"})
             self._say(f"{what}: {c['symbol']} needs about Rs {need:,.0f}, the account has "
-                      f"Rs {funds:,.0f} - not traded", jid, notify=True)
+                      f"Rs {funds:,.0f} - not traded", jid, True, "entry", "WARN")
             return
+        self._log("order", f"BUY {c['symbol']} x{qty} at market ({self.broker.mode})", "TRADE")
         buy = self.broker.buy_market(c, qty)
         buy.update(kind="buy", at=self._ts())
         self.store.add_order(jid, buy)
         if not buy.get("ok"):
             self.store.update_job(jid, set_={"status": "failed", "reject_reason": buy.get("error")})
-            self._say(f"{what}: BUY {c['symbol']} x{qty} not filled - {buy.get('error')}", jid, notify=True)
+            self._say(f"{what}: BUY {c['symbol']} x{qty} not filled - {buy.get('error')}", jid, True,
+                      "order", "ERROR")
             return
         q, px = int(buy["filled"]), float(buy["avg_price"])
-        target = tick_round(sig["price"] * self.target_mult(sig["indices"]), c["tick"], up=True)
+        mult = self.target_mult(sig["indices"])
+        target = tick_round(sig["price"] * mult, c["tick"], up=True)
+        self._log("order", f"BUY filled {q} @ {px:.2f} (order {buy.get('order_id')}, status {buy.get('status')})",
+                  "TRADE")
         pos = {"qty": q, "avg_price": round(px, 2), "invested": round(px * q, 2),
                "entry_price": round(px, 2), "entry_qty": q, "entry_at": self._ts()}
         self.store.update_job(jid, set_={"status": "open", "position": pos, "target_price": target,
-                                         "target_mult": self.target_mult(sig["indices"]),
-                                         "ltp_high": px, "ltp_low": px})
+                                         "target_mult": mult, "ltp_high": px, "ltp_low": px})
         self._say(f"BOUGHT {c['symbol']} x{q} @ {px:.2f} (Rs {px * q:,.0f}; signal {sig['price']:g}); "
-                  f"target {target:.2f} = {self.target_mult(sig['indices']):g} x the signal's price", jid,
-                  notify=True)
+                  f"target {target:.2f} = {mult:g} x the signal's price", jid, True, "entry", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target")
 
     def _place_target(self, job, price, kind):
         c, q = job["contract"], int(job["position"]["qty"])
+        self._log("order", f"SELL {c['symbol']} x{q} LIMIT {price:.2f} DAY ({kind})", "TRADE")
         o = self.broker.place_limit_sell(c, q, price)
         o.update(kind=kind, at=self._ts(), price=price)
         self.store.add_order(job["job_id"], o)
         self.store.update_job(job["job_id"], set_={"target_price": price, "target_order": o,
+                                                   "target_last_status": o.get("status"),
                                                    "soft_target": not o.get("ok")})
         if o.get("ok"):
-            self._say(f"target SELL {c['symbol']} x{q} @ {price:.2f} placed ({o.get('order_id')})", job["job_id"])
+            self._say(f"target SELL {c['symbol']} x{q} @ {price:.2f} placed ({o.get('order_id')}, "
+                      f"{o.get('status')})", job["job_id"], area="order", level="TRADE")
         else:
             self._say(f"target order refused ({o.get('error')}) - watching the price instead and selling "
-                      f"at market at {price:.2f}", job["job_id"], notify=True)
+                      f"at market at {price:.2f}", job["job_id"], True, "order", "WARN")
 
     # ── the next day ────────────────────────────────────────────────────────
     def _manage(self, job):
         now = self.now()
         if market_phase(now, start="09:15", end="15:30") != "open":
             return
-        c = job["contract"]
         jid = job["job_id"]
         ltp = self._watch(job)                  # first, so the day's high and low include this pass
-        # A filled target closes the trade whenever it happens.
         to = job.get("target_order")
+        st = None
         if to and to.get("ok"):
             st = self.broker.order_state(to)
+            status = (st or {}).get("status", "unreadable")
+            if status != job.get("target_last_status"):
+                self._log("order", f"target order {to.get('order_id')} is now {status}"
+                                   + (f" (filled {st['filled']} @ {st['avg']})" if st and st.get("filled") else ""),
+                          "TRADE" if status == "complete" else ("WARN" if status in ("rejected", "unreadable") else "INFO"))
+                self.store.update_job(jid, set_={"target_last_status": status})
+                job["target_last_status"] = status
             if st and st["status"] == "complete":
                 self._close(job, "target", st["avg"] or job["target_price"], None)
                 return
+        self._status_line(job, ltp, st)
         if job.get("soft_target") and ltp and ltp >= job["target_price"]:
+            self._log("exit", f"LTP {ltp} reached the watched target {job['target_price']:.2f} - selling", "TRADE")
             self._exit_market(job, "target (watched)")
             return
         if now.date().isoformat() <= job["trade_date"]:
@@ -217,11 +305,24 @@ class BtstStrategy:
             self._decide(job, ltp)
             return
         if job.get("decision") and _secs(now) >= _hm(self.c("exit_at", "15:14")):
+            self._log("exit", f"{self.c('exit_at', '15:14')} reached - target not hit, closing at market", "TRADE")
             self._exit_market(job, "time_exit")
 
+    def _status_line(self, job, ltp, st):
+        """Every log_status_sec while a trade is open: where it stands."""
+        if time.time() - self.last_status_log < float(self.c("log_status_sec", 60)):
+            return
+        self.last_status_log = time.time()
+        p = job["position"]
+        pnl = (ltp - p["avg_price"]) * p["qty"] if ltp else None
+        pct = 100.0 * (ltp - p["avg_price"]) / p["avg_price"] if ltp else None
+        self._log("manage", f"{job['contract']['symbol']} x{p['qty']} avg {p['avg_price']:.2f} | LTP {ltp} "
+                            + (f"({pct:+.1f}%, Rs {pnl:+,.0f}) " if pnl is not None else "")
+                            + f"| target {job['target_price']:.2f} ({(st or {}).get('status', 'watched' if job.get('soft_target') else '?')})"
+                            + (f" | decision {job['decision']['scenario']}" if job.get("decision") else " | decision at the next open"))
+
     def _watch(self, job):
-        """The LTP every poll_sec, with the day's high and low kept for the metrics."""
-        import time
+        """The LTP every ltp_poll_sec, with the day's high and low kept for the metrics."""
         if time.time() - self.last_ltp_at < float(self.c("ltp_poll_sec", 10)):
             return job.get("last_ltp")
         self.last_ltp_at = time.time()
@@ -232,6 +333,8 @@ class BtstStrategy:
                    "ltp_low": min(float(job.get("ltp_low") or ltp), ltp)}
             self.store.update_job(job["job_id"], set_=upd)
             job.update(upd)
+        else:
+            self._log("manage", f"no LTP for {job['contract']['symbol']} this pass", "WARN")
         return ltp
 
     def _decide(self, job, ltp):
@@ -239,25 +342,30 @@ class BtstStrategy:
         if not ltp:
             ltp = self.broker.ltp(c)
         if not ltp:
-            self.log("[btst] no opening price yet - deciding on the next pass")
+            self._log("decision", "no opening price yet - deciding on the next pass", "WARN")
             return
-        # Yesterday's target order died at the close (unless it filled, handled above).
         pnl_pct = 100.0 * (ltp - pos["avg_price"]) / pos["avg_price"]
         limit = float(self.c("avg_down_loss_pct", 20.0))
+        self._log("decision", f"next-day open: LTP {ltp:.2f} vs average {pos['avg_price']:.2f} = {pnl_pct:+.2f}% "
+                              f"(average down below -{limit:g}%)")
         decision = {"at": self._ts(), "ltp": ltp, "pnl_pct": round(pnl_pct, 2), "avg_before": pos["avg_price"]}
         if pnl_pct >= -limit:
             decision["scenario"] = "hold" if pnl_pct >= 0 else "hold_small_loss"
             self.store.update_job(jid, set_={"decision": decision})
             self._say(f"opened {pnl_pct:+.1f}% ({ltp:.2f} vs {pos['avg_price']:.2f}) - "
                       f"{'up' if pnl_pct >= 0 else f'loss within {limit:g}%'}: target stays "
-                      f"{job['target_price']:.2f}, out at {self.c('exit_at', '15:14')} if not hit", jid, notify=True)
+                      f"{job['target_price']:.2f}, out at {self.c('exit_at', '15:14')} if not hit",
+                      jid, True, "decision")
             self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
             return
-        # Down by more than the limit: about the same amount again, in whole lots.
         lot = int(c["lot_size"])
         per_lot = ltp * lot
         n = max(1, round(pos["invested"] / per_lot))
         add = n * lot
+        self._log("decision", f"average down: first invested Rs {pos['invested']:,.0f}, one lot now Rs {per_lot:,.0f} "
+                              f"-> {n} lot(s) = {add} qty = Rs {add * ltp:,.0f} "
+                              f"({100.0 * (add * ltp - pos['invested']) / pos['invested']:+.1f}% vs the first amount)")
+        self._log("order", f"BUY {c['symbol']} x{add} at market (average down)", "TRADE")
         buy = self.broker.buy_market(c, add)
         buy.update(kind="average_down", at=self._ts())
         self.store.add_order(jid, buy)
@@ -265,13 +373,15 @@ class BtstStrategy:
             decision["scenario"] = "average_down_failed"
             self.store.update_job(jid, set_={"decision": decision})
             self._say(f"opened {pnl_pct:+.1f}%: average-down BUY x{add} not filled ({buy.get('error')}) - "
-                      f"keeping the target {job['target_price']:.2f}", jid, notify=True)
+                      f"keeping the target {job['target_price']:.2f}", jid, True, "order", "ERROR")
             self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
             return
         q2, p2 = int(buy["filled"]), float(buy["avg_price"])
         q = pos["qty"] + q2
         avg = (pos["avg_price"] * pos["qty"] + p2 * q2) / q
         target = tick_round(avg * (1 + float(self.c("avg_target_pct", 10.0)) / 100.0), c["tick"], up=True)
+        self._log("order", f"average-down BUY filled {q2} @ {p2:.2f} (order {buy.get('order_id')}) - "
+                           f"position {q} @ {avg:.2f}", "TRADE")
         new_pos = dict(pos, qty=q, avg_price=round(avg, 2), invested=round(pos["invested"] + p2 * q2, 2),
                        added_qty=q2, added_price=round(p2, 2), added_amount=round(p2 * q2, 2))
         decision.update(scenario="average_down", added_qty=q2, added_price=p2, avg_after=round(avg, 2),
@@ -279,7 +389,7 @@ class BtstStrategy:
         self.store.update_job(jid, set_={"decision": decision, "position": new_pos})
         self._say(f"opened {pnl_pct:+.1f}% (over {limit:g}% down): bought {q2} more @ {p2:.2f} "
                   f"(Rs {p2 * q2:,.0f} vs Rs {pos['invested']:,.0f} first) - average {avg:.2f}, "
-                  f"target {target:.2f} (+{self.c('avg_target_pct', 10.0):g}%)", jid, notify=True)
+                  f"target {target:.2f} (+{self.c('avg_target_pct', 10.0):g}%)", jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target_after_average")
 
     def _exit_market(self, job, reason):
@@ -287,29 +397,37 @@ class BtstStrategy:
         q = int(job["position"]["qty"])
         to = job.get("target_order")
         if to and to.get("ok"):
+            self._log("exit", f"cancelling target order {to.get('order_id')}")
             st = self.broker.cancel(to)
+            self._log("exit", f"target order after the cancel: {st}")
             self.store.add_order(jid, {"kind": "target_cancel", "at": self._ts(), "order_id": to.get("order_id"),
                                        "state": st})
             if st and st["status"] == "complete":
+                self._log("exit", "the target filled before the cancel - closing as a target hit", "TRADE")
                 self._close(job, "target", st["avg"] or job["target_price"], None)
                 return
             if st and st.get("filled"):
-                q -= int(st["filled"])          # part of the target filled before the cancel
+                self._log("exit", f"{st['filled']} of the target filled before the cancel", "TRADE")
+                q -= int(st["filled"])
         held = self.broker.net_qty(c)
+        self._log("exit", f"the broker holds {held} of {c['symbol']}, the job {q}")
         if held is not None and held < q:
             self._say(f"the account holds {held} of {c['symbol']}, the job {q} - selling {max(0, held)}",
-                      jid, notify=True)
+                      jid, True, "exit", "WARN")
             q = max(0, held)
         if q <= 0:
             self._close(job, f"{reason} (nothing left at the broker)", job.get("last_ltp") or 0.0, None)
             return
+        self._log("order", f"SELL {c['symbol']} x{q} at market ({reason})", "TRADE")
         sell = self.broker.sell_market(c, q)
         sell.update(kind="exit", at=self._ts(), reason=reason)
         self.store.add_order(jid, sell)
         if not sell.get("ok"):
             self._say(f"EXIT SELL {c['symbol']} x{q} not filled ({sell.get('error')}) - retrying; "
-                      f"check the Angel app", jid, notify=True)
+                      f"check the Angel app", jid, True, "order", "ERROR")
             return
+        self._log("order", f"SELL filled {sell['filled']} @ {sell['avg_price']:.2f} (order {sell.get('order_id')})",
+                  "TRADE")
         self._close(job, reason, float(sell["avg_price"]), sell)
 
     # ── close and metrics ───────────────────────────────────────────────────
@@ -361,8 +479,10 @@ class BtstStrategy:
             "mode": job.get("mode"),
         }
         self.store.update_job(jid, set_={"status": "closed", "result": metrics})
+        self._log("close", f"metrics {jid}: " + ", ".join(f"{k}={v}" for k, v in metrics.items()))
         self._say(f"CLOSED {job['contract']['symbol']} x{q} @ {exit_px:.2f} ({reason}) - net Rs {net:+,.0f} "
-                  f"({metrics['pnl_pct']:+.1f}% of Rs {inv:,.0f}, charges Rs {cost:,.0f})", jid, notify=True)
+                  f"({metrics['pnl_pct']:+.1f}% of Rs {inv:,.0f}, charges Rs {cost:,.0f})", jid, True,
+                  "close", "TRADE")
 
     # ── the loop ────────────────────────────────────────────────────────────
     def resume(self):
@@ -373,9 +493,12 @@ class BtstStrategy:
                                                      "reject_reason": "the service stopped during entry"})
             self._say(f"job {j['job_id']} was being entered when the service stopped - not retried; "
                       f"check the Angel app for {j.get('contract', {}).get('symbol', 'the contract')}",
-                      j["job_id"], notify=True)
+                      j["job_id"], True, "resume", "ERROR")
         elif j:
-            self._say(f"resuming {j['job_id']} ({j['contract']['symbol']} x{j['position']['qty']})")
+            self._say(f"resuming {j['job_id']} ({j['contract']['symbol']} x{j['position']['qty']} "
+                      f"@ {j['position']['avg_price']}, target {j.get('target_price')})", area="resume")
+        else:
+            self._log("resume", "no open trade to resume")
 
     def _record_quiet_day(self):
         """After the scan window of a trading day with no job at all: no signal,
@@ -391,17 +514,16 @@ class BtstStrategy:
         self.store.save_day({"date": today, "status": "no_signal", "messages_read": len(read),
                              "looked_like_signals": looked, "at": self._ts()})
         self._say(f"{today}: no BTST signal between {self.c('scan_start', '15:15')} and "
-                  f"{self.c('scan_end', '15:30')} ({len(read)} messages read) - no trade")
+                  f"{self.c('scan_end', '15:30')} ({len(read)} messages read, {looked} with the markers) - "
+                  f"no trade", area="day")
 
     def step(self):
-        try:
-            self._process_messages()
-        except Exception as e:
-            self.log(f"[btst] message handling error: {e!r}")
-        try:
-            self._record_quiet_day()
-        except Exception as e:
-            self.log(f"[btst] day record error: {e!r}")
+        for name, fn in (("window", self._window_edges), ("message", self._process_messages),
+                         ("day", self._record_quiet_day)):
+            try:
+                fn()
+            except Exception as e:
+                self._log(name, f"error: {e!r}\n{traceback.format_exc()}", "ERROR")
         try:
             job = self.store.open_job()
             if job and job["status"] == "open":
@@ -410,7 +532,7 @@ class BtstStrategy:
             else:
                 self.status_note = "waiting for a signal (15:15 - 15:30)"
         except Exception as e:
-            self.log(f"[btst] manage error: {e!r}")
+            self._log("manage", f"error: {e!r}\n{traceback.format_exc()}", "ERROR")
 
     def status(self):
         j = self.store.open_job()

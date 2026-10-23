@@ -12,6 +12,7 @@ import math
 import time
 
 from arb.execution import ip_refused
+from btst.logbook import fmt
 
 FINAL = ("complete", "cancelled", "rejected")
 
@@ -46,20 +47,24 @@ class AngelBtstBroker:
             v = _num((r.get("data") or {}).get("ltp"))
             return v if v > 0 else None
         except Exception as e:
-            self.log(f"[btst] LTP {c['symbol']} failed: {e!r}")
+            self.log(fmt("WARN", "broker", f"LTP {c['symbol']} failed: {e!r}"))
             return None
 
     def funds(self):
         from run_bot import live_funds
-        return live_funds(self.api)[0]
+        v, src = live_funds(self.api)
+        self.log(fmt("INFO" if v else "WARN", "broker", f"funds Rs {v:,.0f} ({src})"))
+        return v
 
     def net_qty(self, c):
         """The account's net quantity in the contract, or None if unreadable."""
         try:
             r = self.api.position() or {}
-        except Exception:
+        except Exception as e:
+            self.log(fmt("WARN", "broker", f"positions unreadable: {e!r}"))
             return None
         if isinstance(r, dict) and r.get("status") is False:
+            self.log(fmt("WARN", "broker", f"positions refused: {r.get('message')}"))
             return None
         rows = (r.get("data") or []) if isinstance(r, dict) else []
         return sum(int(_num(p.get("netqty"))) for p in rows if str(p.get("tradingsymbol")) == c["symbol"])
@@ -71,9 +76,13 @@ class AngelBtstBroker:
                 "squareoff": "0", "stoploss": "0", "quantity": str(int(qty))}
 
     def _send(self, params):
+        self.log(fmt("TRADE", "broker", f"send {params['transactiontype']} {params['tradingsymbol']} "
+                                        f"({params['symboltoken']}, {params['exchange']}) x{params['quantity']} "
+                                        f"LIMIT {params['price']} {params['duration']} {params['producttype']}"))
         try:
             r = self.api.placeOrderFullResponse(params)
         except Exception as e:
+            self.log(fmt("ERROR", "broker", f"place failed: {e!r}"))
             return None, None, f"place failed: {e}"
         data = (r or {}).get("data") if isinstance(r, dict) else None
         data = data if isinstance(data, dict) else {}
@@ -82,7 +91,9 @@ class AngelBtstBroker:
             why = (r or {}).get("message") if isinstance(r, dict) else r
             if ip_refused(r):
                 why = f"refused - this machine's IP is not registered with Angel (AG7002): {why}"
+            self.log(fmt("ERROR", "broker", f"order refused: {why} (answer {r})"))
             return None, uid, f"refused: {why}"
+        self.log(fmt("TRADE", "broker", f"accepted: order {oid} (uid {uid})"))
         return str(oid), str(uid or ""), None
 
     def order_state(self, order):
@@ -95,7 +106,8 @@ class AngelBtstBroker:
             if not row and oid:
                 book = self.api.orderBook() or {}
                 row = next((x for x in (book.get("data") or []) if str(x.get("orderid")) == str(oid)), None)
-        except Exception:
+        except Exception as e:
+            self.log(fmt("WARN", "broker", f"order {oid} state unreadable: {e!r}"))
             row = None
         return _state(row)
 
@@ -119,15 +131,21 @@ class AngelBtstBroker:
                 break
             self.sleep(0.5)
         if not st or not st["final"]:
+            self.log(fmt("WARN", "broker", f"order {oid} not final after {self.confirm_sec:g}s "
+                                           f"({(st or {}).get('status', 'unreadable')}) - cancelling the rest"))
             try:
                 self.api.cancelOrder(oid, "NORMAL")
-            except Exception:
-                pass
+            except Exception as e:
+                self.log(fmt("WARN", "broker", f"cancel {oid} failed: {e!r}"))
             self.sleep(1.0)
             st = self.order_state(order)
         if not st:
+            self.log(fmt("ERROR", "broker", f"order {oid}: status unknown - check the Angel app"))
             return dict(order, ok=False, error="status unknown - check the Angel app", filled=0,
                         status="unknown")
+        self.log(fmt("TRADE" if st["filled"] else "WARN", "broker",
+                     f"order {oid} {st['status']}: filled {st['filled']}/{int(qty)} @ {st['avg']}"
+                     + (f" - {st['text']}" if st["text"] else "")))
         return dict(order, ok=st["filled"] > 0, filled=st["filled"], avg_price=st["avg"] or ltp,
                     status=st["status"], error=None if st["filled"] > 0 else (st["text"] or st["status"]))
 
@@ -146,7 +164,9 @@ class AngelBtstBroker:
         self.sleep(1.0)
         st = self.order_state(order)
         if st and st["status"] == "rejected":
+            self.log(fmt("ERROR", "broker", f"target {oid} rejected by the exchange: {st['text']}"))
             return dict(order, ok=False, error=st["text"] or "rejected", status="rejected")
+        self.log(fmt("TRADE", "broker", f"target {oid} resting: {(st or {}).get('status', 'open')}"))
         return dict(order, ok=True, status=(st or {}).get("status", "open"), error=None)
 
     def cancel(self, order):
@@ -154,14 +174,18 @@ class AngelBtstBroker:
         try:
             self.api.cancelOrder(order["order_id"], "NORMAL")
         except Exception as e:
-            self.log(f"[btst] cancel {order.get('order_id')} failed: {e!r}")
+            self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} failed: {e!r}"))
         end = self.clock() + self.confirm_sec
         st = None
         while self.clock() < end:
             st = self.order_state(order)
             if st and st["final"]:
+                self.log(fmt("INFO", "broker", f"cancel {order.get('order_id')}: {st['status']}, "
+                                               f"filled {st['filled']}"))
                 return st
             self.sleep(0.5)
+        self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')}: not final after "
+                                       f"{self.confirm_sec:g}s ({st})"))
         return st
 
 
@@ -198,9 +222,11 @@ class PaperBtstBroker:
     def _market(self, c, side, qty):
         ltp = self.ltp(c)
         if not ltp:
+            self.log(fmt("ERROR", "broker", f"paper {side} {c['symbol']} x{qty}: no LTP - not filled"))
             return {"ok": False, "error": "no LTP for the contract", "filled": 0}
         oid = self._new(c, side, qty, ltp, "IOC")
         self._fill(oid, ltp)
+        self.log(fmt("TRADE", "broker", f"paper {oid} {side} {c['symbol']} x{qty} filled @ {ltp} (the LTP)"))
         return {"side": side, "order_id": oid, "uid": oid, "qty": int(qty), "price_sent": ltp,
                 "ltp_at_send": ltp, "duration": "IOC", "ok": True, "filled": int(qty), "avg_price": ltp,
                 "status": "complete", "error": None}
@@ -213,6 +239,8 @@ class PaperBtstBroker:
 
     def place_limit_sell(self, c, qty, price):
         oid = self._new(c, "SELL", qty, price, "DAY")
+        self.log(fmt("TRADE", "broker", f"paper {oid} SELL {c['symbol']} x{qty} LIMIT {price:.2f} resting "
+                                        f"(fills when the LTP reaches it)"))
         return {"side": "SELL", "order_id": oid, "uid": oid, "qty": int(qty), "price_sent": price,
                 "duration": "DAY", "ok": True, "status": "open", "error": None}
 
@@ -224,6 +252,8 @@ class PaperBtstBroker:
             ltp = self.ltp(o["contract"])
             if ltp and ltp >= o["price"]:
                 self._fill(order["order_id"], o["price"])
+                self.log(fmt("TRADE", "broker", f"paper {order['order_id']} target filled @ {o['price']:.2f} "
+                                                f"(LTP {ltp})"))
         return {"status": o["status"], "final": o["status"] in FINAL, "filled": o["filled"],
                 "avg": o["avg"], "text": ""}
 
@@ -232,4 +262,5 @@ class PaperBtstBroker:
         o = self.orders.get(order.get("order_id"))
         if o is not None and o["status"] == "open":
             o["status"] = "cancelled"
+            self.log(fmt("INFO", "broker", f"paper {order['order_id']} cancelled"))
         return self.order_state(order) if o is not None else st

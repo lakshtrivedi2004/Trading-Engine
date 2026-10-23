@@ -10,6 +10,9 @@ scripted price, a fixed clock. No network, no orders.
   4. The next day: up -> target held; down <= 20% -> held, out at 15:14;
      down > 20% -> about the same amount again, target = average + 10%
   5. Metrics on close, statistics per mode, restart safety
+  6. The live order path on a fake SmartAPI
+  7. The log: every line "LEVEL area | text", the reasons a trade was not
+     taken, the /logs page and its filters
 """
 import copy
 import os
@@ -237,6 +240,7 @@ check("a second signal the same day is ignored (one BTST a day)",
 st.on_message(msg(5, SAMPLE, 15, 31))
 st.step()
 check("a message at 15:31 is not read", not store.message_seen("btst_karo", 5))
+logs3 = list(logs)                                               # section 7 reads the day's log
 
 section("4a. Next day, up at the open: target held, hit")
 at(2026, 10, 23, 9, 15, 40)
@@ -443,6 +447,82 @@ check("an unregistered IP (AG7002) is a refusal, said plainly", not r2["ok"] and
 api3 = FakeAngel(fill=False)
 r3 = AngelBtstBroker(api3, sleep=lambda s: None, log=lambda *_: None).buy_market(C, 65)
 check("an IOC that did not fill: not ok, nothing assumed held", not r3["ok"] and r3["filled"] == 0)
+
+section("7. The log")
+import json as _json                                             # noqa: E402
+import re as _re                                                 # noqa: E402
+import tempfile                                                  # noqa: E402
+import urllib.request                                            # noqa: E402
+from btst.logbook import Logbook                                 # noqa: E402
+
+tagged = _re.compile(r"^(ERROR|WARN|TRADE|INFO)\s+[\w.-]+ \| ")
+check("every line the strategy logs carries a level and an area", logs3 and all(tagged.match(x) for x in logs3),
+      next((x for x in logs3 if not tagged.match(x)), ""))
+has = lambda *words: any(all(w in x for w in words) for x in logs3)
+check("...a message before 15:15 is counted as not read (outside the window)",
+      has("INFO", "message", "outside today's 15:15-15:30 window"))
+check("...each message read is logged, and why it was not a signal",
+      has("message", "#2 posted 15:16") and has("signal", "#2 NOT a signal"))
+check("...the model's answer, the signal, the contract, the funds check and the orders",
+      has("ai", "#3 model answered") and has("signal", "#3 SIGNAL (ai)") and has("contract", "NIFTY27OCT2622800CE token")
+      and has("entry", "funds check") and has("TRADE", "order", "BUY NIFTY27OCT2622800CE x65 at market")
+      and has("TRADE", "order", "LIMIT 210.00 DAY (target)"))
+check("...the second signal's refusal is a WARN with the reason", has("WARN", "signal", "one BTST a day"))
+
+book = Logbook(echo=False)
+book.log("INFO  message | #7 posted 15:16: hello")
+book.log("WARN  signal | #7 NOT a signal - no markers")
+book.log("TRADE order | BUY X x65 at market")
+book.log("[btst_karo channel #9 2026-10-22 15:17] line one\nline two failed")      # the reader's plain line
+book.log("[telegram-user] not logged in yet - once, by hand")
+book.log("ERROR manage | error: boom\nTraceback (most recent call last):\n  File \"x.py\", line 1\nValueError: boom")
+book.log("WARN  mongo | could not connect to mongodb+srv://user:s3cretpw@cluster0.x.net/?appName=y key AIzaSyA1234567890abcdefghijk")
+rows, src = book.lines(limit=50)
+check("the ring buffer serves the page when there is no file: newest first",
+      src.startswith("memory") and len(rows) == 7 and rows[0]["area"] == "mongo" and rows[-1]["area"] == "message",
+      str([(r["level"], r["area"]) for r in rows]))
+check("a channel message stays one entry (its second line too) and is never a warning",
+      any(r["area"] == "channel" and r["level"] == "INFO" and "line two failed" in r["text"] for r in rows))
+check("a plain 'not logged in' line from the Telegram reader is a WARN under telegram",
+      any(r["area"] == "telegram" and r["level"] == "WARN" for r in rows))
+check("a traceback stays with its ERROR line", any(r["level"] == "ERROR" and "ValueError: boom" in r["text"]
+                                                    for r in rows))
+check("secrets scrubbed: the MongoDB password and a Google key never reach the log",
+      "s3cretpw" not in rows[0]["text"] and "AIzaSyA1234567890" not in rows[0]["text"] and "***@" in rows[0]["text"],
+      rows[0]["text"])
+check("filters: problems / trades / signals / text",
+      {r["level"] for r in book.lines(group="errors")[0]} <= {"ERROR", "WARN"}
+      and [r["area"] for r in book.lines(group="trades")[0]] == ["order"]
+      and {r["area"] for r in book.lines(group="signals")[0]} == {"message", "signal", "channel"}
+      and len(book.lines(q="#7")[0]) == 2)
+
+fd, path = tempfile.mkstemp(suffix=".log")
+with os.fdopen(fd, "w") as fh:                                   # what systemd appends: stdout and stderr
+    fh.write(Logbook(echo=False).log("INFO  start | starting") + "\n")
+    fh.write("Traceback (most recent call last):\n  File \"run_btst.py\", line 9, in main\nRuntimeError: no mongo\n")
+    fh.write("[2026-10-21 15:20:00] INFO  message | yesterday\n")
+fbook = Logbook(path=path, echo=False)
+frows, fsrc = fbook.lines(limit=50)
+check("from btst.log: an uncaught traceback (stderr) is one ERROR entry, its last line included",
+      fsrc.endswith(".log") and len(frows) == 3 and frows[1]["level"] == "ERROR" and frows[1]["area"] == "crash"
+      and frows[1]["text"].endswith("RuntimeError: no mongo"), str(frows))
+check("...and the day filter keeps one day", [r["text"] for r in fbook.lines(day="2026-10-21")[0]] == ["yesterday"])
+os.remove(path)
+
+httpd = web.serve(st, store, lambda to: {"ok": False, "error": "test"}, port=0, host="127.0.0.1", book=book)
+base = f"http://127.0.0.1:{httpd.server_address[1]}"
+get = lambda u: urllib.request.urlopen(base + u, timeout=10).read().decode()
+home, page = get("/"), get("/logs")
+api_l = _json.loads(get("/api/logs?group=errors&limit=100"))
+st_json = _json.loads(get("/api/state"))
+httpd.shutdown()
+check("the desk has a View logs button opening /logs", 'href="/logs"' in home and "View logs" in home)
+check("/logs is the log page, /api/logs its filtered lines with counts",
+      "BTST Log" in page and api_l["source"].startswith("memory")
+      and api_l["lines"] and all(r["level"] in ("ERROR", "WARN") for r in api_l["lines"])
+      and api_l["counts"].get("ERROR") == 1, str(api_l)[:200])
+check("the desk's state counts today's warnings and errors for the button",
+      isinstance(st_json.get("log_problems_today"), int), str(st_json.get("log_problems_today")))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)
