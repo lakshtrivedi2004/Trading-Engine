@@ -17,6 +17,9 @@ scripted price, a fixed clock. No network, no orders.
      the exchange's day high for a touch between two looks, 1 s passes, live
      order checks at once on a touch, DAY targets dying at the close, and a
      restart in paper picking the trade up again
+  9. Live, after the close: the target as an AMO at 16:01 for the next open,
+     kept through the decision, cancelled (as AMO) before averaging down and
+     at 15:14; rejected at the open -> a normal target; refused -> retried
 """
 import copy
 import os
@@ -712,6 +715,213 @@ sL.step()
 check("live: the order's state is not read every pass (order_poll_sec) - but at once when the price touches",
       n_quiet == 1 and sL.broker.checks == 2 and stL.recent_jobs()[0]["status"] == "closed",
       f"{n_quiet} quiet, {sL.broker.checks} total")
+
+section("9. Live: the target as an AMO for the next open")
+import run_bot                                                   # noqa: E402,F401  (live_funds)
+
+RESTING = ("open", "after market order req received")
+
+
+class Exchange:
+    """A fake Angel: IOC fills at the price, DAY orders rest and die at the
+    close, AMOs wait for the open; a cancel must name the order's variety."""
+
+    def __init__(self):
+        self.px, self.high, self.rows, self.n, self.net = 106.0, 110.0, {}, 0, 0
+        self.events, self.refuse_amo = [], 0
+
+    def ltpData(self, ex, sym, tok):
+        return {"status": True, "data": {"ltp": str(self.px), "high": str(self.high)}}
+
+    def rmsLimit(self):
+        return {"status": True, "data": {"availablecash": "1000000", "net": "1000000"}}
+
+    def position(self):
+        return {"status": True, "data": [{"tradingsymbol": "NIFTY27OCT2622800CE", "netqty": str(self.net)}]}
+
+    def placeOrderFullResponse(self, p):
+        self.events.append(("place", p["variety"], p["transactiontype"], p["duration"], p["quantity"], p["price"]))
+        if p["variety"] == "AMO" and self.refuse_amo:
+            self.refuse_amo -= 1
+            return {"status": False, "message": "AMO window closed", "errorcode": "AB4036", "data": None}
+        self.n += 1
+        uid, q = f"u{self.n}", int(p["quantity"])
+        row = {"orderid": str(self.n), "uniqueorderid": uid, "variety": p["variety"], "side": p["transactiontype"],
+               "duration": p["duration"], "qty": q, "price": float(p["price"]), "orderstatus": "open",
+               "filledshares": "0", "averageprice": "0", "text": ""}
+        if p["duration"] == "IOC":
+            row.update(orderstatus="complete", filledshares=str(q), averageprice=str(self.px))
+            self.net += q if p["transactiontype"] == "BUY" else -q
+        elif p["variety"] == "AMO":
+            row["orderstatus"] = "after market order req received"
+        self.rows[uid] = row
+        return {"status": True, "data": {"orderid": str(self.n), "uniqueorderid": uid}}
+
+    def individual_order_details(self, uid):
+        return {"status": True, "data": self.rows.get(uid)}
+
+    def orderBook(self):
+        return {"status": True, "data": list(self.rows.values())}
+
+    def cancelOrder(self, oid, variety):
+        self.events.append(("cancel", oid, variety))
+        row = next(r for r in self.rows.values() if r["orderid"] == oid)
+        if row["variety"] != variety:
+            return {"status": False, "message": "Invalid variety", "data": None}
+        if row["orderstatus"] in RESTING:
+            row["orderstatus"] = "cancelled"
+        return {"status": True, "data": {"orderid": oid}}
+
+    def _fill(self, r, px):
+        r.update(orderstatus="complete", filledshares=str(r["qty"]), averageprice=str(px))
+        self.net -= r["qty"]
+
+    def close_day(self):
+        for r in self.rows.values():
+            if r["variety"] == "NORMAL" and r["duration"] == "DAY" and r["orderstatus"] == "open":
+                r["orderstatus"] = "cancelled"            # the exchange's close
+
+    def open_market(self, px, reject_amo=False):
+        self.px = self.high = px
+        for r in self.rows.values():
+            if r["variety"] == "AMO" and r["orderstatus"] == "after market order req received":
+                if reject_amo:
+                    r.update(orderstatus="rejected", text="price outside the operating range")
+                    continue
+                r["orderstatus"] = "open"
+                if r["side"] == "SELL" and px >= r["price"]:
+                    self._fill(r, px)                     # a sell below the opening price fills at the open
+
+    def resting_sells(self):
+        return [r for r in self.rows.values() if r["side"] == "SELL" and r["orderstatus"] in RESTING]
+
+
+def live_desk():
+    ex = Exchange()
+    store = MongoStore(client=_Client(), db_name="amo")
+    conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
+            "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
+            "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55", "amo_tries": 3, "amo_retry_sec": 300}
+    lg, sent = [], []
+    s_ = BtstStrategy(conf, store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None), lambda: MASTER,
+                      Model(GOOD), "btst_karo", log=lg.append, now=lambda: CLOCK["t"],
+                      notifier=SimpleNamespace(send=sent.append), cost_model=CostModel.load())
+    at(2026, 10, 22, 15, 16)
+    s_.on_message(msg(3, SAMPLE, 15, 16))
+    s_.step()
+    return s_, store, ex, lg, sent
+
+
+sA, stA, exA, lgA, sentA = live_desk()
+jA = stA.open_job()
+at(2026, 10, 22, 15, 45)
+sA.step()
+check("live entry: bought, DAY target 210 at the exchange; no AMO before 16:01",
+      jA and jA["mode"] == "live" and exA.net == 65 and not stA.get_job(jA["job_id"]).get("amo"))
+exA.close_day()
+at(2026, 10, 22, 16, 1)
+sA.step()
+jA = stA.get_job(jA["job_id"])
+amo_ev = [e for e in exA.events if e[0] == "place" and e[1] == "AMO"]
+check("16:01: the target goes in as an AMO - SELL 65 LIMIT 210.00 DAY, for the next open",
+      amo_ev == [("place", "AMO", "SELL", "DAY", "65", "210.00")], str(amo_ev))
+check("...saved under the job id: job.amo, the target order (amo_target), the orders list; Telegram told",
+      jA.get("amo", {}).get("order_id") and jA["target_order"]["kind"] == "amo_target"
+      and jA["target_order"]["variety"] == "AMO" and "amo_target" in [o["kind"] for o in jA["orders"]]
+      and any("AMO target" in x for x in sentA), str(jA.get("amo")))
+at(2026, 10, 22, 16, 30)
+sA.step()
+check("...placed once", len([e for e in exA.events if e[0] == "place" and e[1] == "AMO"]) == 1)
+exA.open_market(120.0)
+at(2026, 10, 23, 9, 15, 5)
+sA.step()
+at(2026, 10, 23, 9, 16)
+n_before = len([e for e in exA.events if e[0] == "place"])
+sA.step()
+jA = stA.get_job(jA["job_id"])
+check("next day, opened +13%: hold - the AMO stays at the exchange, no second sell placed",
+      jA["decision"]["scenario"] == "hold" and len([e for e in exA.events if e[0] == "place"]) == n_before
+      and len(exA.resting_sells()) == 1)
+at(2026, 10, 23, 15, 14, 5)
+exA.px = 118.0
+sA.step()
+jA = stA.get_job(jA["job_id"])
+check("15:14, not hit: the AMO cancelled AS AMO, then sold at market; CLOSED time_exit, nothing left",
+      ("cancel", jA["amo"]["order_id"], "AMO") in exA.events and jA["status"] == "closed"
+      and jA["result"]["exit_reason"] == "time_exit" and exA.net == 0 and not exA.resting_sells(),
+      str([e for e in exA.events if e[0] == "cancel"]))
+
+sB, stB, exB, lgB, _ = live_desk()
+exB.close_day()
+at(2026, 10, 22, 16, 1)
+sB.step()
+exB.open_market(232.0)                       # a gap up through the target at the open
+at(2026, 10, 23, 9, 15, 3)
+sB.step()
+jB = stB.recent_jobs()[0]
+check("a spike at the open: the AMO fills there (232) - CLOSED as a target hit before the decision",
+      jB["status"] == "closed" and jB["result"]["exit_reason"] == "target" and jB["result"]["exit_price"] == 232.0
+      and not jB.get("decision"), str(jB.get("result", {}).get("exit_price")))
+
+sC, stC, exC, lgC, _ = live_desk()
+exC.close_day()
+at(2026, 10, 22, 16, 1)
+sC.step()
+exC.open_market(70.0)
+at(2026, 10, 23, 9, 16)
+sC.step()
+jC = stC.recent_jobs()[0]
+iC = next(i for i, e in enumerate(exC.events) if e[0] == "cancel")
+iB = next(i for i, e in enumerate(exC.events) if e[0] == "place" and e[2] == "BUY" and i > iC - 1 and e[1] == "NORMAL"
+          and i > 2)
+rs = exC.resting_sells()
+check("opened -34%: the AMO cancelled (as AMO) BEFORE the average-down buy; then one target for the whole position",
+      exC.events[iC][2] == "AMO" and iC < iB and jC["decision"]["scenario"] == "average_down"
+      and len(rs) == 1 and rs[0]["qty"] == jC["position"]["qty"] and rs[0]["variety"] == "NORMAL"
+      and rs[0]["price"] == jC["target_price"], str(exC.events[-4:]))
+
+sD, stD, exD, lgD, sentD = live_desk()
+exD.close_day()
+at(2026, 10, 22, 16, 1)
+sD.step()
+exD.open_market(120.0, reject_amo=True)
+at(2026, 10, 23, 9, 15, 5)
+sD.step()
+jD = stD.recent_jobs()[0]
+rsD = exD.resting_sells()
+check("the AMO rejected at the open: a normal target 210 placed at once, and said",
+      len(rsD) == 1 and rsD[0]["variety"] == "NORMAL" and rsD[0]["price"] == 210.0
+      and jD["target_order"]["kind"] == "target_day2" and any("rejected at the open" in x for x in sentD))
+at(2026, 10, 23, 9, 16)
+sD.step()
+check("...and the decision keeps it (still one sell)", len(exD.resting_sells()) == 1
+      and stD.recent_jobs()[0]["decision"]["scenario"] == "hold")
+
+sE, stE, exE, lgE, sentE = live_desk()
+exE.close_day()
+exE.refuse_amo = 3
+tries = []
+for hh, mm in ((16, 1), (16, 3), (16, 6), (16, 12), (16, 30)):
+    at(2026, 10, 22, hh, mm)
+    sE.step()
+    tries.append(len([e for e in exE.events if e[0] == "place" and e[1] == "AMO"]))
+check("an AMO refused at 16:01 is retried every 5 min, 3 tries in all, then said",
+      tries == [1, 1, 2, 3, 3] and any("no more tries" in x for x in sentE), str(tries))
+exE.open_market(120.0)
+at(2026, 10, 23, 9, 16)
+sE.step()
+rsE = exE.resting_sells()
+check("...and the target goes in normally at the decision", len(rsE) == 1 and rsE[0]["variety"] == "NORMAL")
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sP, stP, _, _, _ = desk()
+sP.on_message(msg(3, SAMPLE, 15, 16))
+sP.step()
+at(2026, 10, 22, 16, 1)
+sP.step()
+check("paper places no AMO (live only)", stP.open_job() and not stP.open_job().get("amo"))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

@@ -5,7 +5,9 @@ an INTRADAY (MIS) one would be squared off by the broker the same afternoon.
 "Market" is a marketable limit, the touch +/- protection_pct, IOC: a plain
 MARKET order is refused for API orders on NSE F&O (NSE/FAOP/69296), as
 arb/execution.py does it. The target is a LIMIT DAY sell: Indian exchanges
-cancel every order at the close, so the strategy places it again each morning.
+cancel every order at the close, so the strategy places it again each morning -
+live, as an AMO (variety AMO) after the close, so it is at the exchange for the
+next open and an opening spike fills it. Cancels use the order's own variety.
 Every fill is read back from Angel (individual_order_details), never assumed.
 """
 import math
@@ -79,16 +81,17 @@ class AngelBtstBroker:
         rows = (r.get("data") or []) if isinstance(r, dict) else []
         return sum(int(_num(p.get("netqty"))) for p in rows if str(p.get("tradingsymbol")) == c["symbol"])
 
-    def _params(self, c, side, qty, price, duration):
-        return {"variety": "NORMAL", "tradingsymbol": c["symbol"], "symboltoken": c["token"],
+    def _params(self, c, side, qty, price, duration, variety="NORMAL"):
+        return {"variety": variety, "tradingsymbol": c["symbol"], "symboltoken": c["token"],
                 "transactiontype": side, "exchange": c["exchange"], "ordertype": "LIMIT",
                 "producttype": self.product, "duration": duration, "price": f"{price:.2f}",
                 "squareoff": "0", "stoploss": "0", "quantity": str(int(qty))}
 
     def _send(self, params):
-        self.log(fmt("TRADE", "broker", f"send {params['transactiontype']} {params['tradingsymbol']} "
-                                        f"({params['symboltoken']}, {params['exchange']}) x{params['quantity']} "
-                                        f"LIMIT {params['price']} {params['duration']} {params['producttype']}"))
+        self.log(fmt("TRADE", "broker", f"send {params['variety']} {params['transactiontype']} "
+                                        f"{params['tradingsymbol']} ({params['symboltoken']}, {params['exchange']}) "
+                                        f"x{params['quantity']} LIMIT {params['price']} {params['duration']} "
+                                        f"{params['producttype']}"))
         try:
             r = self.api.placeOrderFullResponse(params)
         except Exception as e:
@@ -179,12 +182,38 @@ class AngelBtstBroker:
         self.log(fmt("TRADE", "broker", f"target {oid} resting: {(st or {}).get('status', 'open')}"))
         return dict(order, ok=True, status=(st or {}).get("status", "open"), error=None)
 
+    def place_amo_sell(self, c, qty, price):
+        """An after-market LIMIT sell for the next session (variety AMO, DAY,
+        CARRYFORWARD): Angel sends it to the exchange for the open."""
+        oid, uid, err = self._send(self._params(c, "SELL", qty, price, "DAY", variety="AMO"))
+        order = {"side": "SELL", "order_id": oid, "uid": uid, "qty": int(qty), "price_sent": round(price, 2),
+                 "duration": "DAY", "variety": "AMO"}
+        if err:
+            return dict(order, ok=False, error=err, status="refused")
+        self.sleep(1.0)
+        st = self.order_state(order)
+        if st and st["status"] in ("rejected", "cancelled"):
+            self.log(fmt("ERROR", "broker", f"AMO {oid} {st['status']}: {st['text']}"))
+            return dict(order, ok=False, error=st["text"] or st["status"], status=st["status"])
+        self.log(fmt("TRADE", "broker", f"AMO {oid} accepted for the next open: {(st or {}).get('status', '?')}"))
+        return dict(order, ok=True, status=(st or {}).get("status", "amo"), error=None)
+
     def cancel(self, order):
-        """Cancel a resting order; its final state (it may have filled first)."""
-        try:
-            self.api.cancelOrder(order["order_id"], "NORMAL")
-        except Exception as e:
-            self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} failed: {e!r}"))
+        """Cancel a resting order; its final state (it may have filled first).
+        The order's own variety first (an AMO is cancelled as AMO), then the other."""
+        first = order.get("variety") or "NORMAL"
+        for variety in (first, "NORMAL" if first == "AMO" else "AMO"):
+            try:
+                r = self.api.cancelOrder(order["order_id"], variety)
+            except Exception as e:
+                self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} ({variety}) failed: {e!r}"))
+                continue
+            if isinstance(r, dict) and r.get("status") is False:
+                self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} ({variety}) refused: "
+                                               f"{r.get('message')}"))
+                continue
+            self.log(fmt("INFO", "broker", f"cancel {order.get('order_id')} ({variety}) sent"))
+            break
         end = self.clock() + self.confirm_sec
         st = None
         while self.clock() < end:

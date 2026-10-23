@@ -12,9 +12,12 @@ Day D+1 (the next trading day), at decide_at:
     down by more: buy again for about the amount first invested (whole lots,
                   the count nearest that amount), and target the new average
                   price + avg_target_pct (10%)
-The target is placed again each morning (the exchange cancels every order at
-the close). At exit_at (15:14) whatever is still open is cancelled and sold at
-market. Every step - the message, the signal, each order, the decision, the
+The exchange cancels every order at the close. Live, the target goes back in
+at amo_at (16:01) on day D as an AMO for the next open, so an opening spike
+fills it; it stays through the decision (averaging down cancels it first -
+never two sells at once), and an AMO the exchange rejects at the open is
+replaced by a normal target. Paper places the target again at decide_at. At
+exit_at (15:14) whatever is still open is cancelled and sold at market. Every step - the message, the signal, each order, the decision, the
 close with its metrics - is written to MongoDB (services/mongo.py) under the
 job's id, and logged ("LEVEL area | text", btst/logbook.py) with the reason
 for every trade not taken. No stop-loss, by the owner's design.
@@ -313,6 +316,13 @@ class BtstStrategy:
             if st and st["status"] == "complete":
                 self._close(job, "target", st["avg"] or job["target_price"], None)
                 return
+            if (st and to.get("kind") == "amo_target" and st["status"] in ("rejected", "cancelled")
+                    and now.date().isoformat() > job["trade_date"]):
+                self._say(f"the AMO target {to.get('order_id')} was {st['status']} at the open"
+                          + (f" ({st['text']})" if st.get("text") else "")
+                          + f" - placing a normal target at {tp:.2f}", jid, True, "order", "WARN")
+                self._place_target(job, tp, "target_day2")
+                return
         self._status_line(job, ltp, st)
         if job.get("soft_target") and touched:
             self._log("exit", f"the price reached the watched target {tp:.2f} (LTP {ltp}, highest {peak}) - "
@@ -387,8 +397,26 @@ class BtstStrategy:
                       f"{'up' if pnl_pct >= 0 else f'loss within {limit:g}%'}: target stays "
                       f"{job['target_price']:.2f}, out at {self.c('exit_at', '15:14')} if not hit",
                       jid, True, "decision")
-            self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
+            st = self._target_state(job)
+            if st and st["status"] == "complete":
+                self._close(job, "target", st["avg"] or job["target_price"], None)
+            elif st and not st["final"]:
+                to = job["target_order"]
+                self._log("decision", f"the target order {to.get('order_id')} "
+                                      f"({to.get('variety', 'NORMAL')}, {st['status']}) is still at the exchange - "
+                                      f"kept, no second sell placed")
+            else:
+                self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
             return
+        gone = self._cancel_resting(job, "averaging down - a new target for the whole position follows")
+        if gone == "closed":
+            return
+        if gone == "unsure":
+            decision["scenario"] = "average_down_skipped"
+            self.store.update_job(jid, set_={"decision": decision})
+            return
+        job = self.store.get_job(jid)
+        pos = job["position"]
         lot = int(c["lot_size"])
         per_lot = ltp * lot
         n = max(1, round(pos["invested"] / per_lot))
@@ -422,6 +450,89 @@ class BtstStrategy:
                   f"(Rs {p2 * q2:,.0f} vs Rs {pos['invested']:,.0f} first) - average {avg:.2f}, "
                   f"target {target:.2f} (+{self.c('avg_target_pct', 10.0):g}%)", jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target_after_average")
+
+    def _target_state(self, job):
+        """The resting target's state at the broker, or None if there is none."""
+        to = job.get("target_order")
+        if not (to and to.get("ok")):
+            return None
+        return self.broker.order_state(to)
+
+    def _cancel_resting(self, job, why):
+        """Cancel the target still at the exchange (the AMO) before another
+        sell goes in - never two at once. 'closed' if it had filled (closed as a
+        target hit), 'unsure' if the cancel is not confirmed, else None."""
+        jid, c = job["job_id"], job["contract"]
+        st = self._target_state(job)
+        if st is None or (st["final"] and st["status"] != "complete"):
+            return None
+        to = job["target_order"]
+        if st["status"] != "complete":
+            self._log("order", f"cancelling the target {to.get('order_id')} ({to.get('variety', 'NORMAL')}) - {why}")
+            st = self.broker.cancel(to)
+            self.store.add_order(jid, {"kind": "target_cancel", "at": self._ts(), "order_id": to.get("order_id"),
+                                       "variety": to.get("variety", "NORMAL"), "state": st, "why": why})
+        if st and st["status"] == "complete":
+            self._log("exit", "the target had filled - closing as a target hit", "TRADE")
+            self._close(job, "target", st["avg"] or job["target_price"], None)
+            return "closed"
+        if not st or not st["final"]:
+            self._say(f"the target {to.get('order_id')} did not confirm cancelled ({(st or {}).get('status')}) - "
+                      f"no new order sent; check the Angel app", jid, True, "order", "ERROR")
+            return "unsure"
+        if st.get("filled"):
+            held = self.broker.net_qty(c)
+            if held is not None:
+                self.store.update_job(jid, set_={"position": dict(job["position"], qty=int(held))})
+            self._say(f"{st['filled']} of the target filled before the cancel - the account holds {held}",
+                      jid, True, "order", "WARN")
+        return None
+
+    # ── after the close (live): the target as an AMO for the next open ─────
+    def _amo_due(self, job):
+        if (self.broker.mode != "live" or not self.c("amo_exit", True)
+                or not hasattr(self.broker, "place_amo_sell") or job.get("amo") or job.get("decision")):
+            return False
+        if int(job.get("amo_attempts") or 0) >= int(self.c("amo_tries", 3)):
+            return False
+        if job.get("amo_failed_at") and (self.now() - datetime.fromisoformat(job["amo_failed_at"])).total_seconds() \
+                < float(self.c("amo_retry_sec", 300)):
+            return False
+        now = self.now()
+        today, t = now.date().isoformat(), _secs(now)
+        if today == job["trade_date"]:
+            return t >= _hm(self.c("amo_at", "16:01"))
+        # the desk was down at amo_at: until shortly before the next open
+        return today > job["trade_date"] and t < _hm(self.c("amo_until", "08:55"))
+
+    def _place_amo(self, job):
+        jid, c = job["job_id"], job["contract"]
+        q, tp = int(job["position"]["qty"]), float(job["target_price"])
+        self._log("order", f"AMO SELL {c['symbol']} x{q} LIMIT {tp:.2f} for the next open (after the close, "
+                           f"so an opening spike fills it)", "TRADE")
+        o = self.broker.place_amo_sell(c, q, tp)
+        o.update(kind="amo_target", at=self._ts(), price=tp)
+        self.store.add_order(jid, o)
+        if o.get("ok"):
+            amo = {"order_id": o.get("order_id"), "uid": o.get("uid"), "price": tp, "qty": q,
+                   "placed_at": o["at"], "status": o.get("status")}
+            self.store.update_job(jid, set_={"amo": amo, "target_order": o, "target_last_status": o.get("status"),
+                                             "soft_target": False})
+            self._say(f"AMO target SELL {c['symbol']} x{q} @ {tp:.2f} placed for the next open "
+                      f"({o.get('order_id')}, {o.get('status')}); cancelled and sold at market at "
+                      f"{self.c('exit_at', '15:14')} if not hit", jid, True, "order", "TRADE")
+            return
+        n = int(job.get("amo_attempts") or 0) + 1
+        self.store.update_job(jid, set_={"amo_attempts": n, "amo_failed_at": self._ts(), "amo_error": o.get("error")})
+        last = n >= int(self.c("amo_tries", 3))
+        self._say(f"AMO target refused ({o.get('error')}) - "
+                  + ("no more tries: the target goes in normally at the open" if last
+                     else f"retrying in {float(self.c('amo_retry_sec', 300)) / 60:g} min ({n}/{self.c('amo_tries', 3)})"),
+                  jid, last, "order", "ERROR" if last else "WARN")
+
+    def _after_close(self, job):
+        if self._amo_due(job):
+            self._place_amo(job)
 
     def _exit_market(self, job, reason):
         jid, c = job["job_id"], job["contract"]
@@ -562,7 +673,10 @@ class BtstStrategy:
             self.managing = bool(job and job["status"] == "open"
                                  and market_phase(self.now(), start="09:15", end="15:30") == "open")
             if job and job["status"] == "open":
-                self._manage(job)
+                if self.managing:
+                    self._manage(job)
+                else:
+                    self._after_close(job)
                 self.status_note = f"managing {job['job_id']}"
             else:
                 self.status_note = "waiting for a signal (15:15 - 15:30)"
