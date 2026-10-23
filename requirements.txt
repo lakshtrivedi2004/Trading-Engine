@@ -29,3 +29,4 @@ grpcio==1.76.0
 grpcio-status==1.71.2
 gunicorn==25.1.0
 google-genai==2.32.0
+pymongo==4.19.0

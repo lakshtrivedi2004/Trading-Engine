@@ -1,0 +1,36 @@
+# The BTST desk - Telegram BTST signals traded overnight (run_btst.py), page on
+# port 9000. Separate from trading-engine (8090) and trading-engine-dev (8091).
+# Paper or live: .btst_mode in the checkout (paper unless it says "live").
+#
+# Install (run these as commands, not part of this file):
+#   cp deployment/trading-btst.service /etc/systemd/system/trading-btst.service
+#   (edit the paths below if the checkout is not /root/dev/Trading-Engine)
+#   systemctl daemon-reload
+#   systemctl enable --now trading-btst
+#   systemctl status trading-btst
+#   tail -f /root/dev/Trading-Engine/btst.log
+
+[Unit]
+Description=Trading-Engine BTST desk (port 9000)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/dev/Trading-Engine
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/dev/Trading-Engine/deployment/run_btst.sh
+Restart=on-failure
+RestartSec=15
+# SIGTERM: the desk stops between passes; an open BTST stays open at the
+# broker (it is an overnight position) and is resumed from MongoDB on start.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/root/dev/Trading-Engine/btst.log
+StandardError=append:/root/dev/Trading-Engine/btst.log
+
+[Install]
+WantedBy=multi-user.target

@@ -40,6 +40,7 @@ config/calibration.json
 *.lock
 .engine.pid
 .trading_mode
+.btst_mode
 
 # Engine pid files (runtime state)
 .engine.pid
@@ -52,3 +53,4 @@ config/calibration.json
 # GCP service-account key for the AI check (config/intraday.json lhm_ai_credentials).
 # It is a credential: never commit it.
 trading-509306-*.json
+btst.log

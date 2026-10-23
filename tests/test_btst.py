@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+"""The BTST desk (btst/, run_btst.py, services/mongo.py), on fakes: an in-memory
+MongoDB under the real MongoStore, a scripted model, the paper broker on a
+scripted price, a fixed clock. No network, no orders.
+
+  1. Reading a message: markers, the model's JSON, its numbers checked against
+     the text and a strict read, the strict read standing in for a dead model
+  2. The contract: the nearest expiry after today, NFO vs BFO
+  3. The day: 15:15-15:30 only, one BTST a day, target 2 x (3 x SENSEX)
+  4. The next day: up -> target held; down <= 20% -> held, out at 15:14;
+     down > 20% -> about the same amount again, target = average + 10%
+  5. Metrics on close, statistics per mode, restart safety
+"""
+import copy
+import os
+import sys
+from datetime import date, datetime
+from types import SimpleNamespace
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from arb.config import CostModel                                # noqa: E402
+from arb.instruments import IST                                  # noqa: E402
+from btst import signal as S, stats                              # noqa: E402
+from btst.broker import PaperBtstBroker                          # noqa: E402
+from btst.contracts import find_option, tick_round               # noqa: E402
+from btst.strategy import BtstStrategy                           # noqa: E402
+from services.mongo import MongoStore                            # noqa: E402
+
+PASS = FAIL = 0
+
+
+def check(label, cond, detail=""):
+    global PASS, FAIL
+    if cond:
+        PASS += 1
+        print(f"  PASS  {label}" + (f" | {detail}" if detail else ""))
+    else:
+        FAIL += 1
+        print(f"  FAIL  {label}" + (f" | {detail}" if detail else ""))
+
+
+def section(t):
+    print(f"\n[{t}]")
+
+
+# ── an in-memory MongoDB, enough of pymongo for MongoStore ───────────────────
+def _match(doc, flt):
+    for k, v in flt.items():
+        val = doc.get(k)
+        if isinstance(v, dict):
+            if "$in" in v and val not in v["$in"]:
+                return False
+            if "$nin" in v and val in v["$nin"]:
+                return False
+        elif val != v:
+            return False
+    return True
+
+
+class _Cursor(list):
+    def sort(self, key, direction=1):
+        return _Cursor(sorted(self, key=lambda d: d.get(key) or "", reverse=direction < 0))
+
+    def limit(self, n):
+        return _Cursor(self[:n])
+
+
+class _Coll:
+    def __init__(self):
+        self.docs = []
+
+    def create_index(self, *a, **k):
+        pass
+
+    def insert_one(self, doc):
+        self.docs.append(copy.deepcopy(doc))
+
+    def find_one(self, flt, proj=None, sort=None):
+        hits = [d for d in self.docs if _match(d, flt)]
+        if sort:
+            key, direction = sort[0]
+            hits.sort(key=lambda d: d.get(key) or "", reverse=direction < 0)
+        return copy.deepcopy(hits[0]) if hits else None
+
+    def find(self, flt=None, proj=None):
+        return _Cursor(copy.deepcopy(d) for d in self.docs if _match(d, flt or {}))
+
+    def update_one(self, flt, upd, upsert=False):
+        hit = next((d for d in self.docs if _match(d, flt)), None)
+        if hit is None:
+            if not upsert:
+                return
+            hit = dict(flt)
+            self.docs.append(hit)
+        for k, v in (upd.get("$set") or {}).items():
+            hit[k] = copy.deepcopy(v)
+        for k, v in (upd.get("$push") or {}).items():
+            hit.setdefault(k, []).append(copy.deepcopy(v))
+
+
+class _DB(dict):
+    def __missing__(self, k):
+        self[k] = _Coll()
+        return self[k]
+
+
+class _Client(dict):
+    def __missing__(self, k):
+        self[k] = _DB()
+        return self[k]
+
+
+# ── the scripted world ───────────────────────────────────────────────────────
+SAMPLE = """#BTST TRADE ☄️☄️
+NIFTY 22800 Call Buy 105++
+
+🕯 Target   130   160   200+
+
+Disclaimer - Only for Educational Purposes"""
+
+MASTER = [
+    {"name": "NIFTY", "instrumenttype": "OPTIDX", "symbol": "NIFTY22OCT2622800CE", "token": "1",
+     "strike": "2280000.000000", "expiry": "22OCT2026", "lotsize": "65", "exch_seg": "NFO", "tick_size": "5.000000"},
+    {"name": "NIFTY", "instrumenttype": "OPTIDX", "symbol": "NIFTY27OCT2622800CE", "token": "2",
+     "strike": "2280000.000000", "expiry": "27OCT2026", "lotsize": "65", "exch_seg": "NFO", "tick_size": "5.000000"},
+    {"name": "NIFTY", "instrumenttype": "OPTIDX", "symbol": "NIFTY03NOV2622800CE", "token": "3",
+     "strike": "2280000.000000", "expiry": "03NOV2026", "lotsize": "65", "exch_seg": "NFO", "tick_size": "5.000000"},
+    {"name": "NIFTY", "instrumenttype": "OPTIDX", "symbol": "NIFTY27OCT2622800PE", "token": "4",
+     "strike": "2280000.000000", "expiry": "27OCT2026", "lotsize": "65", "exch_seg": "NFO", "tick_size": "5.000000"},
+    {"name": "SENSEX", "instrumenttype": "OPTIDX", "symbol": "SENSEX29OCT2673000PE", "token": "9",
+     "strike": "7300000.000000", "expiry": "29OCT2026", "lotsize": "20", "exch_seg": "BFO", "tick_size": "5.000000"},
+]
+
+
+class Model:
+    def __init__(self, answer=None, boom=None):
+        self.answer, self.boom, self.calls = answer, boom, 0
+
+    def query_json(self, prompt, **k):
+        self.calls += 1
+        if self.boom:
+            raise self.boom
+        return dict(self.answer), {"model": "test", "elapsed_s": 0.1, "cost_usd": 0}
+
+
+GOOD = {"is_btst_signal": True, "indices": "NIFTY", "strike_price": 22800, "side": "CE", "price": 105,
+        "reason": "btst call"}
+
+CLOCK = {"t": datetime(2026, 10, 22, 15, 16, 0, tzinfo=IST)}
+PRICE = {"ltp": 105.0}
+
+
+def at(y, mo, d, h, mi, s=0):
+    CLOCK["t"] = datetime(y, mo, d, h, mi, s, tzinfo=IST)
+
+
+def desk(model=None, cfg=None):
+    store = MongoStore(client=_Client(), db_name="t")
+    broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None)
+    conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
+            "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0}
+    conf.update(cfg or {})
+    logs, sent = [], []
+    st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "btst_karo",
+                      log=logs.append, now=lambda: CLOCK["t"],
+                      notifier=SimpleNamespace(send=sent.append), cost_model=CostModel.load())
+    return st, store, broker, logs, sent
+
+
+def msg(i, text, h, mi, day=22):
+    return SimpleNamespace(id=i, raw_text=text, text=text, date=datetime(2026, 10, day, h, mi, tzinfo=IST))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+section("1. Reading a message")
+r = S.parse(SAMPLE, llm=Model(GOOD))
+check("the owner's sample: a signal, read by the model and agreeing with the strict read",
+      r["is_signal"] and r["parsed_by"] == "ai"
+      and r["signal"] == {"indices": "NIFTY", "strike_price": 22800.0, "side": "CE", "price": 105.0}, str(r["signal"]))
+check("the strict read alone gets the same", S.strict_read(SAMPLE) ==
+      {"indices": "NIFTY", "strike_price": 22800.0, "side": "CE", "price": 105.0})
+m = Model(GOOD)
+r = S.parse("Market update: NIFTY looks strong today", llm=m)
+check("no BTST + Disclaimer markers: not a signal, the model is never asked", not r["is_signal"] and m.calls == 0)
+r = S.parse(SAMPLE, llm=Model(dict(GOOD, strike_price=22900)))
+check("a strike the message does not contain is refused", not r["is_signal"] and "22900" in r["reason"], r["reason"])
+r = S.parse(SAMPLE, llm=Model(dict(GOOD, price=130)))
+check("a target taken for the buy price (130 is in the text) is refused by the strict read",
+      not r["is_signal"] and "disagree" in r["reason"], r["reason"][:100])
+r = S.parse(SAMPLE, llm=Model(dict(GOOD, is_btst_signal=False, reason="a result post")))
+check("the model saying 'not a signal' is no signal", not r["is_signal"] and "not a signal" in r["reason"])
+r = S.parse(SAMPLE, llm=Model(boom=RuntimeError("429 quota")))
+check("the model down: the strict read stands in", r["is_signal"] and r["parsed_by"] == "regex", r["reason"][:80])
+r = S.parse(SAMPLE, llm=Model(boom=RuntimeError("429 quota")), ai_fallback_regex=False)
+check("...unless ai_fallback_regex is off", not r["is_signal"])
+put = SAMPLE.replace("NIFTY 22800 Call Buy 105", "SENSEX 73000 PUT buy 210")
+check("PUT on SENSEX reads too", S.strict_read(put) ==
+      {"indices": "SENSEX", "strike_price": 73000.0, "side": "PE", "price": 210.0})
+
+section("2. The contract")
+c = find_option(MASTER, "NIFTY", 22800, "CE", date(2026, 10, 22))
+check("the nearest expiry AFTER today (today's 22 Oct contract settles tonight)",
+      c and c["symbol"] == "NIFTY27OCT2622800CE" and c["exchange"] == "NFO" and c["lot_size"] == 65 and c["tick"] == 0.05,
+      str(c))
+s = find_option(MASTER, "SENSEX", 73000, "PE", date(2026, 10, 22))
+check("SENSEX trades on BFO", s and s["exchange"] == "BFO" and s["lot_size"] == 20)
+check("no such strike: None", find_option(MASTER, "NIFTY", 99999, "CE", date(2026, 10, 22)) is None)
+check("a target on the tick, rounded up", tick_round(81.6667 * 1.1, 0.05) == 89.85)
+
+section("3. The day: 15:15-15:30, one BTST a day")
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+st, store, broker, logs, sent = desk()
+st.on_message(msg(1, SAMPLE, 15, 10))
+st.on_message(msg(2, "BTST chat\nDisclaimer", 15, 16))
+st.step()
+check("a message posted before 15:15 is not read; one in the window is (and saved)",
+      not store.message_seen("btst_karo", 1) and store.message_seen("btst_karo", 2) and not store.open_job())
+st.on_message(msg(3, SAMPLE, 15, 16))
+st.step()
+j = store.open_job()
+check("the signal at 15:16: BOUGHT one lot at market (paper fill at the LTP)",
+      j and j["status"] == "open" and j["position"]["qty"] == 65 and j["position"]["avg_price"] == 106.0
+      and j["contract"]["symbol"] == "NIFTY27OCT2622800CE", str((j or {}).get("position")))
+check("...target 2 x the signal's price (210), a limit sell for the whole position",
+      j["target_price"] == 210.0 and j["target_order"]["price_sent"] == 210.0 and j["target_order"]["qty"] == 65)
+check("...buy and target orders, the message and the signal saved under the job id",
+      [o["kind"] for o in j["orders"]] == ["buy", "target"] and j["message"]["msg_id"] == 3
+      and j["signal"]["parsed_by"] == "ai" and j["job_id"].startswith("BTST-"))
+check("...and Telegram told", any("BOUGHT" in x for x in sent))
+st.on_message(msg(4, SAMPLE, 15, 20))
+st.step()
+check("a second signal the same day is ignored (one BTST a day)",
+      len(store.recent_jobs()) == 1 and any("one BTST a day" in x for x in logs))
+st.on_message(msg(5, SAMPLE, 15, 31))
+st.step()
+check("a message at 15:31 is not read", not store.message_seen("btst_karo", 5))
+
+section("4a. Next day, up at the open: target held, hit")
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 120.0
+st.step()
+j = store.open_job()
+check("opened +13%: scenario hold, target stays 210, placed again for the day",
+      j["decision"]["scenario"] == "hold" and j["target_price"] == 210.0
+      and j["orders"][-1]["kind"] == "target_day2", str(j.get("decision")))
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 211.0
+st.step()
+done = store.get_job(j["job_id"])
+r = done.get("result") or {}
+check("the target fills: CLOSED at 210, target_hit, net = gross - exact charges",
+      done["status"] == "closed" and r["exit_price"] == 210.0 and r["target_hit"]
+      and abs(r["gross_pnl"] - (210 - 106) * 65) < 1e-6 and r["charges"] > 0
+      and abs(r["net_pnl"] - (r["gross_pnl"] - r["charges"])) < 0.02, str(r)[:160])
+check("...with the metrics: % of invested, slippage vs the signal, MFE, held hours, scenario",
+      abs(r["pnl_pct"] - 100 * r["net_pnl"] / (106 * 65)) < 0.01 and r["entry_slippage_pct"] == round(100 / 105, 2)
+      and r["max_ltp"] == 211.0 and r["scenario"] == "hold" and r["held_hours"] > 17, str(r)[:200])
+
+section("4b. Next day, down 10%: held, out at 15:14")
+at(2026, 10, 22, 15, 17)
+PRICE["ltp"] = 100.0
+st, store, broker, logs, sent = desk()
+st.on_message(msg(10, SAMPLE, 15, 17))
+st.step()
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 90.0
+st.step()
+j = store.open_job()
+check("opened -10%: within 20%, target stays 210", j["decision"]["scenario"] == "hold_small_loss"
+      and j["target_price"] == 210.0, str(j.get("decision")))
+at(2026, 10, 23, 15, 14, 2)
+PRICE["ltp"] = 95.0
+st.step()
+done = store.get_job(j["job_id"])
+r = done.get("result") or {}
+check("15:14: target cancelled, sold at market (95), CLOSED time_exit with a loss",
+      done["status"] == "closed" and r["exit_reason"] == "time_exit" and r["exit_price"] == 95.0
+      and r["net_pnl"] < 0 and [o["kind"] for o in done["orders"]][-2:] == ["target_cancel", "exit"], str(r)[:120])
+
+section("4c. Next day, down 33%: about the same amount again, target average + 10%")
+at(2026, 10, 22, 15, 18)
+PRICE["ltp"] = 105.0
+st, store, broker, logs, sent = desk()
+st.on_message(msg(20, SAMPLE, 15, 18))
+st.step()
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 70.0
+st.step()
+j = store.open_job()
+d = j["decision"]
+avg = (105 * 65 + 70 * 130) / 195
+check("opened -33%: Rs 6,825 invested, Rs 4,550 a lot now -> 2 lots (Rs 9,100, the nearest whole lots)",
+      d["scenario"] == "average_down" and d["added_qty"] == 130 and d["added_price"] == 70.0, str(d))
+check("...average %.2f, target average + 10%% = %.2f on the tick" % (avg, tick_round(avg * 1.1)),
+      abs(j["position"]["avg_price"] - round(avg, 2)) < 1e-6 and j["position"]["qty"] == 195
+      and j["target_price"] == tick_round(avg * 1.1) and j["orders"][-1]["kind"] == "target_after_average",
+      f"avg {j['position']['avg_price']}, target {j['target_price']}")
+at(2026, 10, 23, 13, 0)
+PRICE["ltp"] = 92.0
+st.step()
+done = store.get_job(j["job_id"])
+r = done.get("result") or {}
+check("the new target fills: CLOSED in profit on the averaged position",
+      done["status"] == "closed" and r["target_hit"] and r["averaged"] and r["qty"] == 195 and r["net_pnl"] > 0,
+      str(r)[:140])
+
+section("4d. SENSEX: target 3 x")
+at(2026, 10, 22, 15, 19)
+PRICE["ltp"] = 210.0
+st, store, broker, logs, sent = desk(model=Model({"is_btst_signal": True, "indices": "SENSEX",
+                                                  "strike_price": 73000, "side": "PE", "price": 210, "reason": "x"}))
+st.on_message(msg(30, put, 15, 19))
+st.step()
+j = store.open_job()
+check("SENSEX 73000 PE @ 210: 1 lot (20) on BFO, target 630", j and j["position"]["qty"] == 20
+      and j["contract"]["exchange"] == "BFO" and j["target_price"] == 630.0, str((j or {}).get("target_price")))
+
+section("5. Restart safety and statistics")
+st2, store2, _, logs2, sent2 = desk()
+store2.insert_job({"job_id": "BTST-x", "status": "entering", "trade_date": "2026-10-22",
+                   "created_at": "2026-10-22T15:16:00", "contract": {"symbol": "NIFTY27OCT2622800CE"}})
+st2.resume()
+check("a job left 'entering' by a crash is not retried: needs_review, and said",
+      store2.get_job("BTST-x")["status"] == "needs_review" and any("not retried" in x for x in sent2))
+jobs = [{"status": "closed", "mode": "paper", "trade_date": "2026-10-20", "result": {"net_pnl": 1000, "pnl_pct": 10,
+         "invested": 10000, "target_hit": True, "exit_reason": "target", "charges": 60}},
+        {"status": "closed", "mode": "paper", "trade_date": "2026-10-21", "result": {"net_pnl": -400, "pnl_pct": -4,
+         "invested": 10000, "exit_reason": "time_exit", "averaged": True, "charges": 70}},
+        {"status": "closed", "mode": "live", "trade_date": "2026-10-22", "result": {"net_pnl": 300, "pnl_pct": 3,
+         "invested": 9000, "exit_reason": "time_exit", "charges": 50}},
+        {"status": "rejected", "mode": "paper", "trade_date": "2026-10-23", "reject_reason": "no LTP"}]
+p = stats.summary(jobs, "paper")
+check("statistics per mode: paper 2 trades, 50% win, net Rs 600, PF 2.5, 1 target / 1 time exit, 1 averaged",
+      p["trades"] == 2 and p["win_rate"] == 50.0 and p["net_pnl"] == 600 and p["profit_factor"] == 2.5
+      and p["target_hits"] == 1 and p["time_exits"] == 1 and p["averaged"] == 1 and p["open_or_failed"] == 1, str(p))
+check("...live kept apart", stats.summary(jobs, "live")["trades"] == 1 and stats.summary(jobs, "live")["net_pnl"] == 300)
+rows = stats.by_day(jobs)
+check("every day listed, newest first, with why a day was not traded",
+      [x["date"] for x in rows] == ["2026-10-23", "2026-10-22", "2026-10-21", "2026-10-20"] and rows[0]["reason"] == "no LTP")
+
+section("5b. No signal, no trade - and the day is still listed")
+at(2026, 10, 22, 15, 20)
+stq, storeq, brokerq, logsq, sentq = desk(model=Model(dict(GOOD, is_btst_signal=False, reason="a result post")))
+stq.on_message(msg(40, SAMPLE, 15, 18))
+stq.on_message(msg(41, "Good evening all", 15, 19))
+stq.step()
+check("15:20, only a non-signal message: nothing bought, no day record yet (the window is open)",
+      not storeq.recent_jobs() and not storeq.day_recorded("2026-10-22") and brokerq.n == 0)
+at(2026, 10, 22, 15, 30, 5)
+stq.step()
+stq.step()
+d = storeq.days.find_one({"date": "2026-10-22"})
+check("after 15:30: 'no signal - no trade' saved once, with the messages read",
+      d and d["status"] == "no_signal" and d["messages_read"] == 2 and len(storeq.recent_days()) == 1
+      and brokerq.n == 0 and any("no trade" in x for x in logsq), str(d))
+at(2026, 10, 23, 9, 16)
+stq.step()
+check("the next morning: nothing to manage, nothing sent", brokerq.n == 0 and not storeq.open_job())
+at(2026, 10, 24, 15, 35)                                         # a Saturday
+stq.step()
+check("a weekend is not a trading day: no record", not storeq.day_recorded("2026-10-24"))
+at(2026, 10, 22, 15, 31)
+check("a day with a trade (or a refused signal) is not marked 'no signal'",
+      (st._record_quiet_day() or True) and not store.day_recorded("2026-10-22"))
+rowsq = stats.by_day(storeq.recent_jobs(), storeq.recent_days())
+check("the day list shows it", rowsq and rowsq[0]["date"] == "2026-10-22"
+      and rowsq[0]["status"] == "no signal - no trade" and "2 messages" in rowsq[0]["reason"], str(rowsq[:1]))
+
+from btst import web                                             # noqa: E402
+sq = web.state(stq, storeq)
+check("the page counts the days with no signal", sq["no_signal_days"] == 1 and sq["days"][0]["job_id"] == "")
+state = web.state(st, store)
+check("the page's state: mode, the open trade, both modes' statistics, every day, the messages",
+      state["mode"] == "paper" and state["open_job"] and [s["mode"] for s in state["stats"]] == ["live", "paper"]
+      and len(state["days"]) == 1 and state["messages"], str(list(state)))
+
+section("6. The live order path (AngelBtstBroker over a fake SmartAPI)")
+from btst.broker import AngelBtstBroker                          # noqa: E402
+
+
+class FakeAngel:
+    def __init__(self, fill=True, refuse=None):
+        self.fill, self.refuse, self.placed, self.cancelled, self.n, self.rows = fill, refuse, [], [], 0, {}
+
+    def ltpData(self, ex, sym, tok):
+        return {"status": True, "data": {"ltp": 100.0}}
+
+    def placeOrderFullResponse(self, p):
+        self.placed.append(dict(p))
+        if self.refuse:
+            return {"status": False, "message": self.refuse, "errorCode": "AG7002", "data": ""}
+        self.n += 1
+        uid = f"u{self.n}"
+        done = p["duration"] == "IOC"
+        self.rows[uid] = {"orderid": str(self.n), "uniqueorderid": uid,
+                          "orderstatus": ("complete" if self.fill else "cancelled") if done else "open",
+                          "filledshares": p["quantity"] if (done and self.fill) else "0",
+                          "averageprice": "101.5" if (done and self.fill) else "0", "text": ""}
+        return {"status": True, "data": {"orderid": str(self.n), "uniqueorderid": uid}}
+
+    def individual_order_details(self, uid):
+        return {"status": True, "data": self.rows.get(uid)}
+
+    def orderBook(self):
+        return {"status": True, "data": list(self.rows.values())}
+
+    def cancelOrder(self, oid, variety):
+        self.cancelled.append(oid)
+        for r in self.rows.values():
+            if r["orderid"] == oid and r["orderstatus"] == "open":
+                r["orderstatus"] = "cancelled"
+        return {"status": True}
+
+    def position(self):
+        return {"status": True, "data": [{"tradingsymbol": "NIFTY27OCT2622800CE", "netqty": "65"}]}
+
+
+C = find_option(MASTER, "NIFTY", 22800, "CE", date(2026, 10, 22))
+api = FakeAngel()
+lb = AngelBtstBroker(api, protection_pct=2.5, sleep=lambda s: None, log=lambda *_: None)
+b = lb.buy_market(C, 65)
+p0 = api.placed[0]
+check("live BUY: a CARRYFORWARD (overnight) marketable limit, IOC, LTP + 2.5% on the tick, NFO",
+      p0["producttype"] == "CARRYFORWARD" and p0["ordertype"] == "LIMIT" and p0["duration"] == "IOC"
+      and p0["price"] == "102.50" and p0["exchange"] == "NFO" and p0["quantity"] == "65"
+      and p0["transactiontype"] == "BUY", str(p0))
+check("...the fill read back from Angel (65 @ 101.5), not assumed",
+      b["ok"] and b["filled"] == 65 and b["avg_price"] == 101.5 and b["status"] == "complete")
+t = lb.place_limit_sell(C, 65, 210.0)
+p1 = api.placed[1]
+check("live target: a LIMIT DAY sell at 210, CARRYFORWARD", t["ok"] and p1["ordertype"] == "LIMIT"
+      and p1["duration"] == "DAY" and p1["price"] == "210.00" and p1["transactiontype"] == "SELL", str(p1))
+st_ = lb.cancel(t)
+check("cancel: the order reads cancelled", st_ and st_["status"] == "cancelled" and api.cancelled)
+check("the account's net quantity from the position book", lb.net_qty(C) == 65)
+api2 = FakeAngel(refuse="122.1.2.3 is not a registered IP")
+r2 = AngelBtstBroker(api2, sleep=lambda s: None, log=lambda *_: None).buy_market(C, 65)
+check("an unregistered IP (AG7002) is a refusal, said plainly", not r2["ok"] and "not registered" in r2["error"],
+      r2["error"][:90])
+api3 = FakeAngel(fill=False)
+r3 = AngelBtstBroker(api3, sleep=lambda s: None, log=lambda *_: None).buy_market(C, 65)
+check("an IOC that did not fill: not ok, nothing assumed held", not r3["ok"] and r3["filled"] == 0)
+
+print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
+sys.exit(1 if FAIL else 0)
