@@ -699,12 +699,12 @@ def t_ai():
         e.notifier = SimpleNamespace(send=sent.append)
         return e, api, lg, m, tmp, sent, built
 
-    def answered(e, wait=3.0):
+    def answered(e, wait=10.0):
         end = _time.time() + wait               # the AI's thread runs on the real clock
         while e._ai.get(KEY) is None and _time.time() < end:
             _time.sleep(0.02)
 
-    def journal(tmp, wait=3.0):
+    def journal(tmp, wait=10.0):
         """The journal's lines, once the AI's thread has written them."""
         p = os.path.join(tmp, f"ai_lhm_{TODAY}.jsonl")
         end = _time.time() + wait
@@ -719,7 +719,7 @@ def t_ai():
     e.hunt()
     check("on: at 15:00:03 the rule's CALL goes to the AI and nothing is sent yet",
           not api.params and e._ai.asked(KEY)
-          and any("asking gemini-3-pro-preview to verify CALL" in x for x in lg), str(lg[-2:]))
+          and any("asking " in x and "to verify CALL" in x for x in lg), str(lg[-2:]))
     st = e.lhm_status()["indices"]["NIFTY"]
     check("...the page shows WAITING, with the rule's side and numbers",
           st["decision"] == "WAITING" and st["strategy"]["side"] == "CALL"
@@ -866,6 +866,72 @@ def t_ai():
     check("normalise: a bad side is refused, confidence clamped",
           _AV.normalise({"side": "call", "confidence": 140, "reasoning": "x"})["confidence"] == 100
           and _raises(lambda: _AV.normalise({"side": "BUY"})))
+
+    # Which model client: the Gemini API key by default, the GCP service account on "vertex"
+    import services.vertex_ai_mime as _SV
+    live = IntradayLimits.load()
+    check("the live config asks gemini_api for gemini-3.1-pro-preview",
+          live.lhm_ai_provider == "gemini_api" and live.lhm_ai_model == "gemini-3.1-pro-preview",
+          f"{live.lhm_ai_provider} {live.lhm_ai_model}")
+    made = []
+
+    class FakeClient:
+        def __init__(self, **kw):
+            made.append((type(self).__name__, kw))
+
+    class GeminiAPILLM(FakeClient):
+        pass
+
+    class VertexAILLM(FakeClient):
+        pass
+    saved_cls = (_SV.GeminiAPILLM, _SV.VertexAILLM)
+    saved_env = {k: os.environ.pop(k) for k in list(os.environ) if k.startswith("GEMINI_")}
+    _SV.GeminiAPILLM, _SV.VertexAILLM = GeminiAPILLM, VertexAILLM
+    try:
+        envf = os.path.join(tempfile.mkdtemp(), ".angel.env")
+        with open(envf, "w") as fh:
+            fh.write("ANGEL_API_KEY=x\nGEMINI_API_KEY=key-123\nGEMINI_API_PROJECT_NAME=projects/42\n"
+                     "GEMINI_API_PROJECT_NUMBER=42\n")
+        Lg = limits()
+        Lg.lhm_ai_provider, Lg.lhm_ai_timeout_sec = "gemini_api", 75.0
+        _AV.AIVerifier(Lg, env_path=envf)._default_client()
+        kind, kw = made[-1]
+        check("gemini_api: the API-key client, with GEMINI_API_KEY from .angel.env",
+              kind == "GeminiAPILLM" and kw["api_key"] == "key-123" and kw["project_name"] == "projects/42"
+              and kw["model_name"] == Lg.lhm_ai_model and kw["max_retries"] == 0 and kw["timeout_sec"] == 75.0,
+              str(kw)[:160])
+        Lg.lhm_ai_provider = "something else"
+        _AV.AIVerifier(Lg, env_path=envf)._default_client()
+        check("an unknown provider is gemini_api", made[-1][0] == "GeminiAPILLM")
+        nokey = os.path.join(tempfile.mkdtemp(), ".angel.env")
+        open(nokey, "w").write("ANGEL_API_KEY=x\n")
+        Lg.lhm_ai_provider = "gemini_api"
+        check("no GEMINI_API_KEY: refused with the reason, no client made",
+              _raises(lambda: _AV.AIVerifier(Lg, env_path=nokey)._default_client())
+              and made[-1][0] == "GeminiAPILLM" and len([m for m in made if m[0] == "GeminiAPILLM"]) == 2)
+        Lg.lhm_ai_provider, Lg.lhm_ai_credentials = "vertex", "key.json"
+        _AV.AIVerifier(Lg, env_path=envf)._default_client()
+        kind, kw = made[-1]
+        check("vertex: the service-account client, its file under the repo root",
+              kind == "VertexAILLM" and kw["service_account_file"].endswith(os.sep + "key.json")
+              and os.path.isabs(kw["service_account_file"]) and kw["location"] == Lg.lhm_ai_location, str(kw)[:160])
+
+        # through the engine: a missing key fails closed, with the reason on the page
+        CLK.at(15, 0, 3)
+        e, api, lg = make()
+        e.L.lhm_ai_verify, e.L.lhm_ai_provider, e.L.lhm_ai_timeout_sec = "on", "gemini_api", 30.0
+        e._ai = _AV.AIVerifier(e.L, log=lg.append, env_path=nokey)
+        e.hunt()
+        answered(e)
+        CLK.at(15, 0, 6)
+        e.hunt()
+        st = e.lhm_status()
+        check("on, with no GEMINI_API_KEY: no order, and the page says why and which provider",
+              not api.params and "GEMINI_API_KEY is not set" in st["indices"]["NIFTY"]["why"]
+              and st["provider"] == "Gemini API key", st["indices"]["NIFTY"]["why"][-120:])
+    finally:
+        _SV.GeminiAPILLM, _SV.VertexAILLM = saved_cls
+        os.environ.update(saved_env)
 
 
 def _raises(fn):

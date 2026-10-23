@@ -14,6 +14,9 @@ Configuration from constructor arguments, else the environment / .env.
 Moved off vertexai.generative_models (22 Oct 2026): Google has deprecated that
 module in favour of google-genai, and it does not reach Gemini 3. The public
 methods are unchanged; query_json (structured JSON answers) is new.
+
+GeminiAPILLM (below) is the same client on the Gemini Developer API with an
+API key (GEMINI_API_KEY) in place of the service account.
 """
 
 import json
@@ -47,6 +50,15 @@ TOKEN_LIMIT = {
         "input_cost": 0.000002,         # <= 200k context
         "output_cost": 0.000012,        # thinking tokens are billed as output
         "input_cost_ext": 0.000004,     # > 200k context
+        "output_cost_ext": 0.000018,
+    },
+    # Assumed at gemini-3-pro-preview's rates (its successor on the Gemini
+    # API); check Google's price list - the dashboard shows it as an estimate.
+    "gemini-3.1-pro-preview": {
+        "output": 65536,
+        "input_cost": 0.000002,
+        "output_cost": 0.000012,
+        "input_cost_ext": 0.000004,
         "output_cost_ext": 0.000018,
     },
     "gemini-2.5-pro": {
@@ -244,7 +256,8 @@ class VertexAILLM:
         config = TOKEN_LIMIT.get(model_name)
         if not config or input_tokens is None or output_tokens is None:
             return 0.0
-        if model_name in ("gemini-2.5-pro", "gemini-3-pro-preview") and input_tokens > 200_000:
+        if model_name in ("gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3.1-pro-preview") \
+                and input_tokens > 200_000:
             in_rate  = config["input_cost_ext"]
             out_rate = config["output_cost_ext"]
         else:
@@ -550,6 +563,87 @@ class VertexAILLM:
             except Exception:
                 logger.exception("Failed to reconnect")
                 return False
+
+
+# ---------------------------------------------------------------------------
+# GeminiAPILLM  (Gemini Developer API with an API key, not Vertex AI)
+# ---------------------------------------------------------------------------
+class GeminiAPILLM(VertexAILLM):
+    """
+    The same client over the Gemini Developer API (aistudio.google.com) with an
+    API key instead of a GCP service account on Vertex AI. Every method of
+    VertexAILLM works unchanged; there is no token to refresh.
+
+        GEMINI_API_KEY            - the key (required)
+        GEMINI_API_PROJECT_NAME   - the key's Google project, for logs only
+        GEMINI_API_PROJECT_NUMBER - its number, for logs only
+        GEMINI_MODEL_NAME         - default gemini-3-pro-preview
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: Optional[str] = None,
+        max_retries: Optional[int] = None,
+        temperature: Optional[float] = None,
+        timeout_sec: Optional[float] = None,
+        retry_delay: float = 1.0,
+        project_name: Optional[str] = None,
+        project_number: Optional[str] = None,
+    ):
+        self.api_key = api_key or _env("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError(
+                "GEMINI_API_KEY is not set. Pass api_key or add it to your .env / .angel.env."
+            )
+        self.project_id             = project_name or _env("GEMINI_API_PROJECT_NAME")
+        self.project_number         = project_number or _env("GEMINI_API_PROJECT_NUMBER")
+        self.location               = "gemini-api"
+        self.model_name             = model_name or _env("GEMINI_MODEL_NAME", "gemini-3-pro-preview")
+        self.max_retries            = _env("VERTEX_MAX_RETRY", 3, int) if max_retries is None else int(max_retries)
+        self.temperature            = temperature
+        self.timeout_sec            = float(timeout_sec or _env("VERTEX_TIMEOUT_SEC", 120.0, float))
+        self.retry_delay            = retry_delay
+        self.refresh_before_seconds = 0
+        self.service_account_file   = None
+        self.credentials  = None
+        self.token_expiry = None
+        self.client       = None
+        self._initialized = False
+        self._initialize()
+
+    def _connect(self):
+        self.client = genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(timeout=int(self.timeout_sec * 1000)),
+        )
+
+    def _initialize(self):
+        try:
+            self._connect()
+            logger.info(
+                "Initialized Gemini API | project=%s (%s) | model=%s",
+                self.project_id, self.project_number, self.model_name,
+            )
+            self._initialized = True
+        except Exception:
+            logger.exception("Failed to initialize the Gemini API client")
+            raise
+
+    def _ensure_valid_token(self) -> bool:
+        return False                    # an API key does not expire
+
+    def _handle_auth_error(self, error: Exception):
+        pass                            # nothing to refresh: a refused key stays refused
+
+    def check_connection(self) -> bool:
+        """The key is accepted and the model is reachable (one metadata read)."""
+        try:
+            self.client.models.get(model=self.model_name)
+            return True
+        except Exception as exc:
+            logger.error("Connection check failed: %s", exc)
+            return False
 
 
 # ---------------------------------------------------------------------------

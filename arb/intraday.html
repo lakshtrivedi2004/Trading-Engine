@@ -254,7 +254,7 @@ function lhmPanel(x){
     ? `<div class="line"><span class="tag">${title}</span><ul>${xs.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : "";
   const sideCls = v => v === "CALL" ? "up" : (v === "PUT" ? "down" : "warn");
   const head = `<p class="sub">Rule <b>${esc(x.mode)}</b>, decides at ${esc(x.entry_at)} IST · AI check <b>${esc(x.ai_mode)}</b>`
-    + (x.ai_mode !== "off" ? ` (${esc(x.model)}${x.min_confidence ? `, needs ≥${x.min_confidence}% confidence` : ""})` : "")
+    + (x.ai_mode !== "off" ? ` (${esc(x.model)} via ${esc(x.provider || "")}${x.min_confidence ? `, needs ≥${x.min_confidence}% confidence` : ""})` : "")
     + (x.ai_mode === "on" ? " · trade only when the AI calls the rule's side" : "") + `</p>`;
   const cards = Object.entries(x.indices || {}).map(([n, r]) => {
     const dcls = r.decision === "TAKEN" ? "up" : (r.decision === "WAITING" ? "muted" : "down");
@@ -271,7 +271,7 @@ function lhmPanel(x){
       ai = `<div class="line"><span class="tag">AI</span><b class="down">no answer</b> — ${esc(a.error)}</div>`;
     } else if(a){
       ai = `<div class="line"><span class="tag">AI</span><b class="${sideCls(a.side)}">${esc(a.side)}</b>
-        · ${f0(a.confidence)}% confidence · answered in ${f2(a.latency_s)} s${a.cost_usd ? ` · $${a.cost_usd}` : ""}</div>
+        · ${f0(a.confidence)}% confidence · answered in ${f2(a.latency_s)} s${a.cost_usd ? ` · ≈$${a.cost_usd}` : ""}</div>
         <div class="reason">${esc(a.reasoning || "")}</div>`
         + list("Key factors", a.key_factors) + list("Risks", a.risks) + list("Data gaps", a.data_gaps);
     }

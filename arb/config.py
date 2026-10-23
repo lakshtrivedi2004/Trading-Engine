@@ -944,9 +944,19 @@ class IntradayLimits:
     # for the answer (the chase guard still applies); each question and answer
     # is journaled (ai_lhm_YYYY-MM-DD.jsonl). No evidence yet that it helps.
     lhm_ai_verify: str = "off"
-    lhm_ai_model: str = "gemini-3-pro-preview"
-    lhm_ai_credentials: str = ""          # service-account JSON, relative to the repo root
-    lhm_ai_location: str = "global"
+    # Where the model is reached (owner, 22 Oct 2026):
+    #   "gemini_api" (default) the Gemini Developer API with GEMINI_API_KEY
+    #                from .angel.env (GEMINI_API_PROJECT_NAME / _NUMBER: logs only)
+    #   "vertex"     Vertex AI with the GCP service account lhm_ai_credentials,
+    #                in lhm_ai_location
+    # Any other value is "gemini_api".
+    lhm_ai_provider: str = "gemini_api"
+    # gemini-3-pro-preview is retired on the Gemini API (22 Oct 2026, a 404
+    # naming gemini-3.1-pro-preview as its successor). Pro models have no free
+    # tier there: the key's project needs billing. gemini-3-flash-preview does.
+    lhm_ai_model: str = "gemini-3.1-pro-preview"
+    lhm_ai_credentials: str = ""          # vertex: service-account JSON, relative to the repo root
+    lhm_ai_location: str = "global"       # vertex only
     lhm_ai_thinking: str = "high"         # Gemini 3 thinking level: "low" answers sooner
     lhm_ai_timeout_sec: float = 90.0
     lhm_ai_min_confidence: float = 0.0

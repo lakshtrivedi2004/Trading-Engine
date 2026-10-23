@@ -1705,8 +1705,8 @@ class IntradayEngine:
                 api = getattr(self.candles, "api", None) if self.candles else None
                 v.ask(key, ctx, want, fetch=lambda: ai_verify.angel_market_data(
                     api, und, b.expiry, log=self.log))
-                self.log(f"[intraday] last_half_hour {und}: asking {self.L.lhm_ai_model} to verify "
-                         f"{want} ({mode}; up to {v.timeout():.0f} s)")
+                self.log(f"[intraday] last_half_hour {und}: asking {self.L.lhm_ai_model} "
+                         f"({v.provider_label()}) to verify {want} ({mode}; up to {v.timeout():.0f} s)")
         res = v.get(key)
         if res is None and v.waited(key) > v.timeout() + self.AI_GRACE_SEC:
             res = v.expire(key, f"no answer in {v.timeout():.0f} s")
@@ -1757,6 +1757,8 @@ class IntradayEngine:
         out = {"mode": self._lhm_mode(),
                "ai_mode": v.mode() if v else str(getattr(L, "lhm_ai_verify", "off")),
                "model": str(getattr(L, "lhm_ai_model", "")), "entry_at": str(L.lhm_entry_at),
+               "provider": (v.provider_label() if v else
+                            ai_verify.AIVerifier(L).provider_label()),
                "min_confidence": float(getattr(L, "lhm_ai_min_confidence", 0.0) or 0.0),
                "indices": {}}
         for und in [str(u) for u in (getattr(L, "lhm_indices", ()) or ())]:

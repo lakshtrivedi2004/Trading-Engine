@@ -6,6 +6,9 @@ through services/vertex_ai_mime.py - shown everything the engine knows at that
 moment, independently calls the SAME side. "shadow" asks and records but never
 blocks; "off" never asks.
 
+The model is reached per lhm_ai_provider: "gemini_api" (default) with
+GEMINI_API_KEY from .angel.env, or "vertex" with the GCP service account.
+
 What the model sees (lhm_context): the rule's own numbers and the contract it
 chose; the index's bars (today in 5-minute bars, the last 30 one-minute bars,
 the prior sessions' daily ranges, 4-hour bars) with EMA / RSI / ATR, the
@@ -466,8 +469,9 @@ class AIVerifier:
     engine never waits on the network; the answer is read back with get().
     Market data from Angel can be fetched ahead (prefetch) for the same key."""
 
-    def __init__(self, L, log=print, journal_dir=None, client_factory=None):
+    def __init__(self, L, log=print, journal_dir=None, client_factory=None, env_path=None):
         self.L, self.log, self.journal_dir = L, log, journal_dir
+        self.env_path = env_path or os.path.join(ROOT, ".angel.env")
         self._factory = client_factory or self._default_client
         self._client = None
         self._lock = threading.Lock()
@@ -480,15 +484,36 @@ class AIVerifier:
     def timeout(self):
         return float(getattr(self.L, "lhm_ai_timeout_sec", 90.0) or 90.0)
 
+    def provider(self):
+        """"gemini_api" (default: GEMINI_API_KEY) or "vertex" (the service account)."""
+        p = str(getattr(self.L, "lhm_ai_provider", "gemini_api") or "gemini_api").strip().lower()
+        return p if p in ("gemini_api", "vertex") else "gemini_api"
+
+    def provider_label(self):
+        return "Vertex AI" if self.provider() == "vertex" else "Gemini API key"
+
     def _default_client(self):
-        from services.vertex_ai_mime import VertexAILLM
-        cred = str(getattr(self.L, "lhm_ai_credentials", "") or os.getenv("VERTEX_SERVICE_ACCOUNT_FILE", ""))
-        if cred and not os.path.isabs(cred):
-            cred = os.path.join(ROOT, cred)
-        return VertexAILLM(service_account_file=cred,
-                           location=str(getattr(self.L, "lhm_ai_location", "global") or "global"),
-                           model_name=str(self.L.lhm_ai_model), max_retries=0,
-                           timeout_sec=self.timeout())
+        if self.provider() == "vertex":
+            from services.vertex_ai_mime import VertexAILLM
+            cred = str(getattr(self.L, "lhm_ai_credentials", "") or os.getenv("VERTEX_SERVICE_ACCOUNT_FILE", ""))
+            if cred and not os.path.isabs(cred):
+                cred = os.path.join(ROOT, cred)
+            return VertexAILLM(service_account_file=cred,
+                               location=str(getattr(self.L, "lhm_ai_location", "global") or "global"),
+                               model_name=str(self.L.lhm_ai_model), max_retries=0,
+                               timeout_sec=self.timeout())
+        from arb.config import _load_env_file
+        from services.vertex_ai_mime import GeminiAPILLM
+        env = _load_env_file(self.env_path)
+        env.update({k: v for k, v in os.environ.items() if k.startswith("GEMINI_")})
+        key = str(env.get("GEMINI_API_KEY", "")).strip()
+        if not key:
+            raise ValueError(f"GEMINI_API_KEY is not set in {os.path.basename(self.env_path)} "
+                             f"(lhm_ai_provider is gemini_api)")
+        return GeminiAPILLM(api_key=key, model_name=str(self.L.lhm_ai_model),
+                            project_name=env.get("GEMINI_API_PROJECT_NAME"),
+                            project_number=env.get("GEMINI_API_PROJECT_NUMBER"),
+                            max_retries=0, timeout_sec=self.timeout())
 
     def client(self):
         with self._lock:
@@ -600,6 +625,7 @@ class AIVerifier:
             res = {"ok": False, "error": f"{type(ex).__name__}: {str(ex)[:300]}"}
         res["latency_s"] = round(time.time() - t0, 1)
         res["answered_at"] = now_ist().strftime("%H:%M:%S")
+        res["provider"] = self.provider()
         late = False
         with self._lock:
             if key in self._results:
@@ -627,7 +653,8 @@ def summary(res, asked=None):
         return {"state": "pending", "asked_at": (asked or {}).get("at")} if asked else None
     out = {"state": "answered" if res.get("ok") else "failed"}
     for k in ("side", "confidence", "reasoning", "key_factors", "risks", "data_gaps", "error",
-              "latency_s", "answered_at", "model", "cost_usd", "input_tokens", "output_tokens"):
+              "latency_s", "answered_at", "model", "provider", "cost_usd", "input_tokens",
+              "output_tokens"):
         if res.get(k) not in (None, "", []):
             out[k] = res[k]
     if asked:
