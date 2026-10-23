@@ -385,6 +385,20 @@ check("the page's state: mode, the open trade, both modes' statistics, every day
       state["mode"] == "paper" and state["open_job"] and [s["mode"] for s in state["stats"]] == ["live", "paper"]
       and len(state["days"]) == 1 and state["messages"], str(list(state)))
 
+import run_btst                                                  # noqa: E402
+dm = run_btst.DailyMaster(loader=lambda: (MASTER, "cache (1.0h old)"), today=lambda: CLOCK["t"].date())
+check("the scrip master as the desk loads it: load_scrip_master's (rows, source) -> the rows",
+      dm() is MASTER and find_option(dm(), "NIFTY", 22800, "CE", date(2026, 10, 22)) is not None)
+at(2026, 10, 22, 15, 16)
+stx, storex, _, logsx, _ = desk()
+stx.master_fn = lambda: (MASTER, "cache")       # the shape that crashed entry before
+stx.on_message(msg(3, SAMPLE, 15, 16))
+stx.step()
+jx = storex.recent_jobs()[0]
+check("a contract lookup that fails rejects the job (never left 'entering', which would block the day)",
+      jx["status"] == "rejected" and "contract lookup" in jx["reject_reason"] and not storex.open_job(),
+      jx.get("reject_reason", "")[:90])
+
 section("6. The live order path (AngelBtstBroker over a fake SmartAPI)")
 from btst.broker import AngelBtstBroker                          # noqa: E402
 
@@ -585,7 +599,19 @@ feed._on_data(None, {"token": str(C["token"]), "last_traded_price": 19875, "high
 p4 = w4.price(C)
 check("a websocket tick (paise) is the price, and no LTP call is made while ticks are fresh",
       p4 == 198.75 and w4.state()["source"] == "websocket" and calls["rest"] == 0, str(w4.state()))
+w5 = watch()
+w5.follow(C)
+QUOTE.update(ltp=204.5, high=358.65)
+w5.price(C)                                  # the LTP call: rupees
+w5.mark()
+f5 = _Feed(w5, SimpleNamespace(), 4, log=lambda *_: None)
+f5.register(C["token"])
+f5._on_data(None, {"token": str(C["token"]), "last_traded_price": 21785, "high_price_of_the_day": 35865,
+                   "best_5_buy_data": [], "best_5_sell_data": []})
+check("the same day high from the socket (paise) and the LTP call (rupees) is not a new high (VM, 23 Oct)",
+      w5.peak() == 217.85, str(w5.peak()))
 w4.last["at"] -= 10                          # the socket went quiet
+calls["rest"] = 0
 QUOTE.update(ltp=199.0, high=205.0)
 check("...quiet for over ws_fresh_sec: the LTP call stands in", w4.price(C) == 199.0 and calls["rest"] == 1)
 

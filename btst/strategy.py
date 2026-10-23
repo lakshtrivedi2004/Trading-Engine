@@ -208,11 +208,12 @@ class BtstStrategy:
         what = f"{sig['indices']} {sig['strike_price']:g} {sig['side']} @ {sig['price']:g}"
         try:
             master = self.master_fn()
-        except Exception as e:
-            self.store.update_job(jid, set_={"status": "rejected", "reject_reason": f"scrip master: {e!r}"})
-            self._say(f"{what}: scrip master unavailable ({e!r}) - not traded", jid, True, "contract", "ERROR")
+            c = find_option(master, sig["indices"], sig["strike_price"], sig["side"], today)
+        except Exception as e:                  # never leave the job 'entering': it would block the day
+            self.store.update_job(jid, set_={"status": "rejected", "reject_reason": f"contract lookup: {e!r}"})
+            self._say(f"{what}: contract lookup failed ({e!r}) - not traded", jid, True, "contract", "ERROR")
+            self._log("contract", traceback.format_exc(), "ERROR")
             return
-        c = find_option(master, sig["indices"], sig["strike_price"], sig["side"], today)
         if c is None:
             self.store.update_job(jid, set_={"status": "rejected", "reject_reason": "no such contract"})
             self._say(f"{what}: no {sig['indices']} {sig['strike_price']:g} {sig['side']} contract after today "

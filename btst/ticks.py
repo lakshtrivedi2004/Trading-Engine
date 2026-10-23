@@ -59,6 +59,9 @@ class PriceWatch:
         """A look at the price: a websocket tick or an LTP answer."""
         if token != self.token:
             return
+        # to the paisa: the socket's paise x 0.01 (358.65000000000003) and the LTP
+        # call's rupees (358.65) are the same price, not a new day high
+        ltp, high = round(float(ltp), 2), round(float(high), 2)
         with self.lock:
             if source == "websocket":
                 self.ticks += 1

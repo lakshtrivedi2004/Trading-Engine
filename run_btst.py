@@ -89,6 +89,31 @@ class Api:
         return getattr(self._s.ensure(), name)
 
 
+class DailyMaster:
+    """The scrip master's rows, loaded once a day. load_scrip_master() answers
+    (rows, where from) - the rows alone go to find_option."""
+
+    def __init__(self, loader=load_scrip_master, today=lambda: now_ist().date()):
+        self.loader, self.today, self.day, self.rows = loader, today, None, None
+
+    def __call__(self):
+        today = self.today()
+        if self.day != today:
+            t0 = time.time()
+            try:
+                rows, src = self.loader()
+            except Exception as e:
+                log(f"scrip master load failed: {e!r}", "ERROR", "contract")
+                raise
+            if not isinstance(rows, list) or not rows:
+                log(f"scrip master unusable ({type(rows).__name__}, from {src})", "ERROR", "contract")
+                raise ValueError(f"scrip master unusable: {type(rows).__name__} from {src}")
+            self.rows, self.day = rows, today
+            log(f"scrip master for {today}: {len(rows):,} contracts ({src}) in {time.time() - t0:.1f}s",
+                area="contract")
+        return self.rows
+
+
 def make_llm(cfg, env):
     try:
         if str(cfg.get("ai_provider", "gemini_api")) == "vertex":
@@ -140,20 +165,7 @@ def main():
     api = Api(sess)
     llm = make_llm(cfg, env)
 
-    masters = {"day": None, "rows": None}
-
-    def master():
-        today = now_ist().date()
-        if masters["day"] != today:
-            t0 = time.time()
-            try:
-                masters["rows"], masters["day"] = load_scrip_master(), today
-            except Exception as e:
-                log(f"scrip master load failed: {e!r}", "ERROR", "contract")
-                raise
-            log(f"scrip master loaded for {today}: {len(masters['rows'])} rows in {time.time() - t0:.1f}s",
-                area="contract")
-        return masters["rows"]
+    master = DailyMaster()
 
     rest = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log)
 
