@@ -1,7 +1,9 @@
 """BTST from a Telegram channel's signals (owner, 23 Oct 2026).
 
-Day D, scan_start - scan_end (15:15 - 15:30 IST): every channel message posted
-in the window is read once. A BTST signal (btst/signal.py) is entered at
+Day D, scan_start - scan_end (15:15 - 15:40 IST): every channel message posted
+in the window is read once. A signal read after market_close (15:30) is saved
+with its reading but not traded - no order can be placed until the next open
+(the channel posted every October 2026 signal at 15:33 - 15:39). A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
 `lots` lots, CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
@@ -138,7 +140,7 @@ class BtstStrategy:
                 break
             posted = self._ist(m["date"])
             if not self._in_window(m["date"]):
-                skipped += 1                    # not today's 15:15 - 15:30 - never read
+                skipped += 1                    # not today's scan window - never read
                 continue
             if self.store.message_seen(self.channel, m["id"]):
                 self._log("message", f"#{m['id']} ({posted:%H:%M:%S}) already read before - skipped")
@@ -190,12 +192,29 @@ class BtstStrategy:
         if j:
             self._say(f"signal {what} ignored - {j['job_id']} is still open", area="signal", level="WARN")
             return
-        if _secs(self.now()) >= _hm(self.c("scan_end", "15:30")):
-            self._say(f"signal {what} ignored - the market has closed ({self.now():%H:%M:%S})",
-                      area="signal", level="WARN")
+        close = self.c("market_close", "15:30")
+        if _secs(self.now()) >= _hm(close):
+            self._after_close_signal(sig, res, m, what, close)
             return
         self._log("entry", f"signal {what} accepted - entering ({self.broker.mode.upper()})")
         self._enter(sig, res, m)
+
+    def _after_close_signal(self, sig, res, m, what, close):
+        """Read after the market closed: kept as the day's job (rejected, with
+        the signal and the reason) - on the page and in MongoDB - not traded."""
+        now = self.now()
+        posted = self._ist(m["date"])
+        job = {"job_id": self.store.new_job_id(), "status": "rejected", "mode": self.broker.mode,
+               "trade_date": now.date().isoformat(), "created_at": now.isoformat(timespec="seconds"),
+               "message": {"channel": self.channel, "msg_id": m["id"], "date": posted.isoformat(timespec="seconds"),
+                           "text": m["text"]},
+               "signal": dict(sig, parsed_by=res["parsed_by"]), "orders": [], "events": [],
+               "reject_reason": f"posted {posted:%H:%M:%S}, after the market closed at {close} - "
+                                f"no order possible until the next open"}
+        jid = self.store.insert_job(job)
+        self._say(f"signal {what} (message {m['id']}, posted {posted:%H:%M:%S}) read after the market closed "
+                  f"at {close} - saved, NOT traded (no order can be placed until tomorrow's open)",
+                  jid, True, "signal", "WARN")
 
     # ── entry ───────────────────────────────────────────────────────────────
     def _enter(self, sig, res, m):
@@ -679,7 +698,8 @@ class BtstStrategy:
                     self._after_close(job)
                 self.status_note = f"managing {job['job_id']}"
             else:
-                self.status_note = "waiting for a signal (15:15 - 15:30)"
+                self.status_note = (f"waiting for a signal ({self.c('scan_start', '15:15')} - "
+                                    f"{self.c('scan_end', '15:30')})")
             if not self.managing and self.prices is not None:
                 self.prices.stop()              # no trade, or the market is shut: no socket
         except Exception as e:

@@ -44,7 +44,7 @@ def by_day(jobs, quiet_days=()):
     rows = []
     for d in quiet_days:
         rows.append({"date": d.get("date"), "job_id": "", "mode": "", "status": "no signal - no trade",
-                     "signal": "", "reason": f"{d.get('messages_read', 0)} messages read 15:15-15:30, none a signal"})
+                     "signal": "", "reason": f"{d.get('messages_read', 0)} messages read in the scan window, none a signal"})
     for j in sorted(jobs, key=lambda j: (j.get("trade_date", ""), j.get("created_at", "")), reverse=True):
         r, s, c, p = j.get("result") or {}, j.get("signal") or {}, j.get("contract") or {}, j.get("position") or {}
         rows.append({

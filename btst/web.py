@@ -52,7 +52,7 @@ PAGE = r"""<!DOCTYPE html>
   <h2>Open trade</h2><div id="open"></div>
   <h2>Statistics</h2><div id="stats"></div>
   <h2>Every day</h2><div class="tbl" id="days"></div>
-  <h2>Channel messages read (15:15 – 15:30)</h2><div class="tbl" id="msgs"></div>
+  <h2 id="msgsh">Channel messages read</h2><div class="tbl" id="msgs"></div>
 </div>
 <script>
 const esc = s => String(s ?? "").replace(/[<>&]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
@@ -111,6 +111,7 @@ async function tick(){
         <td class="${cls(r.pnl_pct)}">${r.pnl_pct == null ? "–" : n2(r.pnl_pct) + "%"}</td>
         <td class="l">${esc(r.status)}${r.reason ? " – " + esc(r.reason) : ""}</td>
         <td><a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></td></tr>`).join("") + `</table>`;
+    document.getElementById("msgsh").textContent = "Channel messages read (" + (d.window || "") + " IST)";
     const ms = d.messages || [];
     document.getElementById("msgs").innerHTML = !ms.length ? `<p class="dim">Nothing read yet.</p>` :
       `<table><tr><th>Time</th><th>Signal?</th><th>Why</th><th>Message</th></tr>` +
@@ -152,7 +153,7 @@ LOGS_PAGE = r"""<!DOCTYPE html>
 <div class="wrap">
   <div class="head"><h1>BTST Log</h1><a class="btn" href="/">← BTST Desk</a></div>
   <p class="sub">Every step of the desk, newest first. <b>No trade today?</b> Pick <i>Signals</i>: each channel message
-  read 15:15 – 15:30 and why it was or was not a signal, then why a signal was not traded. <i>Problems</i> shows the warnings
+  read in the scan window (15:15 – 15:40) and why it was or was not a signal, then why a signal was not traded. <i>Problems</i> shows the warnings
   and errors (Telegram reader down, Angel login, refused orders).</p>
   <div class="bar">
     <span id="groups"></span>

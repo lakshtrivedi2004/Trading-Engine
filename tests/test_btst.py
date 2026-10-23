@@ -283,6 +283,25 @@ put = SAMPLE.replace("NIFTY 22800 Call Buy 105", "SENSEX 73000 PUT buy 210")
 check("PUT on SENSEX reads too", S.strict_read(put) ==
       {"indices": "SENSEX", "strike_price": 73000.0, "side": "PE", "price": 210.0})
 
+section("1b. The scan runs to 15:40; a signal after the 15:30 close is saved, not traded")
+at(2026, 10, 22, 15, 35, 50)
+PRICE["ltp"] = 106.0
+stL2, storeL2, brokerL2, logsL2, sentL2 = desk(cfg={"scan_end": "15:40", "market_close": "15:30"})
+stL2.on_message(msg(50, SAMPLE, 15, 35))
+stL2.step()
+jL2 = storeL2.recent_jobs()
+check("a signal posted 15:35 (scan to 15:40) is read and saved as a signal",
+      storeL2.message_seen("btst_karo", 50) and storeL2.recent_messages(5)[0]["is_signal"])
+check("...but not traded: the day's job is 'rejected - after the market closed', nothing bought, Telegram told",
+      len(jL2) == 1 and jL2[0]["status"] == "rejected" and "after the market closed" in jL2[0]["reject_reason"]
+      and brokerL2.n == 0 and not storeL2.open_job() and any("NOT traded" in x for x in sentL2),
+      str(jL2[:1] and jL2[0].get("reject_reason")))
+at(2026, 10, 22, 15, 41)
+stL2.on_message(msg(51, SAMPLE.replace("22800", "22900"), 15, 41))
+stL2.step()
+check("a message at 15:41 is not read; no 'no signal' day recorded (the day has its job)",
+      not storeL2.message_seen("btst_karo", 51) and not storeL2.day_recorded("2026-10-22"))
+
 section("2. The contract")
 c = find_option(MASTER, "NIFTY", 22800, "CE", date(2026, 10, 22))
 check("the nearest expiry AFTER today (today's 22 Oct contract settles tonight)",
