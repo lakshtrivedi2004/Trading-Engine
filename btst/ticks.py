@@ -42,11 +42,12 @@ class PriceWatch:
     """One contract at a time: the open job's."""
 
     def __init__(self, session_fn=None, rest_quote=None, log=print, ltp_poll_sec=1.0, ws_fresh_sec=5.0,
-                 stale_sec=60.0, use_ws=True, clock=time.time, feed_cls=_Feed, today=lambda: now_ist().date()):
+                 stale_sec=60.0, use_ws=True, clock=time.time, feed_cls=_Feed, today=lambda: now_ist().date(),
+                 hours=("09:15", "15:45")):
         self.session_fn, self.rest_quote, self.log = session_fn, rest_quote, log
         self.ltp_poll_sec, self.ws_fresh_sec = float(ltp_poll_sec), float(ws_fresh_sec)
         self.stale_sec, self.use_ws, self.clock, self.feed_cls = float(stale_sec), use_ws, clock, feed_cls
-        self.today = today
+        self.today, self.hours = today, hours
         self.lock = threading.Lock()
         self.token, self.symbol = None, None
         self.feed, self.feed_session, self.feed_failed_at = None, None, 0.0
@@ -126,7 +127,7 @@ class PriceWatch:
             self._stop_feed()
         try:
             f = self.feed_cls(self, sess, 4, correlation_id="btstfeed01", log=self._feed_log, stale_sec=30.0,
-                              market_open=lambda: market_phase(start="09:15", end="15:30") == "open")
+                              market_open=lambda: market_phase(start=self.hours[0], end=self.hours[1]) == "open")
             f.register(self.token, BSE_FO if c["exchange"] == "BFO" else NSE_FO)
             f.start()
             self.feed, self.feed_session = f, sess

@@ -302,6 +302,26 @@ stL2.step()
 check("a message at 15:41 is not read; no 'no signal' day recorded (the day has its job)",
       not storeL2.message_seen("btst_karo", 51) and not storeL2.day_recorded("2026-10-22"))
 
+at(2026, 10, 22, 15, 36, 20)
+stL3, storeL3, brokerL3, _, _ = desk(cfg={"scan_end": "16:00", "market_close": "15:45"})
+stL3.on_message(msg(52, SAMPLE, 15, 36))
+stL3.step()
+jL3 = storeL3.open_job()
+check("orders until 15:45 (the new hours): a signal at 15:36 is BOUGHT", jL3 and jL3["status"] == "open"
+      and brokerL3.n >= 1, str(storeL3.recent_jobs()[:1] and storeL3.recent_jobs()[0].get("reject_reason")))
+at(2026, 10, 22, 15, 44)
+PRICE["ltp"] = 215.0
+stL3.step()
+check("...and its target is still watched until 15:45 (filled at 15:44)",
+      storeL3.recent_jobs()[0]["status"] == "closed" and storeL3.recent_jobs()[0]["result"]["exit_reason"] == "target")
+PRICE["ltp"] = 106.0
+at(2026, 10, 22, 15, 46)
+stL4, storeL4, brokerL4, _, sentL4 = desk(cfg={"scan_end": "16:00", "market_close": "15:45"})
+stL4.on_message(msg(53, SAMPLE, 15, 45))
+stL4.step()
+check("a signal read at 15:46 is saved, not traded", storeL4.recent_jobs()[0]["status"] == "rejected"
+      and brokerL4.n == 0 and "15:45" in storeL4.recent_jobs()[0]["reject_reason"])
+
 section("2. The contract")
 c = find_option(MASTER, "NIFTY", 22800, "CE", date(2026, 10, 22))
 check("the nearest expiry AFTER today (today's 22 Oct contract settles tonight)",

@@ -1,9 +1,9 @@
 """BTST from a Telegram channel's signals (owner, 23 Oct 2026).
 
 Day D, scan_start - scan_end (15:15 - 16:00 IST): every channel message posted
-in the window is read once. A signal read after market_close (15:30) is saved
-with its reading but not traded - no order can be placed until the next open
-(the channel posted every October 2026 signal at 15:33 - 15:39). A BTST signal (btst/signal.py) is entered at
+in the window is read once. Orders can be placed until market_close (15:45 -
+the market's hours changed in 2026; the channel posted every October signal at
+15:33 - 15:39); a signal read after it is saved with its reading, not traded. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
 `lots` lots, CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
@@ -74,6 +74,10 @@ class BtstStrategy:
     # ── settings and logging ────────────────────────────────────────────────
     def c(self, k, default=None):
         return self.cfg.get(k, default)
+
+    def _market_open(self, now):
+        """Orders can be placed: market_open - market_close (09:15 - 15:45) on a trading day."""
+        return market_phase(now, start=self.c("market_open", "09:15"), end=self.c("market_close", "15:45")) == "open"
 
     def target_mult(self, index):
         m = self.c("target_mult", {}) or {}
@@ -192,7 +196,7 @@ class BtstStrategy:
         if j:
             self._say(f"signal {what} ignored - {j['job_id']} is still open", area="signal", level="WARN")
             return
-        close = self.c("market_close", "15:30")
+        close = self.c("market_close", "15:45")
         if _secs(self.now()) >= _hm(close):
             self._after_close_signal(sig, res, m, what, close)
             return
@@ -304,7 +308,7 @@ class BtstStrategy:
     # ── the next day ────────────────────────────────────────────────────────
     def _manage(self, job):
         now = self.now()
-        if market_phase(now, start="09:15", end="15:30") != "open":
+        if not self._market_open(now):
             return
         jid = job["job_id"]
         ltp = self._watch(job)                  # first, so the day's high and low include this pass
@@ -690,7 +694,7 @@ class BtstStrategy:
         try:
             job = self.store.open_job()
             self.managing = bool(job and job["status"] == "open"
-                                 and market_phase(self.now(), start="09:15", end="15:30") == "open")
+                                 and self._market_open(self.now()))
             if job and job["status"] == "open":
                 if self.managing:
                     self._manage(job)

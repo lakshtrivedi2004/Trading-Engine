@@ -174,7 +174,8 @@ def main():
         return sess.angel
     prices = PriceWatch(session_fn=angel_session, rest_quote=rest.quote, log=BOOK.log,
                         ltp_poll_sec=float(cfg.get("ltp_poll_sec", 1)), ws_fresh_sec=float(cfg.get("ws_fresh_sec", 5)),
-                        use_ws=bool(cfg.get("use_websocket", True)))
+                        use_ws=bool(cfg.get("use_websocket", True)),
+                        hours=(cfg.get("market_open", "09:15"), cfg.get("market_close", "15:45")))
 
     def make_broker(mode):
         log(f"broker: {mode.upper()}" + (" - real orders, CARRYFORWARD" if mode == "live"
