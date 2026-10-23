@@ -194,17 +194,91 @@ check("the strict read alone gets the same", S.strict_read(SAMPLE) ==
 m = Model(GOOD)
 r = S.parse("Market update: NIFTY looks strong today", llm=m)
 check("no BTST + Disclaimer markers: not a signal, the model is never asked", not r["is_signal"] and m.calls == 0)
+WANT = {"indices": "NIFTY", "strike_price": 22800.0, "side": "CE", "price": 105.0}
 r = S.parse(SAMPLE, llm=Model(dict(GOOD, strike_price=22900)))
-check("a strike the message does not contain is refused", not r["is_signal"] and "22900" in r["reason"], r["reason"])
+check("the model's strike is not in the message: its answer is dropped, the template read stands in",
+      r["is_signal"] and r["parsed_by"] == "template" and r["signal"] == WANT and "22900" in r["reason"], r["reason"])
 r = S.parse(SAMPLE, llm=Model(dict(GOOD, price=130)))
-check("a target taken for the buy price (130 is in the text) is refused by the strict read",
-      not r["is_signal"] and "disagree" in r["reason"], r["reason"][:100])
+check("the model took a target (130) for the buy price: the template's price after 'Buy' (105) is used",
+      r["is_signal"] and r["parsed_by"] == "template" and r["signal"]["price"] == 105.0 and "disagree" in r["reason"],
+      r["reason"][:100])
 r = S.parse(SAMPLE, llm=Model(dict(GOOD, is_btst_signal=False, reason="a result post")))
-check("the model saying 'not a signal' is no signal", not r["is_signal"] and "not a signal" in r["reason"])
+check("the model says 'not a signal' to the exact signal template: the template read stands in",
+      r["is_signal"] and r["parsed_by"] == "template" and r["signal"] == WANT, r["reason"][:100])
+post = "BTST Also hit 125++ High 🎯\nNifty 22850 Call hit\nDisclaimer - Only for Educational Purposes"
+r = S.parse(post, llm=Model(dict(GOOD, is_btst_signal=False, reason="a result post")))
+check("...but a results post is not a signal when the model says so", not r["is_signal"]
+      and "not a signal" in r["reason"])
 r = S.parse(SAMPLE, llm=Model(boom=RuntimeError("429 quota")))
-check("the model down: the strict read stands in", r["is_signal"] and r["parsed_by"] == "regex", r["reason"][:80])
+check("the model down (error, quota, timeout): the template read stands in",
+      r["is_signal"] and r["parsed_by"] == "template" and r["signal"] == WANT, r["reason"][:80])
+for bad in (None, "NIFTY 22800 CE", ["x"], {"indices": "NIFTY"}, {"is_btst_signal": "yes"}):
+    r = S.parse(SAMPLE, llm=Model(bad))
+    if not (r["is_signal"] and r["parsed_by"] == "template" and r["signal"] == WANT):
+        break
+check("the model answers something that is not the JSON asked for (None, text, a list, missing keys): "
+      "the template read stands in, and parse never raises", r["is_signal"] and r["parsed_by"] == "template",
+      f"{bad!r}: {r['reason'][:90]}")
+r = S.parse(SAMPLE, llm=None)
+check("no model configured: the template read", r["is_signal"] and r["parsed_by"] == "template")
+loose = "BTST view\nNIFTY 22800 CE 105\nDisclaimer"
+r = S.parse(loose, llm=Model(boom=RuntimeError("timeout")))
+check("not the template but one clean line, and the model down: the strict read stands in",
+      r["is_signal"] and r["parsed_by"] == "regex" and r["signal"]["price"] == 105.0, r["reason"][:80])
+r = S.parse(loose, llm=Model(dict(GOOD, is_btst_signal=False, reason="a view, not a trade")))
+check("...but with no template the model's 'not a signal' stands", not r["is_signal"])
+r = S.parse(loose, llm=Model(dict(GOOD, price=22800)))
+check("...and a disagreement with no template is no trade", not r["is_signal"] and "disagree" in r["reason"])
 r = S.parse(SAMPLE, llm=Model(boom=RuntimeError("429 quota")), ai_fallback_regex=False)
 check("...unless ai_fallback_regex is off", not r["is_signal"])
+r = S.parse(SAMPLE, llm=Model(dict(GOOD, price=130)), ai_fallback_regex=False)
+check("...(off: a disagreement is no trade)", not r["is_signal"])
+
+REAL = [
+    ('2026-05-15 15:23:46', '#BTST TRADE ☄️☄️\nNIFTY 23600 Put Buy 145++\n\n🕯 Target\xa0\xa0 170\xa0\xa0 200\xa0\xa0\xa0230+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-05-18 15:26:31', '#BTST TRADE ☄️☄️\nNIFTY 23650 Call Buy 95++\n\n🕯 Target\xa0\xa0 115\xa0\xa0 140\xa0\xa0\xa0175+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-05-19 15:22:26', '#BTST TRADE ☄️☄️\nSENSEX 75200 Put Buy 465++\n\n🕯 Target\xa0\xa0 500\xa0\xa0 540\xa0\xa0\xa0580+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-05-20 15:27:54', '#BTST TRADE ☄️☄️\nSensex 75400 Put Buy 330++\n\n🕯 Target\xa0\xa0 365\xa0\xa0 405\xa0\xa0\xa0445+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-05-21 15:26:29', '#BTST TRADE ☄️☄️\nNifty 23650 Call Buy 160++\n\n🕯 Target\xa0\xa0 185\xa0\xa0 220\xa0\xa0\xa0260+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-05-22 15:19:39', '#BTST TRADE ☄️☄️\nNifty 23750 Put Buy 140++\n\n🕯 Target\xa0\xa0 165\xa0\xa0 195\xa0\xa0\xa0230+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-12 15:35:46', '#BTST TRADE ☄️☄️\nNIFTY 22350 Put Buy 82++\n\n🕯 Target\xa0\xa0 105  \xa0135\xa0  166+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-13 15:33:00', '#BTST TRADE ☄️☄️\nSENSEX 73000 CALL Buy 475++\n\n🕯 Target\xa0\xa0 505  \xa0540\xa0  580+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-14 15:35:03', '#BTST TRADE ☄️☄️\nNIFTY 22600 PUT Buy 125++\n\n🕯 Target\xa0\xa0 150  \xa0180\xa0  215+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-15 15:38:10', '#BTST TRADE ☄️☄️\nNIFTY 22950 CALL Buy 115++\n\n🕯 Target\xa0\xa0 140  \xa0170\xa0  200+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-16 15:39:13', '#BTST TRADE ☄️☄️\nSENSEX 74800 CALL Buy 365++\n\n🕯 Target\xa0\xa0 405  \xa0440\xa0  480+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-19 15:37:05', '#BTST TRADE ☄️☄️\nSENSEX 73800 Put Buy 350++\n\n🕯 Target\xa0\xa0 380  \xa0420\xa0  460+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-21 15:37:17', '#BTST TRADE ☄️☄️\nNIFTY 22850 CALL Buy 115++\n\n🕯 Target\xa0\xa0 140\xa0 \xa0170\xa0\xa0 200+\n\nDisclaimer - Only for Educational Purposes'),
+    ('2026-10-22 15:38:35', '#BTST TRADE ☄️☄️\nNIFTY 22800 Call Buy 105++\n\n🕯 Target\xa0\xa0 130  \xa0160\xa0  200+\n\nDisclaimer - Only for Educational Purposes'),
+]
+
+reads = [(at, S.template_read(t), S.parse(t, llm=Model(boom=RuntimeError("down")))) for at, t in REAL]
+check(f"all {len(REAL)} real signals from the channel (May - Oct 2026) read by the template, model down",
+      all(tr and p["is_signal"] and p["signal"] == tr for _, tr, p in reads),
+      next((f"{at}: {p['reason']}" for at, tr, p in reads if not (tr and p["is_signal"])), ""))
+check("...e.g. 15 May: NIFTY 23600 PE @ 145; 19 May: SENSEX 75200 PE @ 465; 13 Oct: SENSEX 73000 CE @ 475",
+      reads[0][1] == {"indices": "NIFTY", "strike_price": 23600.0, "side": "PE", "price": 145.0}
+      and reads[2][1] == {"indices": "SENSEX", "strike_price": 75200.0, "side": "PE", "price": 465.0}
+      and reads[7][1] == {"indices": "SENSEX", "strike_price": 73000.0, "side": "CE", "price": 475.0})
+VARIANTS = {
+    "NIFTY INTRADAY Level\nLevel for Upside\n22850 CallBuy Above-   100++":
+        {"indices": "NIFTY", "strike_price": 22850.0, "side": "CE", "price": 100.0},
+    "#BTST TRADE\nBANK NIFTY 51,000 PE Buy @ 320++\nTarget 360\nDisclaimer":
+        {"indices": "BANKNIFTY", "strike_price": 51000.0, "side": "PE", "price": 320.0},
+    "#BTST TRADE\nNIFTY 50 22800 CE 28 OCT Buy 105++\nTarget 130\nDisclaimer":
+        {"indices": "NIFTY", "strike_price": 22800.0, "side": "CE", "price": 105.0},
+    "#BTST TRADE ☄️\nNifty 📌 22800 📌 Call Buy 105.5++\nTarget 130\nDisclaimer":
+        {"indices": "NIFTY", "strike_price": 22800.0, "side": "CE", "price": 105.5},
+    "#BTST TRADE\nFIN NIFTY 23500 Put Buy 90\nTarget 120\nDisclaimer":
+        {"indices": "FINNIFTY", "strike_price": 23500.0, "side": "PE", "price": 90.0},
+}
+bad = {t: S.strict_read(t) for t, want in VARIANTS.items() if S.strict_read(t) != want}
+check("variants read: 'CallBuy' with the index a line above, BANK NIFTY, 51,000, NIFTY 50, a date before 'Buy', "
+      "emojis between, FIN NIFTY", not bad, str(bad))
+NOT = ["Jay Shree Ram Trader's\nDisclaimer-\nBTST is always Risky, So Trade with less Quantity",
+       "Nifty 22850 Call hit 🎯", "BTST Also hit 125++ High / 10 Point Profit", "✅💰 READY FOR BTST TRADE 🍾",
+       "😀1ST TRADE - (BTST) 22800 CE / 75 POINT X 130 QTY"]
+check("the channel's other posts do not read as the template (disclaimer, results, 'READY FOR BTST TRADE')",
+      not any(S.template_read(t) for t in NOT), str([t for t in NOT if S.template_read(t)]))
 put = SAMPLE.replace("NIFTY 22800 Call Buy 105", "SENSEX 73000 PUT buy 210")
 check("PUT on SENSEX reads too", S.strict_read(put) ==
       {"indices": "SENSEX", "strike_price": 73000.0, "side": "PE", "price": 210.0})
@@ -355,7 +429,7 @@ check("every day listed, newest first, with why a day was not traded",
 section("5b. No signal, no trade - and the day is still listed")
 at(2026, 10, 22, 15, 20)
 stq, storeq, brokerq, logsq, sentq = desk(model=Model(dict(GOOD, is_btst_signal=False, reason="a result post")))
-stq.on_message(msg(40, SAMPLE, 15, 18))
+stq.on_message(msg(40, "BTST Also hit 125++ High 🎯\nDisclaimer - Only for Educational Purposes", 15, 18))
 stq.on_message(msg(41, "Good evening all", 15, 19))
 stq.step()
 check("15:20, only a non-signal message: nothing bought, no day record yet (the window is open)",
