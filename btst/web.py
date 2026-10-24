@@ -163,8 +163,11 @@ function drawHead(d){
     + (lp ? chip(lp + " warning/error" + (lp > 1 ? "s" : "") + " today", "mid") : "");
   const now = d.now || "";
   document.getElementById("sub").innerHTML = `${day(now)}, ${esc(now.slice(11, 19))} IST · signals read ${esc(d.window)} IST · ${esc(d.note)}`;
-  document.getElementById("ctl").innerHTML = d.open_job ? `<span class="n">mode switch after the open trade closes</span>`
-    : `<button class="btn ${live ? "" : "danger"}" ${BUSY ? "disabled" : ""} onclick="switchMode('${live ? "paper" : "live"}')">Switch to ${live ? "PAPER" : "LIVE"}</button>`;
+  const lock = d.open_job ? `a trade is open (${d.open_job.job_id}) - the mode can be switched once it is closed` : "";
+  document.getElementById("ctl").innerHTML =
+    `<button class="btn ${live ? "" : "danger"}" ${BUSY || lock ? "disabled" : ""} title="${esc(lock || (live ? "back to paper trading" : "real orders with real money"))}"
+       onclick="switchMode('${live ? "paper" : "live"}')">Switch to ${live ? "PAPER" : "LIVE"}</button>`
+    + (lock ? `<span class="n" style="margin-left:6px">locked while a trade is open</span>` : "");
   document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">(${lp})</span>` : "");
 }
 
