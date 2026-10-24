@@ -46,6 +46,13 @@ from btst.contracts import days_left, find_option, tick_round
 from btst.logbook import fmt
 
 
+# What the page shows of the rules - with the values the code falls back to.
+RULE_DEFAULTS = {"decide_at": "09:15:30", "exit_at": "15:14", "avg_down_loss_pct": 20.0, "deep_loss_pct": 50.0,
+                 "avg_target_pct": 20.0, "deep_target_pct": 10.0, "trail_step_points": 1.0,
+                 "trail_floor_points": 2.0, "amo_at": "17:00", "market_close": "15:45",
+                 "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0}
+
+
 def _hm(s):
     p = [int(x) for x in str(s).split(":")]
     return p[0] * 3600 + p[1] * 60 + (p[2] if len(p) > 2 else 0)
@@ -948,6 +955,8 @@ class BtstStrategy:
     def status(self):
         j = self.store.open_job()
         return {"now": self.now().isoformat(timespec="seconds"), "mode": self.broker.mode,
+                "market": market_phase(self.now(), start=self.c("market_open", "09:15"),
+                                       end=self.c("market_close", "15:45")),
                 "channel": self.channel, "note": self.status_note,
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
                 "open_job": j, "jobs": self.store.recent_jobs(20),
@@ -955,7 +964,4 @@ class BtstStrategy:
                 "price": self.prices.state() if self.prices is not None else None,
                 "health": dict(self.health),
                 "next_session": self._next_session(self.now().date()).isoformat(),
-                "rules": {k: self.c(k) for k in ("decide_at", "exit_at", "avg_down_loss_pct", "deep_loss_pct",
-                                                  "avg_target_pct", "deep_target_pct", "trail_step_points",
-                                                  "trail_floor_points", "amo_at", "market_close",
-                                                  "session_refresh_at", "trade_amount", "amount_tolerance_pct")}}
+                "rules": {k: self.c(k, v) for k, v in RULE_DEFAULTS.items()}}

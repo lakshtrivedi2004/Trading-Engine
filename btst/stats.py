@@ -50,9 +50,13 @@ def by_day(jobs, quiet_days=()):
     """One row per day, newest first: the signal, the trade and its result -
     and the days whose scan window passed with no signal (no trade)."""
     rows = []
+    traded = {j.get("trade_date") for j in jobs}
     for d in quiet_days:
+        if d.get("date") in traded:                 # a day with a trade (or a signal) is not a no-signal day
+            continue
         rows.append({"date": d.get("date"), "job_id": "", "mode": "", "status": "no signal - no trade",
-                     "signal": "", "reason": f"{d.get('messages_read', 0)} messages read in the scan window, none a signal"})
+                     "signal": "", "messages_read": d.get("messages_read", 0),
+                     "reason": f"{d.get('messages_read', 0)} messages read in the scan window, none a signal"})
     for k, j in enumerate(sorted(jobs, key=lambda j: (j.get("trade_date", ""), j.get("created_at", "")),
                                  reverse=True)):
         r, s, c, p = j.get("result") or {}, j.get("signal") or {}, j.get("contract") or {}, j.get("position") or {}
