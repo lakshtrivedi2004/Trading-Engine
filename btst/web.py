@@ -85,7 +85,7 @@ PAGE = r"""<!DOCTYPE html>
   .kpis div{border:1px solid var(--hair);background:var(--surface);padding:6px 8px;font-size:12px;color:var(--dim)}
   .kpis b{display:block;font-size:16px;color:var(--ink);font-weight:500}
   .empty{color:var(--dim);font-style:italic;padding:6px 0}
-  pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Menlo,monospace}
+  pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Menlo,monospace;max-height:8.6em;overflow:auto}
   details.msgs summary{cursor:pointer;color:var(--dim);font-size:13px;margin-bottom:6px}
   @media (max-width:640px){.hero{text-align:left}.hero .pnl{font-size:24px}.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -174,10 +174,11 @@ function bar(avg, now, target, low, tr){
   const at = x => Math.max(0, Math.min(100, 100 * (x - lo) / (hi - lo)));
   const a = at(avg), n = num(now) ? at(now) : a;
   const fill = n >= a ? `<b style="left:${a}%;width:${n - a}%;background:var(--up)"></b>` : `<b style="left:${n}%;width:${a - n}%;background:var(--down)"></b>`;
-  const mark = (x, label, cl) => `<span class="tick" style="left:${at(x)}%"></span><span class="mk ${cl || ""}" style="left:${at(x)}%">${label}</span>`;
+  const edge = x => at(x) > 88 ? "transform:translateX(-100%)" : (at(x) < 12 ? "transform:none" : "");
+  const mark = (x, label, cl) => `<span class="tick" style="left:${at(x)}%"></span><span class="mk ${cl || ""}" style="left:${at(x)}%;${edge(x)}">${label}</span>`;
   const floor = tr && num(tr.floor) ? `<span class="lab" style="left:${at(tr.floor)}%;transform:translateX(-50%)">floor ${n2(tr.floor)}</span>` : "";
   return `<div class="bar">${fill}${mark(avg, "avg " + n2(avg))}${mark(target, "target " + n2(target), "up")}`
-    + (num(now) ? `<span class="mk ${now >= avg ? "up" : "down"}" style="left:${n}%;top:14px">now ${n2(now)}</span>` : "") + floor + `</div>`;
+    + (num(now) ? `<span class="mk ${now >= avg ? "up" : "down"}" style="left:${n}%;top:14px;${edge(now)}">now ${n2(now)}</span>` : "") + floor + `</div>`;
 }
 
 function plan(d, j, p){
@@ -232,7 +233,7 @@ function drawOpen(d){
       ${box("Target", n2(j.target_price), `${tKind} · ${esc(j.target_last_status || "–")}${num(away) ? " · " + pc(away) + " away" : ""}`)}
       ${box("Signal", `@ ${esc(s.price)}`, `posted ${tm((j.message || {}).date)} · read by ${esc(s.parsed_by)}`)}
       ${box("High / low since entry", `${n2(j.ltp_high)} / ${n2(j.ltp_low)}`, `${pc(p.avg_price ? 100 * (j.ltp_high - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (j.ltp_low - p.avg_price) / p.avg_price : null)}`)}
-      ${box("AMO", amoTxt, amoNote)}
+      ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
     </div>
     ${plan(d, j, p)}
   </div>`;
