@@ -53,6 +53,16 @@ RULE_DEFAULTS = {"decide_at": "09:15:30", "exit_at": "15:14", "avg_down_loss_pct
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0}
 
 
+def _no_channel(job):
+    """A job for the page: without the channel's name (owner, 24 Oct 2026)."""
+    if not job:
+        return job
+    j = dict(job)
+    if isinstance(j.get("message"), dict):
+        j["message"] = {k: v for k, v in j["message"].items() if k != "channel"}
+    return j
+
+
 def _hm(s):
     p = [int(x) for x in str(s).split(":")]
     return p[0] * 3600 + p[1] * 60 + (p[2] if len(p) > 2 else 0)
@@ -160,7 +170,7 @@ class BtstStrategy:
         if s <= t < e and "open" not in said:
             said.add("open")
             self._log("window", f"scan window OPEN {self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}: "
-                                f"reading {self.channel} for a BTST signal")
+                                f"reading the channel for a BTST signal")
         if t >= e and "closed" not in said and ("open" in said or t < e + 3600):
             said.add("closed")
             read = self.store.messages_on(day)
@@ -957,10 +967,10 @@ class BtstStrategy:
         return {"now": self.now().isoformat(timespec="seconds"), "mode": self.broker.mode,
                 "market": market_phase(self.now(), start=self.c("market_open", "09:15"),
                                        end=self.c("market_close", "15:45")),
-                "channel": self.channel, "note": self.status_note,
+                "note": self.status_note,
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
-                "open_job": j, "jobs": self.store.recent_jobs(20),
-                "messages": self.store.recent_messages(20),
+                "open_job": _no_channel(j), "jobs": [_no_channel(x) for x in self.store.recent_jobs(20)],
+                "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.recent_messages(20)],
                 "price": self.prices.state() if self.prices is not None else None,
                 "health": dict(self.health),
                 "next_session": self._next_session(self.now().date()).isoformat(),

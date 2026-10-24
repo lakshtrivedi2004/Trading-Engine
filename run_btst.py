@@ -8,7 +8,7 @@ Mode is .btst_mode (repo root): "live" sends real orders, anything else is
 paper. The page switches it (POST /api/mode), only while no trade is open.
 
 Reads from .angel.env: the Angel login (ANGEL_*), TELEGRAM_BTST_CHANNEL (the
-signal channel, e.g. https://t.me/btst_karo), TELEGRAM_API_ID / _HASH (the
+signal channel's link or @name - only there, never in the code), TELEGRAM_API_ID / _HASH (the
 user login, see arb/utils.py), GEMINI_API_KEY (signal reading), DATABASE_URL
 (MongoDB), TELEGRAM_BOT_TOKEN / _CHAT_ID (alerts). The procedure is
 btst/strategy.py; settings are config/btst.json. Every step is logged
@@ -113,9 +113,11 @@ def main():
     env = _load_env_file(os.path.join(ROOT, ".angel.env"))
     env.update({k: v for k, v in os.environ.items() if k.startswith(("TELEGRAM_", "GEMINI_"))})
     channel = str(env.get("TELEGRAM_BTST_CHANNEL", "")).strip()
+    # never shown on the page or in the log: the link, @name and bare name
+    BOOK.hide(channel, channel.rstrip("/").rsplit("/", 1)[-1], channel.rstrip("/").rsplit("/", 1)[-1].lstrip("@"))
     if not channel:
         log("TELEGRAM_BTST_CHANNEL is not set in .angel.env - cannot start", "ERROR", "start")
-        raise SystemExit("TELEGRAM_BTST_CHANNEL is not set in .angel.env (e.g. https://t.me/btst_karo)")
+        raise SystemExit("TELEGRAM_BTST_CHANNEL is not set in .angel.env (the signal channel's t.me link)")
     creds = Credentials.load()
     if creds.missing():
         log(f"missing Angel credentials in .angel.env: {creds.missing()} - cannot start", "ERROR", "start")
@@ -186,18 +188,18 @@ def main():
 
     port = args.port or int(cfg.get("port", 9000))
     web.serve(strategy, store, switch_mode, port=port, book=BOOK)
-    log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | channel {channel} | "
+    log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | "
         f"scan {cfg.get('scan_start')}-{cfg.get('scan_end')} | model {cfg.get('ai_model') if llm else 'none'}",
         area="start")
     if notifier:
-        notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>\nChannel {channel}\nPage :{port}")
+        notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>\nPage :{port}")
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     def start_reader():
-        log(f"starting the Telegram reader on {channel} (last {cfg.get('read_last_messages', 50)} "
+        log(f"starting the Telegram reader on the signal channel (last {cfg.get('read_last_messages', 50)} "
             f"messages, poll {cfg.get('channel_poll_sec', 5)} s)", area="channel")
         return read_channel_messages(channel=channel, last_messages=int(cfg.get("read_last_messages", 50)),
                                      on_message=strategy.on_message,

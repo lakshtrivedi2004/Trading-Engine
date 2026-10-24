@@ -173,7 +173,7 @@ def desk(model=None, cfg=None):
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0}
     conf.update(cfg or {})
     logs, sent = [], []
-    st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "btst_karo",
+    st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "test_channel",
                       log=logs.append, now=lambda: CLOCK["t"],
                       notifier=SimpleNamespace(send=sent.append), cost_model=CostModel.load())
     return st, store, broker, logs, sent
@@ -291,7 +291,7 @@ stL2.on_message(msg(50, SAMPLE, 15, 35))
 stL2.step()
 jL2 = storeL2.recent_jobs()
 check("a signal posted 15:35 (scan to 15:40) is read and saved as a signal",
-      storeL2.message_seen("btst_karo", 50) and storeL2.recent_messages(5)[0]["is_signal"])
+      storeL2.message_seen("test_channel", 50) and storeL2.recent_messages(5)[0]["is_signal"])
 check("...but not traded: the day's job is 'rejected - after the market closed', nothing bought, Telegram told",
       len(jL2) == 1 and jL2[0]["status"] == "rejected" and "after the market closed" in jL2[0]["reject_reason"]
       and brokerL2.n == 0 and not storeL2.open_job() and any("NOT traded" in x for x in sentL2),
@@ -300,7 +300,7 @@ at(2026, 10, 22, 15, 41)
 stL2.on_message(msg(51, SAMPLE.replace("22800", "22900"), 15, 41))
 stL2.step()
 check("a message at 15:41 is not read; no 'no signal' day recorded (the day has its job)",
-      not storeL2.message_seen("btst_karo", 51) and not storeL2.day_recorded("2026-10-22"))
+      not storeL2.message_seen("test_channel", 51) and not storeL2.day_recorded("2026-10-22"))
 
 at(2026, 10, 22, 15, 36, 20)
 stL3, storeL3, brokerL3, _, _ = desk(cfg={"scan_end": "16:00", "market_close": "15:45"})
@@ -340,7 +340,7 @@ st.on_message(msg(1, SAMPLE, 15, 10))
 st.on_message(msg(2, "BTST chat\nDisclaimer", 15, 16))
 st.step()
 check("a message posted before 15:15 is not read; one in the window is (and saved)",
-      not store.message_seen("btst_karo", 1) and store.message_seen("btst_karo", 2) and not store.open_job())
+      not store.message_seen("test_channel", 1) and store.message_seen("test_channel", 2) and not store.open_job())
 st.on_message(msg(3, SAMPLE, 15, 16))
 st.step()
 j = store.open_job()
@@ -359,7 +359,7 @@ check("a second signal the same day is ignored (one BTST a day)",
       len(store.recent_jobs()) == 1 and any("one BTST a day" in x for x in logs))
 st.on_message(msg(5, SAMPLE, 15, 31))
 st.step()
-check("a message at 15:31 is not read", not store.message_seen("btst_karo", 5))
+check("a message at 15:31 is not read", not store.message_seen("test_channel", 5))
 logs3 = list(logs)                                               # section 7 reads the day's log
 
 section("4a. Next day, up at the open: target held, hit")
@@ -607,7 +607,7 @@ book = Logbook(echo=False)
 book.log("INFO  message | #7 posted 15:16: hello")
 book.log("WARN  signal | #7 NOT a signal - no markers")
 book.log("TRADE order | BUY X x65 at market")
-book.log("[btst_karo channel #9 2026-10-22 15:17] line one\nline two failed")      # the reader's plain line
+book.log("[test_channel #9 2026-10-22 15:17] line one\nline two failed")      # the reader's plain line
 book.log("[telegram-user] not logged in yet - once, by hand")
 book.log("ERROR manage | error: boom\nTraceback (most recent call last):\n  File \"x.py\", line 1\nValueError: boom")
 book.log("WARN  mongo | could not connect to mongodb+srv://user:s3cretpw@cluster0.x.net/?appName=y key AIzaSyA1234567890abcdefghijk")
@@ -740,7 +740,7 @@ def desk8():
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "manage_poll_sec": 1, "poll_sec": 3}
     lg = []
-    s_ = BtstStrategy(conf, store, br, lambda: MASTER, Model(GOOD), "btst_karo", log=lg.append,
+    s_ = BtstStrategy(conf, store, br, lambda: MASTER, Model(GOOD), "test_channel", log=lg.append,
                       now=lambda: CLOCK["t"], notifier=SimpleNamespace(send=lambda *_: None),
                       cost_model=CostModel.load(), prices=pw)
     return s_, store, br, pw, lg
@@ -782,7 +782,7 @@ s9.step()                                    # the decision: hold, the target 21
 pw9c = watch()
 s9b = BtstStrategy(s9.cfg, st9, PaperBtstBroker(pw9c.price, log=lambda *_: None, watch=pw9c,
                                                 today=lambda: CLOCK["t"].date()),
-                   lambda: MASTER, None, "btst_karo", log=lg9.append, now=lambda: CLOCK["t"], prices=pw9c)
+                   lambda: MASTER, None, "test_channel", log=lg9.append, now=lambda: CLOCK["t"], prices=pw9c)
 s9b.resume()
 check("after a restart in paper the open trade is adopted: position and today's target back",
       s9b.broker.net_qty(C) == 65 and st9.get_job(j9["job_id"])["target_order"]["order_id"] in s9b.broker.orders)
@@ -938,7 +938,7 @@ def live_desk(day=22, cfg=None):
     conf.update(cfg or {})
     lg, sent = [], []
     s_ = BtstStrategy(conf, store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None), lambda: MASTER,
-                      Model(GOOD), "btst_karo", log=lg.append, now=lambda: CLOCK["t"],
+                      Model(GOOD), "test_channel", log=lg.append, now=lambda: CLOCK["t"],
                       notifier=SimpleNamespace(send=sent.append), cost_model=CostModel.load())
     at(2026, 10, day, 15, 16)
     s_.on_message(msg(3, SAMPLE, 15, 16, day=day))
@@ -1304,7 +1304,7 @@ check("market shut, a trade open: its last traded price fetched, P&L on it (98.5
 PRICE["ltp"] = 97.0
 sC1.step()
 check("...not fetched again within 10 minutes", stC1.open_job()["last_ltp"] == 98.5)
-sC2 = BtstStrategy(sC1.cfg, stC1, brC1, lambda: MASTER, None, "btst_karo", log=lgC1.append, now=lambda: CLOCK["t"])
+sC2 = BtstStrategy(sC1.cfg, stC1, brC1, lambda: MASTER, None, "test_channel", log=lgC1.append, now=lambda: CLOCK["t"])
 sC2.resume()
 sC2.step()
 check("...and fetched at once after a restart", stC1.open_job()["last_ltp"] == 97.0)
@@ -1332,6 +1332,25 @@ check("...and the amount is the same every trade - no compounding (the config's 
 check("the total stays strictly below Rs 15,750: 2 lots of exactly Rs 7,875 (= 15,750) -> 1 lot; Rs 7,874.95 -> 2",
       sS1._size({"lot_size": 25}, 315.0)[0] == 1 and sS1._size({"lot_size": 25}, 314.998)[0] == 2)
 PRICE["ltp"] = 106.0
+
+hb = Logbook(echo=False)
+hb.hide("https://t.me/some_chan", "some_chan")
+hb.log("INFO  channel | starting the reader on https://t.me/some_chan")
+hb.log("[some_chan #12 23 Oct 15:36:13] #BTST TRADE")
+hrows, _ = hb.lines()
+check("the channel's link and name never reach the log view: replaced by 'channel'",
+      all("some_chan" not in r["text"] for r in hrows) and any("[channel #12" in r["text"] for r in hrows),
+      str([r["text"] for r in hrows]))
+fd2, path2 = tempfile.mkstemp(suffix=".log")
+with os.fdopen(fd2, "w") as fh:
+    fh.write("[2026-10-23 15:38:51] INFO  channel | [some_chan #22932 23 Oct 15:36:13] old line\n")
+hb2 = Logbook(path=path2, echo=False)
+hb2.hide("some_chan")
+check("...lines already in btst.log too", "some_chan" not in hb2.lines()[0][0]["text"])
+os.remove(path2)
+sst = web.state(st, store)
+check("the page's state carries no channel name (no 'channel' key, none in messages or jobs)",
+      "test_channel" not in _json.dumps(sst, default=str) and "channel" not in sst)
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

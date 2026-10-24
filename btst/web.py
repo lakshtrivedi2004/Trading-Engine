@@ -157,12 +157,12 @@ function drawHead(d){
   document.getElementById("chips").innerHTML =
     `<span class="chip ${live ? "live" : "paper"}">${live ? "LIVE" : "PAPER"}</span>`
     + chip(mk[0], mk[1])
-    + chip("Telegram " + (h.reader || "–"), h.reader === "up" ? "ok" : (h.reader ? "bad" : ""), d.channel)
+    + chip("Telegram " + (h.reader || "–"), h.reader === "up" ? "ok" : (h.reader ? "bad" : ""), "the signal channel reader")
     + chip("Angel " + (a.last_error ? "error" : (a.logged_in_at ? "logged in " + tm(a.logged_in_at) : "–")), a.last_error ? "bad" : (a.logged_in_at ? "ok" : ""), a.last_error || "")
     + chip("Websocket " + (p.websocket ? "connected" : (p.symbol ? "off" : "idle")), p.websocket ? "ok" : (p.symbol && d.market === "open" ? "bad" : ""), p.symbol || "runs while a trade is open in market hours")
     + (lp ? chip(lp + " warning/error" + (lp > 1 ? "s" : "") + " today", "mid") : "");
   const now = d.now || "";
-  document.getElementById("sub").innerHTML = `${day(now)}, ${esc(now.slice(11, 19))} IST · channel ${esc(d.channel)} · signals read ${esc(d.window)} IST · ${esc(d.note)}`;
+  document.getElementById("sub").innerHTML = `${day(now)}, ${esc(now.slice(11, 19))} IST · signals read ${esc(d.window)} IST · ${esc(d.note)}`;
   document.getElementById("ctl").innerHTML = d.open_job ? `<span class="n">mode switch after the open trade closes</span>`
     : `<button class="btn ${live ? "" : "danger"}" ${BUSY ? "disabled" : ""} onclick="switchMode('${live ? "paper" : "live"}')">Switch to ${live ? "PAPER" : "LIVE"}</button>`;
   document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">(${lp})</span>` : "");
@@ -295,7 +295,7 @@ function drawSys(d){
   document.getElementById("sys").innerHTML = `<div class="grid">
     ${box("Angel session", a.logged_in_at ? "logged in " + tm(a.logged_in_at) : "–", `${a.logins || 0} login(s) · fresh login daily at ${esc(R.session_refresh_at || "–")}${a.auth_refreshes ? " · " + a.auth_refreshes + " token re-login(s)" : ""}${a.last_error ? " · last error: " + esc(a.last_error) : ""}`)}
     ${box("Live price", p.websocket ? "websocket" : (p.symbol ? "LTP call" : "idle"), p.symbol ? `${esc(p.symbol)} · ${n0(p.ticks)} ticks · ${n0(p.ltp_calls)} LTP calls${p.ws_restarts ? " · " + p.ws_restarts + " restart(s)" : ""}` : "the websocket runs while a trade is open in market hours")}
-    ${box("Telegram reader", h.reader || "–", esc(d.channel))}
+    ${box("Telegram reader", h.reader || "–", "reads the signal channel (set in .angel.env)")}
     ${box("Holidays", `${ho.known_this_year ?? "–"} this year`, `${esc(ho.source || "")}${(ho.next || []).length ? " · next " + ho.next.map(day).join(", ") : ""}${ho.error ? " · fetch error: " + esc(ho.error) : ""}`)}
     ${box("Sizing", R.trade_amount ? rsp(R.trade_amount) + " ± " + n0(R.amount_tolerance_pct) + "%" : "fixed lots", R.trade_amount ? "the most lots below " + rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100)) + " · no compounding" : "")}
   </div>`;

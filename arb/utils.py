@@ -15,10 +15,11 @@ checkout:
 After that the function sends without asking anything.
 
 read_channel_messages reads a channel through the same login: its last
-read_last_messages messages at once, then every new one as it comes.
-config/telegram.json sets the channel (https://t.me/btst_karo), how many of
-the last messages to print at start (50) and the poll interval. run_bot
-starts it when the engine starts.
+read_last_messages messages at once, then every new one as it comes. The
+channel is TELEGRAM_BTST_CHANNEL in .angel.env - never written in the code
+(owner, 24 Oct 2026); config/telegram.json sets how many of the last messages
+to print at start (50) and the poll interval. run_bot starts it when the
+engine starts.
 
     venv/bin/python arb/utils.py read                  # the last N, then live, until Ctrl+C
 """
@@ -128,9 +129,6 @@ def send_channel_message(text, channel=None, parse_mode="html", interactive=Fals
     return box.get("sent", False)
 
 
-READ_CHANNEL = "https://t.me/btst_karo"
-
-
 def read_channel_messages(channel=None, last_messages=None, on_message=None, poll_sec=None,
                           background=True, stop_event=None, env_path=None, log=print,
                           config_path=None):
@@ -138,12 +136,14 @@ def read_channel_messages(channel=None, last_messages=None, on_message=None, pol
     its last `last_messages` messages at once, oldest first, then every new
     one as it arrives, until stop_event is set (or the process ends).
 
-    channel, last_messages and poll_sec default to config/telegram.json
-    (read_channel, read_last_messages, read_poll_sec); without it,
-    https://t.me/btst_karo, 50 and 10 s. last_messages 0 prints none at start.
+    channel defaults to TELEGRAM_BTST_CHANNEL in .angel.env (the only place
+    it is written); without it nothing is read (logged, None returned).
+    last_messages and poll_sec default to config/telegram.json
+    (read_last_messages, read_poll_sec), else 50 and 10 s. last_messages 0
+    prints none at start.
 
     on_message(msg) gets each telethon Message (msg.id, msg.date, msg.text);
-    by default it is printed as "[btst_karo #id 21 Oct 16:40:05] text".
+    by default it is printed as "[channel from env #id 21 Oct 16:40:05] text".
     Telegram pushes new posts only for channels the account has joined, so
     the channel is also polled every poll_sec seconds - it works joined or
     not, and nothing is printed twice.
@@ -160,7 +160,12 @@ def read_channel_messages(channel=None, last_messages=None, on_message=None, pol
         pass
     except Exception as e:
         log(f"[telegram-user] {config_path or CONFIG} unreadable ({e!r}); using the defaults")
-    channel = channel or cfg.get("read_channel") or READ_CHANNEL
+    if not channel:
+        env = _load_env_file(env_path or os.path.join(ROOT, ".angel.env"))
+        channel = str(os.environ.get("TELEGRAM_BTST_CHANNEL") or env.get("TELEGRAM_BTST_CHANNEL") or "").strip()
+    if not channel:
+        log("[telegram-user] TELEGRAM_BTST_CHANNEL is not set in .angel.env - no channel is read")
+        return None
     try:
         last_messages = max(0, int(cfg.get("read_last_messages", 50)
                                    if last_messages is None else last_messages))

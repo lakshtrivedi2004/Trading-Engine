@@ -38,6 +38,7 @@ def fmt(level, area, text):
 class Logbook:
     def __init__(self, path=None, keep=5000, echo=True):
         self.path, self.echo = path, echo
+        self.hidden = []                # words never shown (the signal channel's link and name)
         self.ring = collections.deque(maxlen=int(keep))
         self.lock = threading.Lock()
 
@@ -48,6 +49,7 @@ class Logbook:
         text = redact(str(text)).rstrip()
         for pat, rep in _SECRETS:
             text = pat.sub(rep, text)
+        text = self._hide(text)
         m = _TAGGED.match(text)
         if m:
             level, area, body = m.group(1), m.group(2), m.group(3)
@@ -65,6 +67,21 @@ class Logbook:
         if self.echo:
             print(line, flush=True)
         return line
+
+    def hide(self, *words):
+        """Never show these (the channel's link, @name and name - owner, 24 Oct
+        2026): replaced by "channel" in new lines and in lines read back."""
+        for w in words:
+            w = str(w or "").strip()
+            if len(w) >= 3 and w not in self.hidden:
+                self.hidden.append(w)
+        self.hidden.sort(key=len, reverse=True)     # the link before the bare name inside it
+
+    def _hide(self, text):
+        for w in self.hidden:
+            if w in text:
+                text = text.replace(w, "channel")
+        return text
 
     def sink(self, area):
         """A one-argument log function for code that logs plain text."""
@@ -85,6 +102,8 @@ class Logbook:
         if scan is None:                # a filter (an older day, a job id) has to look further back
             scan = 40000 if (group or q or day) else max(200, int(limit) * 4)
         raw, source = self._source(int(scan))
+        if self.hidden:
+            raw = [self._hide(x) for x in raw]          # older lines written before it was hidden
         out, cur, tb = [], None, False
         for line in raw:
             m = _LINE.match(line)

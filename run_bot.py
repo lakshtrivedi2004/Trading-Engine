@@ -786,8 +786,9 @@ def main():
     log(f"market phase: {phase} ({now_ist().strftime('%a %d %b %H:%M IST')})")
 
     if not args.status:
-        # Owner, 21 Oct 2026: at start, print the btst_karo channel's last
-        # message, then each new one (arb/utils.py). Its own daemon thread;
+        # Owner, 21 Oct 2026: at start, print the signal channel's last
+        # messages, then each new one (arb/utils.py; the channel is
+        # TELEGRAM_BTST_CHANNEL in .angel.env). Its own daemon thread;
         # nothing it does can stop the engine.
         try:
             from arb.utils import read_channel_messages
