@@ -71,6 +71,7 @@ def by_day(jobs, quiet_days=()):
             "buy_at": p.get("entry_at"), "avg_price": avg, "invested": p.get("invested"),
             "added_qty": p.get("added_qty"), "added_price": p.get("added_price"), "added_at": p.get("added_at"),
             "now_price": now_px, "now_at": r.get("closed_at") or j.get("last_ltp_at"), "live_pnl": pnl,
+            "now_source": None if r else j.get("last_ltp_source"),
             "live_pct": pct, "high": j.get("ltp_high"), "low": j.get("ltp_low"),
             "target": j.get("target_price"), "target_kind": to.get("kind"), "target_variety": to.get("variety"),
             "target_status": j.get("target_last_status"), "watched": bool(j.get("soft_target")),

@@ -75,6 +75,7 @@ class BtstStrategy:
         self.touch_said = None
         self.managing = False
         self.last_trail_modify = 0.0
+        self.last_offhours_price = 0.0     # 0: the first pass after a start fetches at once
         self.health = {}                # the runner's view: session, websocket, reader, holidays
         self.last_status_log = 0.0
         self.window_said = {}           # day -> "open" / "closed" already logged
@@ -428,8 +429,9 @@ class BtstStrategy:
             return job.get("last_ltp")
         hi = max(float(job.get("ltp_high") or ltp), ltp, peak or 0.0)
         lo = min(float(job.get("ltp_low") or ltp), ltp)
-        upd = {"last_ltp": ltp, "last_ltp_at": self._ts(), "ltp_high": hi, "ltp_low": lo}
-        moved = hi != job.get("ltp_high") or lo != job.get("ltp_low")
+        src = (self.prices.state().get("source") or "ltp call") if self.prices is not None else "ltp call"
+        upd = {"last_ltp": ltp, "last_ltp_at": self._ts(), "ltp_high": hi, "ltp_low": lo, "last_ltp_source": src}
+        moved = hi != job.get("ltp_high") or lo != job.get("ltp_low") or src != job.get("last_ltp_source")
         job.update(upd)
         if moved or time.time() - self.last_store_at >= float(self.c("ltp_store_sec", 5)):
             self.last_store_at = time.time()        # MongoDB: on a new high or low, else every few seconds
@@ -721,6 +723,35 @@ class BtstStrategy:
     def _after_close(self, job):
         self._amo_check(job)
 
+    def _offhours_price(self, job):
+        """The market shut, a trade open: its last traded price from Angel at
+        once after a start and every offhours_price_sec (600 s) - the page
+        shows the trade's P&L on it. No websocket (nothing trades)."""
+        if time.time() - self.last_offhours_price < float(self.c("offhours_price_sec", 600)):
+            return
+        self.last_offhours_price = time.time()
+        jid, c, p = job["job_id"], job["contract"], job["position"]
+        rest = getattr(self.prices, "rest_quote", None) if self.prices is not None else None
+        try:
+            q = rest(c) if rest else None
+            ltp = (q or {}).get("ltp") if rest else self.broker.ltp(c)
+        except Exception as e:
+            ltp = None
+            self._log("manage", f"last price for {c['symbol']} unreadable: {e!r}", "WARN")
+        if not ltp:
+            self._log("manage", f"no last traded price for {c['symbol']} (market closed) - the page keeps "
+                                f"{job.get('last_ltp')}", "WARN")
+            return
+        ltp = float(ltp)
+        upd = {"last_ltp": ltp, "last_ltp_at": self._ts(), "last_ltp_source": "last traded price (market closed)",
+               "ltp_high": max(float(job.get("ltp_high") or ltp), ltp),
+               "ltp_low": min(float(job.get("ltp_low") or ltp), ltp)}
+        self.store.update_job(jid, set_=upd)
+        job.update(upd)
+        pct = 100.0 * (ltp - p["avg_price"]) / p["avg_price"]
+        self._log("manage", f"{c['symbol']} last traded {ltp:.2f} (market closed): {pct:+.2f}%, "
+                            f"Rs {(ltp - p['avg_price']) * p['qty']:+,.0f} on {p['qty']} @ {p['avg_price']:.2f}")
+
     def _exit_market(self, job, reason):
         jid, c = job["job_id"], job["contract"]
         q = int(job["position"]["qty"])
@@ -873,6 +904,7 @@ class BtstStrategy:
                     self._manage(job)
                 else:
                     self._after_close(job)
+                    self._offhours_price(job)
                 self.status_note = f"managing {job['job_id']}"
             else:
                 self.status_note = (f"waiting for a signal ({self.c('scan_start', '15:15')} - "

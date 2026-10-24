@@ -106,6 +106,7 @@ function drawOpen(d){
   if (!j){ el.innerHTML = `<p class="dim">No trade open.</p>`; return; }
   const r = (d.days || []).find(x => x.job_id === j.job_id) || {}, p = j.position || {}, c = j.contract || {};
   const pr = d.price || {}, tr = j.trail, box = (k, v, n, c2) => `<div class="box"><div class="k">${k}</div><div class="v ${c2||""}" style="font-size:17px">${v}</div><div class="n">${n||""}</div></div>`;
+  const closed = /closed/.test(j.last_ltp_source || "");
   const tKind = j.soft_target ? "watched (order refused)" : (j.target_order && j.target_order.kind === "amo_target" ? "AMO at Angel" : "limit order at Angel");
   const toTarget = r.now_price && j.target_price ? 100 * (j.target_price - r.now_price) / r.now_price : null;
   el.innerHTML = `<p class="phase"><b>${esc(c.symbol)}</b> <span class="${j.mode === "live" ? "live" : "paper"}">${esc((j.mode||"").toUpperCase())}</span>
@@ -115,8 +116,8 @@ function drawOpen(d){
       ${box("Signal", `${esc((j.signal||{}).indices)} ${esc((j.signal||{}).strike_price)} ${esc((j.signal||{}).side)} @ ${esc((j.signal||{}).price)}`, `posted ${tm((j.message||{}).date)} · read by ${esc((j.signal||{}).parsed_by)}`)}
       ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `at ${tm(p.entry_at)}`)}
       ${box("Average · invested", `${n2(p.avg_price)} · ${rs(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} at ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
-      ${box("Current price", n2(r.now_price), `${tm(j.last_ltp_at)} · via ${esc(pr.source || "–")}${pr.age_sec != null ? " · " + pr.age_sec + "s old" : ""}`)}
-      ${box("Profit / loss", `${rs(r.live_pnl)} · ${pc(r.live_pct)}`, "vs the average price", cls(r.live_pnl))}
+      ${box(closed ? "Last traded price" : "Current price", n2(r.now_price), `${tm(j.last_ltp_at)} · ${esc(j.last_ltp_source || pr.source || "–")}${!closed && pr.age_sec != null ? " · " + pr.age_sec + "s old" : ""}`)}
+      ${box("Profit / loss", `${rs(r.live_pnl)} · ${pc(r.live_pct)}`, closed ? "on the last traded price - market closed" : "vs the average price", cls(r.live_pnl))}
       ${box("High / low since entry", `${n2(j.ltp_high)} / ${n2(j.ltp_low)}`, `${pc(p.avg_price ? 100 * (j.ltp_high - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (j.ltp_low - p.avg_price) / p.avg_price : null)}`)}
       ${box("Target", n2(j.target_price), `${tKind} · ${esc(j.target_last_status || "–")}${toTarget != null ? " · " + pc(toTarget) + " away" : ""}`)}
       ${box("Trailing", tr ? (tr.active ? "on" : "stopped") : "–", tr ? `from ${n2(tr.initial)} · floor ${n2(tr.floor)} · ${(tr.steps||[]).length} step(s) · lowest ${n2(tr.low)} under ${n2(tr.ref)}` : "only when averaged at a loss over 50%", tr && tr.active ? "up" : "")}
@@ -141,7 +142,7 @@ function drawTrades(d){
       const open = r.status === "open", id = r.job_id;
       const main = `<tr class="${id ? "" : "dim"}"><td>${esc(r.date)}</td><td>${esc(r.mode)}</td><td>${esc(r.symbol || "–")}</td><td class="l">${esc(r.signal)}<div class="n">${tm(r.signal_at)}</div></td>
         <td>${tm(r.buy_at)}</td><td>${n2(r.entry_price)}</td><td>${n0(r.qty)}</td><td>${n2(r.avg_price)}${r.added_qty ? `<div class="n">+${n0(r.added_qty)} @ ${n2(r.added_price)}</div>` : ""}</td><td>${rs(r.invested)}</td>
-        <td>${n2(r.now_price)}<div class="n">${open ? "now" : tm(r.exit_at)}</div></td><td class="${cls(r.live_pnl)}">${rs(r.live_pnl)}</td><td class="${cls(r.live_pct)}">${pc(r.live_pct)}</td>
+        <td>${n2(r.now_price)}<div class="n">${open ? (/closed/.test(r.now_source || "") ? "last, " + tm(r.now_at) : "now") : tm(r.exit_at)}</div></td><td class="${cls(r.live_pnl)}">${rs(r.live_pnl)}</td><td class="${cls(r.live_pct)}">${pc(r.live_pct)}</td>
         <td>${n2(r.target)}${r.target_kind === "amo_target" ? '<span class="pill">AMO</span>' : ""}${r.trail ? `<span class="pill ${r.trail.active ? "on" : ""}">trail ${r.trail.steps}</span>` : ""}</td>
         <td class="l">${esc(SCEN[r.scenario] || r.scenario || "")}${r.opened_pct != null ? `<div class="n">opened ${pc(r.opened_pct)}</div>` : ""}</td>
         <td class="l">${esc(r.exit_reason || "")}${r.exit_price ? `<div class="n">@ ${n2(r.exit_price)}</div>` : ""}</td>

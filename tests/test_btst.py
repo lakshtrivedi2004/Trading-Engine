@@ -1288,5 +1288,26 @@ jO = stO.recent_jobs()[0]
 check("the desk down on the planned day (Fri): out at market at the next open, 'overdue_exit'",
       jO["status"] == "closed" and jO["result"]["exit_reason"] == "overdue_exit", str(jO.get("result", {}).get("exit_reason")))
 
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sC1, stC1, brC1, lgC1, _ = desk()
+sC1.on_message(msg(3, SAMPLE, 15, 16))
+sC1.step()
+at(2026, 10, 24, 11, 0)                            # Saturday: the market shut, the trade open
+PRICE["ltp"] = 98.5
+sC1.step()
+jC1 = stC1.open_job()
+rowC1 = [r for r in stats.by_day(stC1.recent_jobs()) if r["job_id"]][0]
+check("market shut, a trade open: its last traded price fetched, P&L on it (98.50 vs 106: -7.08%, Rs -488)",
+      jC1["last_ltp"] == 98.5 and "market closed" in jC1["last_ltp_source"] and rowC1["live_pct"] == -7.08
+      and round(rowC1["live_pnl"]) == -488 and rowC1["now_source"] == jC1["last_ltp_source"], str(rowC1["live_pct"]))
+PRICE["ltp"] = 97.0
+sC1.step()
+check("...not fetched again within 10 minutes", stC1.open_job()["last_ltp"] == 98.5)
+sC2 = BtstStrategy(sC1.cfg, stC1, brC1, lambda: MASTER, None, "btst_karo", log=lgC1.append, now=lambda: CLOCK["t"])
+sC2.resume()
+sC2.step()
+check("...and fetched at once after a restart", stC1.open_job()["last_ltp"] == 97.0)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)
