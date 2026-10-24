@@ -320,8 +320,8 @@ class BtstStrategy:
 
     def _size(self, c, ltp):
         """(lots, why). trade_amount (Rs 15,000) + amount_tolerance_pct (5%),
-        the same every trade - no compounding: the most lots costing at most
-        the amount + 5% (owner, 24 Oct 2026); none if one lot costs more. With
+        the same every trade - no compounding: the most lots whose total is
+        below the amount + 5% (owner, 24 Oct 2026); none if one lot is not. With
         no trade_amount, a fixed `lots`."""
         amount = float(self.c("trade_amount", 0) or 0)
         per_lot = ltp * int(c["lot_size"])
@@ -330,14 +330,14 @@ class BtstStrategy:
             return n, f"fixed {n} lot(s) = Rs {n * per_lot:,.0f}"
         tol = float(self.c("amount_tolerance_pct", 5.0))
         hi, lo = amount * (1 + tol / 100.0), amount * (1 - tol / 100.0)
-        n = int(math.floor(hi / per_lot + 1e-9))
+        n = int(math.ceil(hi / per_lot - 1e-9)) - 1        # the most lots whose total stays below the cap
         if n < 1:
-            return 0, (f"one lot ({c['lot_size']} x {ltp:g} = Rs {per_lot:,.0f}) costs more than Rs {hi:,.0f} "
+            return 0, (f"one lot ({c['lot_size']} x {ltp:g} = Rs {per_lot:,.0f}) is not below Rs {hi:,.0f} "
                        f"(Rs {amount:,.0f} + {tol:g}%)")
         cost = n * per_lot
         where = "within" if cost >= lo else "under"
         return n, (f"{n} lot(s) x Rs {per_lot:,.0f} = Rs {cost:,.0f} for Rs {amount:,.0f} +/- {tol:g}% "
-                   f"({where} the band Rs {lo:,.0f} - {hi:,.0f}; never above)")
+                   f"({where} the band Rs {lo:,.0f} - {hi:,.0f}; always below Rs {hi:,.0f})")
 
     def _place_target(self, job, price, kind):
         c, q = job["contract"], int(job["position"]["qty"])
