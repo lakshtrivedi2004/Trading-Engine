@@ -643,7 +643,8 @@ check("from btst.log: an uncaught traceback (stderr) is one ERROR entry, its las
 check("...and the day filter keeps one day", [r["text"] for r in fbook.lines(day="2026-10-21")[0]] == ["yesterday"])
 os.remove(path)
 
-httpd = web.serve(st, store, lambda to: {"ok": False, "error": "test"}, port=0, host="127.0.0.1", book=book)
+httpd = web.serve(st, store, lambda to, exit_trade=False: {"ok": False, "error": "test"}, port=0,
+                  host="127.0.0.1", book=book)
 base = f"http://127.0.0.1:{httpd.server_address[1]}"
 get = lambda u: urllib.request.urlopen(base + u, timeout=10).read().decode()
 home, page = get("/"), get("/logs")
@@ -841,6 +842,7 @@ class Exchange:
 
     def __init__(self):
         self.px, self.high, self.rows, self.n, self.net = 106.0, 110.0, {}, 0, 0
+        self.held = {}                                    # net quantity per trading symbol
         self.events, self.refuse_amo = [], 0
 
     def ltpData(self, ex, sym, tok):
@@ -850,7 +852,7 @@ class Exchange:
         return {"status": True, "data": {"availablecash": "1000000", "net": "1000000"}}
 
     def position(self):
-        return {"status": True, "data": [{"tradingsymbol": "NIFTY27OCT2622800CE", "netqty": str(self.net)}]}
+        return {"status": True, "data": [{"tradingsymbol": k, "netqty": str(v)} for k, v in self.held.items()]}
 
     def placeOrderFullResponse(self, p):
         self.events.append(("place", p["variety"], p["transactiontype"], p["duration"], p["quantity"], p["price"]))
@@ -860,11 +862,14 @@ class Exchange:
         self.n += 1
         uid, q = f"u{self.n}", int(p["quantity"])
         row = {"orderid": str(self.n), "uniqueorderid": uid, "variety": p["variety"], "side": p["transactiontype"],
+               "sym": p["tradingsymbol"],
                "duration": p["duration"], "qty": q, "price": float(p["price"]), "orderstatus": "open",
                "filledshares": "0", "averageprice": "0", "text": ""}
         if p["duration"] == "IOC":
             row.update(orderstatus="complete", filledshares=str(q), averageprice=str(self.px))
-            self.net += q if p["transactiontype"] == "BUY" else -q
+            d = q if p["transactiontype"] == "BUY" else -q
+            self.net += d
+            self.held[p["tradingsymbol"]] = self.held.get(p["tradingsymbol"], 0) + d
         elif p["variety"] == "AMO":
             row["orderstatus"] = "after market order req received"
         self.rows[uid] = row
@@ -888,6 +893,7 @@ class Exchange:
     def _fill(self, r, px):
         r.update(orderstatus="complete", filledshares=str(r["qty"]), averageprice=str(px))
         self.net -= r["qty"]
+        self.held[r["sym"]] = self.held.get(r["sym"], 0) - r["qty"]
 
     def close_day(self):
         for r in self.rows.values():
@@ -1351,6 +1357,71 @@ os.remove(path2)
 sst = web.state(st, store)
 check("the page's state carries no channel name (no 'channel' key, none in messages or jobs)",
       "test_channel" not in _json.dumps(sst, default=str) and "channel" not in sst)
+
+section("11. Switching paper <-> live")
+from btst import modes                                           # noqa: E402
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sM, stM, brM, lgM, sentM = desk()
+sM.on_message(msg(3, SAMPLE, 15, 16))
+sM.step()
+paper_jid = stM.open_job()["job_id"]
+exM = Exchange()
+exM.px = 106.0
+saved = []
+
+
+def mk(to):
+    return (AngelBtstBroker(exM, sleep=lambda s: None, log=lambda *_: None) if to == "live"
+            else PaperBtstBroker(lambda c: PRICE["ltp"], log=lambda *_: None, today=lambda: CLOCK["t"].date()))
+
+
+at(2026, 10, 22, 15, 20)
+mlog = []
+rM = modes.switch(sM, "live", make_broker=mk, save_mode=saved.append, notify=sentM.append, log=mlog.append)
+jP = stM.get_job(paper_jid)
+check("PAPER -> LIVE with a paper trade open: switched at once; the paper trade parked with its state saved",
+      rM["ok"] and sM.broker.mode == "live" and saved == ["live"] and jP["status"] == "parked"
+      and jP["parked"]["qty"] == 65 and jP["parked"]["avg_price"] == 106.0 and not stM.open_job()
+      and "parked" in rM["note"], str(rM))
+sM.cfg["markers"] = ["BTST", "Disclaimer"]
+sM.on_message(msg(9, SAMPLE.replace("22800", "22850").replace("Call", "Call"), 15, 21))
+MASTER_EXTRA = dict(MASTER[1], symbol="NIFTY27OCT2622850CE", token="9", strike="2285000.000000")
+sM.master_fn = lambda: MASTER + [MASTER_EXTRA]
+sM.llm = None
+sM.step()
+jL = stM.open_job()
+check("...the parked paper trade does not block a live signal the same day: bought LIVE",
+      jL and jL["mode"] == "live" and jL["contract"]["symbol"] == "NIFTY27OCT2622850CE" and exM.net > 0,
+      str(stM.recent_jobs()[0].get("reject_reason") if not jL else jL["contract"]["symbol"]))
+rM2 = modes.switch(sM, "paper", make_broker=mk, save_mode=saved.append, log=mlog.append)
+check("LIVE -> PAPER with a live trade open, without the exit choice: refused, nothing changes",
+      not rM2["ok"] and rM2.get("need_exit") and sM.broker.mode == "live" and stM.open_job()["job_id"] == jL["job_id"])
+at(2026, 10, 22, 16, 30)
+rM3 = modes.switch(sM, "paper", exit_trade=True, make_broker=mk, save_mode=saved.append, log=mlog.append)
+check("...with the exit choice but the market shut: refused, still LIVE, the trade still open",
+      not rM3["ok"] and "market is closed" in rM3["error"] and sM.broker.mode == "live" and stM.open_job())
+at(2026, 10, 22, 15, 25)
+exM.px = 112.0
+rM4 = modes.switch(sM, "paper", exit_trade=True, make_broker=mk, save_mode=saved.append, log=mlog.append)
+jL2 = stM.get_job(jL["job_id"])
+jP2 = stM.get_job(paper_jid)
+check("...with the exit choice in market hours: sold at market (closed 'mode_switch_exit'), then PAPER, "
+      "and the parked paper trade resumed and taken back by the paper broker",
+      rM4["ok"] and jL2["status"] == "closed" and jL2["result"]["exit_reason"] == "mode_switch_exit" and exM.net == 0
+      and sM.broker.mode == "paper" and jP2["status"] == "open" and sM.broker.net_qty(jP2["contract"]) == 65
+      and "resumed" in rM4["note"], str(rM4))
+rM5 = modes.switch(sM, "paper", make_broker=mk, save_mode=saved.append, log=mlog.append)
+check("switching to the mode it is already in changes nothing", rM5["ok"] and "already" in rM5["note"])
+at(2026, 10, 22, 15, 26)
+sQ, stQ, _, _, _ = desk()
+rQ = modes.switch(sQ, "live", make_broker=mk, save_mode=saved.append, log=mlog.append)
+rQ2 = modes.switch(sQ, "paper", make_broker=mk, save_mode=saved.append, log=mlog.append)
+check("no trade open: a simple switch both ways", rQ["ok"] and rQ2["ok"] and sQ.broker.mode == "paper"
+      and saved[-2:] == ["live", "paper"])
+stateM = web.state(sM, stM)
+check("the page's state lists parked trades", "parked" in stateM and isinstance(stateM["parked"], list))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

@@ -95,9 +95,17 @@ class MongoStore:
                                   sort=[("created_at", -1)])
 
     def job_for_trade_date(self, trade_date):
-        """A BTST entered (or being entered) on trade_date, if any - one a day."""
+        """A BTST entered (or being entered) on trade_date, if any - one a day.
+        A paper trade parked by a switch to live does not count."""
         return self.jobs.find_one({"trade_date": trade_date,
-                                   "status": {"$nin": ["rejected"]}}, {"_id": 0})
+                                   "status": {"$nin": ["rejected", "parked"]}}, {"_id": 0})
+
+    def parked_jobs(self, mode=None):
+        """Trades parked by a mode switch (saved, not managed), newest first."""
+        flt = {"status": "parked"}
+        if mode:
+            flt["mode"] = mode
+        return list(self.jobs.find(flt, {"_id": 0}).sort("created_at", -1))
 
     def any_job_on(self, trade_date):
         """Any job on trade_date, refused ones included."""

@@ -5,7 +5,9 @@
     venv/bin/python run_btst.py --port 9001
 
 Mode is .btst_mode (repo root): "live" sends real orders, anything else is
-paper. The page switches it (POST /api/mode), only while no trade is open.
+paper. The page switches it (POST /api/mode, btst/modes.py): to PAPER with a
+live trade open only after selling it at market; to LIVE at once, parking an
+open paper trade.
 
 Reads from .angel.env: the Angel login (ANGEL_*), TELEGRAM_BTST_CHANNEL (the
 signal channel's link or @name - only there, never in the code), TELEGRAM_API_ID / _HASH (the
@@ -31,7 +33,7 @@ from arb.config import CostModel, Credentials, _load_env_file      # noqa: E402
 from arb.feed import AngelSession                                  # noqa: E402
 from arb.instruments import load_scrip_master, now_ist             # noqa: E402
 from arb.utils import read_channel_messages                        # noqa: E402
-from btst import web                                               # noqa: E402
+from btst import modes, web                                        # noqa: E402
 from btst.broker import AngelBtstBroker, PaperBtstBroker           # noqa: E402
 from btst.holidays import Holidays                                 # noqa: E402
 from btst.logbook import Logbook, fmt                              # noqa: E402
@@ -169,22 +171,15 @@ def main():
     strategy.resume()
     lock = threading.Lock()
 
-    def switch_mode(to):
-        log(f"mode switch to {to!r} asked from the page", area="mode")
-        if to not in ("paper", "live"):
-            return {"ok": False, "error": "to must be paper or live"}
-        with lock:
-            j = store.open_job()
-            if j:
-                log(f"mode switch refused - {j['job_id']} is open", "WARN", "mode")
-                return {"ok": False, "error": "a trade is open - switch once it is closed"}
-            with open(MODE_FILE, "w") as fh:
-                fh.write(to)
-            strategy.broker = make_broker(to)
-            log(f"mode switched to {to.upper()}", "WARN" if to == "live" else "INFO", "mode")
-            if notifier:
-                notifier.send(f"🌙 <b>BTST</b> mode is now <b>{to.upper()}</b>")
-            return {"ok": True, "mode": to}
+    def save_mode(to):
+        with open(MODE_FILE, "w") as fh:
+            fh.write(to)
+
+    def switch_mode(to, exit_trade=False):
+        log(f"mode switch to {to!r} asked from the page" + (" (sell the live trade first)" if exit_trade else ""),
+            area="mode")
+        return modes.switch(strategy, to, exit_trade=exit_trade, make_broker=make_broker, save_mode=save_mode,
+                            notify=notifier.send if notifier else None, log=BOOK.log)
 
     port = args.port or int(cfg.get("port", 9000))
     web.serve(strategy, store, switch_mode, port=port, book=BOOK)

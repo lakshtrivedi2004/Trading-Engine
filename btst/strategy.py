@@ -36,6 +36,7 @@ retried - it is marked for a human to look at.
 """
 import math
 import queue
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta
@@ -95,6 +96,7 @@ class BtstStrategy:
         self.last_trail_modify = 0.0
         self.last_offhours_price = 0.0     # 0: the first pass after a start fetches at once
         self.health = {}                # the runner's view: session, websocket, reader, holidays
+        self.lock = threading.RLock()   # one pass of step() or one mode switch at a time
         self.last_status_log = 0.0
         self.window_said = {}           # day -> "open" / "closed" already logged
         self.status_note = "starting"
@@ -896,6 +898,48 @@ class BtstStrategy:
                   f"({metrics['pnl_pct']:+.1f}% of Rs {inv:,.0f}, charges Rs {cost:,.0f})", jid, True,
                   "close", "TRADE")
 
+    # ── mode switches (btst/modes.py) ──────────────────────────────────────
+    def park(self, job, why):
+        """An open paper trade set aside by a switch to live: its position,
+        target and P&L kept as they are now; not managed until a switch back."""
+        jid, p = job["job_id"], job["position"]
+        ltp = job.get("last_ltp")
+        pnl = round((ltp - p["avg_price"]) * p["qty"], 2) if ltp else None
+        pct = round(100.0 * (ltp - p["avg_price"]) / p["avg_price"], 2) if ltp else None
+        state = {"at": self._ts(), "why": why, "last_ltp": ltp, "last_ltp_at": job.get("last_ltp_at"),
+                 "pnl": pnl, "pnl_pct": pct, "qty": p["qty"], "avg_price": p["avg_price"],
+                 "target_price": job.get("target_price"), "decision": (job.get("decision") or {}).get("scenario")}
+        self.store.update_job(jid, set_={"status": "parked", "parked": state})
+        self._say(f"paper trade {job['contract']['symbol']} x{p['qty']} @ {p['avg_price']} parked ({why}) - "
+                  f"saved at {ltp} ({pct:+.2f}%, Rs {pnl:+,.0f}); it resumes on a switch back to PAPER"
+                  if ltp else f"paper trade {job['contract']['symbol']} parked ({why}); it resumes on a switch "
+                              f"back to PAPER", jid, True, "mode", "WARN")
+        return state
+
+    def unpark(self, mode):
+        """The newest trade parked in `mode`, managed again (the paper broker
+        takes its position and target back)."""
+        parked = self.store.parked_jobs(mode)
+        if not parked:
+            return None
+        j = parked[0]
+        self.store.update_job(j["job_id"], set_={"status": "open", "unparked_at": self._ts()})
+        j = self.store.get_job(j["job_id"])
+        if hasattr(self.broker, "adopt"):
+            self.broker.adopt(j)
+        self._say(f"paper trade {j['contract']['symbol']} x{j['position']['qty']} resumed (parked "
+                  f"{(j.get('parked') or {}).get('at', '?')})", j["job_id"], True, "mode")
+        return j
+
+    def exit_now(self, job, reason):
+        """Sell an open trade at market now (a switch away from live). The
+        market must be open. True if the trade is closed."""
+        if not self._market_open(self.now()):
+            return False
+        self._exit_market(job, reason)
+        j = self.store.get_job(job["job_id"])
+        return bool(j and j.get("status") == "closed")
+
     # ── the loop ────────────────────────────────────────────────────────────
     def resume(self):
         """On start: a job left 'entering' by a crash is not retried."""
@@ -932,6 +976,10 @@ class BtstStrategy:
                   f"no trade", area="day")
 
     def step(self):
+        with self.lock:
+            self._step()
+
+    def _step(self):
         for name, fn in (("window", self._window_edges), ("message", self._process_messages),
                          ("day", self._record_quiet_day)):
             try:
@@ -973,5 +1021,6 @@ class BtstStrategy:
                 "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.recent_messages(20)],
                 "price": self.prices.state() if self.prices is not None else None,
                 "health": dict(self.health),
+                "parked": [_no_channel(x) for x in self.store.parked_jobs()],
                 "next_session": self._next_session(self.now().date()).isoformat(),
                 "rules": {k: self.c(k, v) for k, v in RULE_DEFAULTS.items()}}

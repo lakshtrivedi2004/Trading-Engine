@@ -7,7 +7,8 @@
                        it was or was not a signal, every order, every decision,
                        every error - filtered by kind, day and text
     GET  /api/logs?limit=&group=errors|trades|signals|ai&q=&day=YYYY-MM-DD
-    POST /api/mode?to=paper|live   switch mode - refused while a trade is open
+    POST /api/mode?to=paper|live[&exit=1]   switch mode (btst/modes.py): exit=1 sells an
+                       open live trade at market first; an open paper trade is parked
 """
 import json
 import threading
@@ -141,11 +142,23 @@ const OPEN_ROWS = new Set();
 let BUSY = false, LAST = null;
 
 async function switchMode(to){
-  if (!confirm(to === "live" ? "Switch BTST to LIVE - real orders with real money?" : "Switch BTST back to PAPER?")) return;
-  BUSY = true;
-  const r = await (await fetch("/api/mode?to=" + to, {method: "POST"})).json().catch(e => ({ok: false, error: String(e)}));
+  const d = LAST || {}, j = d.open_job, parked = (d.parked || []).filter(x => x.mode === "paper")[0];
+  const tr = x => x ? `${(x.contract || {}).symbol} x${(x.position || {}).qty} @ ${(x.position || {}).avg_price}` : "";
+  let exit = false;
+  if (to === "live"){
+    if (!confirm("Switch BTST to LIVE - real orders with real money?"
+        + (j ? `\n\nThe open paper trade (${tr(j)}) is saved and parked: no longer managed, and it resumes when you switch back to PAPER.` : ""))) return;
+  } else if (j && j.mode === "live"){
+    const r = (d.days || []).find(x => x.job_id === j.job_id) || {};
+    if (!confirm(`A LIVE trade is open: ${tr(j)}, P&L ${rs(r.live_pnl)} (${pc(r.live_pct)}).\n\n`
+        + `OK = sell it at market now, then switch to PAPER.\nCancel = keep LIVE (no switch).`)) return;
+    exit = true;
+  } else if (!confirm("Switch BTST to PAPER?" + (parked ? `\n\nThe parked paper trade (${tr(parked)}) resumes.` : ""))) return;
+  BUSY = true; drawHead(d);
+  const r = await (await fetch(`/api/mode?to=${to}${exit ? "&exit=1" : ""}`, {method: "POST"})).json().catch(e => ({ok: false, error: String(e)}));
   BUSY = false;
-  alert(r.ok ? "BTST is now " + r.mode.toUpperCase() : "Not switched: " + r.error);
+  alert(r.ok ? `BTST is now ${r.mode.toUpperCase()}` + (r.note ? `\n\n${r.note}` : "") : "Not switched: " + r.error);
+  tick();
 }
 function toggle(id){ OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); if (LAST) drawTrades(LAST); }
 
@@ -163,11 +176,12 @@ function drawHead(d){
     + (lp ? chip(lp + " warning/error" + (lp > 1 ? "s" : "") + " today", "mid") : "");
   const now = d.now || "";
   document.getElementById("sub").innerHTML = `${day(now)}, ${esc(now.slice(11, 19))} IST · signals read ${esc(d.window)} IST · ${esc(d.note)}`;
-  const lock = d.open_job ? `a trade is open (${d.open_job.job_id}) - the mode can be switched once it is closed` : "";
+  const liveTrade = d.open_job && d.open_job.mode === "live";
+  const tip = live ? (liveTrade ? "a live trade is open: you will be asked to sell it at market first, or cancel" : "back to paper trading")
+    : (d.open_job ? "real orders with real money; the open paper trade is saved (parked) and resumes on PAPER" : "real orders with real money");
   document.getElementById("ctl").innerHTML =
-    `<button class="btn ${live ? "" : "danger"}" ${BUSY || lock ? "disabled" : ""} title="${esc(lock || (live ? "back to paper trading" : "real orders with real money"))}"
-       onclick="switchMode('${live ? "paper" : "live"}')">Switch to ${live ? "PAPER" : "LIVE"}</button>`
-    + (lock ? `<span class="n" style="margin-left:6px">locked while a trade is open</span>` : "");
+    `<button class="btn ${live ? "" : "danger"}" ${BUSY ? "disabled" : ""} title="${esc(tip)}"
+       onclick="switchMode('${live ? "paper" : "live"}')">${BUSY ? "Switching…" : "Switch to " + (live ? "PAPER" : "LIVE")}</button>`;
   document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">(${lp})</span>` : "");
 }
 
@@ -203,9 +217,17 @@ function plan(d, j, p){
     <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr></table></div>`;
 }
 
+function parkedHtml(d){
+  const ps = d.parked || [];
+  if (!ps.length) return "";
+  return ps.map(j => { const k = j.parked || {}, p = j.position || {};
+    return `<div class="phase" style="border-left-color:var(--warn);margin-top:10px"><b>Parked ${esc(j.mode)} trade</b> — ${esc((j.contract || {}).symbol)} x${n0(p.qty)} @ ${n2(p.avg_price)}, target ${n2(j.target_price)}
+      · saved ${tm(k.at)} at ${n2(k.last_ltp)}: <span class="${cls(k.pnl)}">${rs(k.pnl)} (${pc(k.pnl_pct)})</span>
+      · resumes when you switch back to ${esc((j.mode || "").toUpperCase())}</div>`; }).join("");
+}
 function drawOpen(d){
   const j = d.open_job, el = document.getElementById("open");
-  if (!j){ el.innerHTML = `<p class="empty">No trade open. Signals are read ${esc(d.window)} IST.</p>`; return; }
+  if (!j){ el.innerHTML = `<p class="empty">No trade open. Signals are read ${esc(d.window)} IST.</p>` + parkedHtml(d); return; }
   const r = (d.days || []).find(x => x.job_id === j.job_id) || {}, p = j.position || {}, c = j.contract || {}, s = j.signal || {};
   const R = d.rules || {}, closed = /closed/.test(j.last_ltp_source || ""), today = (d.now || "").slice(0, 10);
   const tKind = j.soft_target ? "watched (order refused)" : (j.target_order && j.target_order.kind === "amo_target" ? "AMO at Angel" : "limit order at Angel");
@@ -239,7 +261,7 @@ function drawOpen(d){
       ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
     </div>
     ${plan(d, j, p)}
-  </div>`;
+  </div>` + parkedHtml(d);
 }
 
 function detail(r){
@@ -258,8 +280,8 @@ function drawTrades(d){
       <th>Now / exit</th><th>P&amp;L</th><th>Target</th><th>Next day</th><th>Result</th><th></th></tr>` +
     rows.map(r => {
       if (!r.job_id) return `<tr class="quiet"><td>${day(r.date)}</td><td class="l" colspan="${COLS - 1}">No signal — ${n0(r.messages_read)} message(s) read in the scan window · no trade</td></tr>`;
-      const open = r.status === "open", rej = r.status !== "open" && r.status !== "closed";
-      const result = open ? `<span class="tag open">open</span>`
+      const open = r.status === "open", parkedRow = r.status === "parked", rej = !open && !parkedRow && r.status !== "closed";
+      const result = open ? `<span class="tag open">open</span>` : parkedRow ? `<span class="tag rej">parked</span><div class="n">resumes on ${esc((r.mode || "").toUpperCase())}</div>`
         : rej ? `<span class="tag rej">${esc(r.status)}</span><div class="n" style="white-space:normal">${esc(r.reason)}</div>`
         : `<span class="tag ${r.net_pnl > 0 ? "win" : "loss"}">${r.net_pnl > 0 ? "win" : "loss"}</span> ${esc(EXIT[r.exit_reason] || r.exit_reason || "")}`;
       const nowNote = open ? (/closed/.test(r.now_source || "") ? "last traded · " + tm(r.now_at) : "live") : tm(r.exit_at);
@@ -479,8 +501,10 @@ def make_handler(strategy, store, switch_mode, book=None):
             try:
                 u = urlparse(self.path)
                 if u.path == "/api/mode":
-                    to = (parse_qs(u.query).get("to") or [""])[0]
-                    self._send(json.dumps(switch_mode(to)))
+                    q = parse_qs(u.query)
+                    to = (q.get("to") or [""])[0]
+                    exit_trade = (q.get("exit") or ["0"])[0] in ("1", "true", "yes")
+                    self._send(json.dumps(switch_mode(to, exit_trade=exit_trade), default=str))
                 else:
                     self._send("{}", code=404)
             except (BrokenPipeError, ConnectionResetError):
