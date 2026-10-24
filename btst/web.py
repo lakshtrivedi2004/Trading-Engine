@@ -11,12 +11,13 @@
                        open live trade at market first; an open paper trade is parked
 """
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from btst import stats
-from btst.logbook import GROUPS
+from btst.logbook import GROUPS, fmt
 from arb.instruments import now_ist
 
 PAGE = r"""<!DOCTYPE html>
@@ -514,8 +515,26 @@ def make_handler(strategy, store, switch_mode, book=None):
     return Handler
 
 
+class _Server(ThreadingHTTPServer):
+    """A client that hangs up mid-request - often an internet scanner probing
+    the port - is not an error: no traceback (it used to fill the log as a
+    "crash"). Anything else is one line in the desk's log."""
+    daemon_threads = True
+    book = None
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, TimeoutError)):
+            return
+        if self.book is not None:
+            self.book.log(fmt("WARN", "web", f"request from {client_address[0]} failed: {exc!r}"))
+        else:
+            super().handle_error(request, client_address)
+
+
 def serve(strategy, store, switch_mode, port=9000, host="0.0.0.0", book=None):
-    httpd = ThreadingHTTPServer((host, int(port)), make_handler(strategy, store, switch_mode, book))
+    httpd = _Server((host, int(port)), make_handler(strategy, store, switch_mode, book))
+    httpd.book = book
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, name="btst-web", daemon=True).start()
     return httpd

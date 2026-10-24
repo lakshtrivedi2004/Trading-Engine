@@ -1423,5 +1423,30 @@ check("no trade open: a simple switch both ways", rQ["ok"] and rQ2["ok"] and sQ.
 stateM = web.state(sM, stM)
 check("the page's state lists parked trades", "parked" in stateM and isinstance(stateM["parked"], list))
 
+fd3, path3 = tempfile.mkstemp(suffix=".log")
+with os.fdopen(fd3, "w") as fh:
+    fh.write("[2026-10-24 17:25:18] INFO  heartbeat | alive\n"
+             "Exception occurred during processing of request from ('167.94.146.62', 51160)\n"
+             "Traceback (most recent call last):\n  File \"/usr/lib/python3.12/socket.py\", line 707, in readinto\n"
+             "ConnectionResetError: [Errno 104] Connection reset by peer\n")
+wrows = Logbook(path=path3, echo=False).lines(group="errors")[0]
+check("a scanner hanging up on the page (old tracebacks in btst.log) is not shown as an error",
+      not wrows, str(wrows)[:200])
+os.remove(path3)
+wlog = []
+srv = web._Server(("127.0.0.1", 0), web.make_handler(st, store, lambda to, exit_trade=False: {}, None))
+srv.book = SimpleNamespace(log=wlog.append)
+try:
+    raise ConnectionResetError(104, "Connection reset by peer")
+except ConnectionResetError:
+    srv.handle_error(None, ("1.2.3.4", 1))
+try:
+    raise ValueError("bad request line")
+except ValueError:
+    srv.handle_error(None, ("1.2.3.4", 2))
+srv.server_close()
+check("...the page server ignores a client hang-up, and logs any other request error as one line",
+      len(wlog) == 1 and "bad request line" in wlog[0] and "web |" in wlog[0], str(wlog))
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

@@ -124,6 +124,10 @@ class Logbook:
                 cur = {"at": "", "level": "WARN" if any(b in line.lower() for b in _BAD) else "INFO",
                        "area": "other", "text": line}
                 out.append(cur)
+        for r in out:                       # a client hanging up (a scanner on the port): not a crash
+            if (r["area"] == "crash" and r["text"].rstrip().endswith(("Connection reset by peer", "Broken pipe"))) \
+                    or (r["area"] == "other" and r["text"].startswith("Exception occurred during processing of request")):
+                r["level"], r["area"] = "INFO", "web"
         if day:
             out = [r for r in out if r["at"].startswith(day)]
         if group in GROUPS:
