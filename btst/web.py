@@ -114,7 +114,7 @@ function drawOpen(d){
     <div class="grid">
       ${box("Contract", esc(c.symbol), `${esc(c.exchange)} · expiry ${esc(c.expiry)} · lot ${esc(c.lot_size)}`)}
       ${box("Signal", `${esc((j.signal||{}).indices)} ${esc((j.signal||{}).strike_price)} ${esc((j.signal||{}).side)} @ ${esc((j.signal||{}).price)}`, `posted ${tm((j.message||{}).date)} · read by ${esc((j.signal||{}).parsed_by)}`)}
-      ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `at ${tm(p.entry_at)}`)}
+      ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `at ${tm(p.entry_at)} · ${n0(j.lots)} lot(s) = ${rs(p.entry_qty * p.entry_price)}${(d.rules||{}).trade_amount ? " of " + rs((d.rules||{}).trade_amount) + " ±" + n0((d.rules||{}).amount_tolerance_pct) + "%" : ""}`)}
       ${box("Average · invested", `${n2(p.avg_price)} · ${rs(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} at ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
       ${box(closed ? "Last traded price" : "Current price", n2(r.now_price), `${tm(j.last_ltp_at)} · ${esc(j.last_ltp_source || pr.source || "–")}${!closed && pr.age_sec != null ? " · " + pr.age_sec + "s old" : ""}`)}
       ${box("Profit / loss", `${rs(r.live_pnl)} · ${pc(r.live_pct)}`, closed ? "on the last traded price - market closed" : "vs the average price", cls(r.live_pnl))}

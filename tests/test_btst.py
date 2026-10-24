@@ -1309,5 +1309,27 @@ sC2.resume()
 sC2.step()
 check("...and fetched at once after a restart", stC1.open_job()["last_ltp"] == 97.0)
 
+SZ = {"trade_amount": 15000, "amount_tolerance_pct": 5}
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sS1, stS1, _, _, _ = desk(cfg=SZ)
+sS1.on_message(msg(3, SAMPLE, 15, 16))
+sS1.step()
+jS1 = stS1.open_job()
+check("Rs 15,000 +/- 5%: NIFTY @ 106, lot 65 (Rs 6,890) -> 2 lots = 130 qty, Rs 13,780 (never above Rs 15,750)",
+      jS1 and jS1["lots"] == 2 and jS1["position"]["qty"] == 130 and "never above" in jS1["sizing"], str(jS1 and jS1.get("sizing")))
+PRICE["ltp"] = 250.0
+sS3, stS3, brS3, _, sentS3 = desk(cfg=SZ)
+sS3.on_message(msg(3, SAMPLE, 15, 16))
+sS3.step()
+jS3 = stS3.recent_jobs()[0]
+check("...one lot costing more than Rs 15,750 (65 x 250 = Rs 16,250): not traded, said, nothing bought",
+      jS3["status"] == "rejected" and "costs more than" in jS3["reject_reason"] and brS3.n == 0
+      and any("costs more than" in x for x in sentS3), jS3.get("reject_reason", ""))
+check("...and the amount is the same every trade - no compounding (the config's Rs 15,000, not the P&L)",
+      sS1._size({"lot_size": 65}, 106.0)[0] == 2 and sS1._size({"lot_size": 20}, 475.0)[0] == 1
+      and sS1._size({"lot_size": 65}, 82.0)[0] == 2 and sS1._size({"lot_size": 65}, 115.0)[0] == 2)
+PRICE["ltp"] = 106.0
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

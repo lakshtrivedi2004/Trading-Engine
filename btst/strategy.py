@@ -5,7 +5,8 @@ in the window is read once. Orders can be placed until market_close (15:45 -
 the market's hours changed in 2026; the channel posted every October signal at
 15:33 - 15:39); a signal read after it is saved with its reading, not traded. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
-`lots` lots, CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
+the most lots costing at most trade_amount + amount_tolerance_pct (Rs 15,000
++ 5%, fixed - no compounding; none if one lot costs more), CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
 no trade (the day is still recorded, btst_days).
 
@@ -271,16 +272,20 @@ class BtstStrategy:
             return
         self._log("contract", f"{c['symbol']} token {c['token']} on {c['exchange']}, expiry {c['expiry']} "
                               f"({days_left(c, today)} days), lot {c['lot_size']}, tick {c['tick']}")
-        lots = max(1, int(self.c("lots", 1)))
-        qty = lots * c["lot_size"]
         ltp = self.broker.ltp(c)
-        self._log("entry", f"{c['symbol']}: {lots} lot(s) = {qty} qty, LTP {ltp} (signal {sig['price']:g})")
-        self.store.update_job(jid, set_={"contract": c, "lots": lots, "ltp_at_signal": ltp,
-                                         "days_to_expiry": days_left(c, today)})
+        self.store.update_job(jid, set_={"contract": c, "ltp_at_signal": ltp, "days_to_expiry": days_left(c, today)})
         if ltp is None:
             self.store.update_job(jid, set_={"status": "rejected", "reject_reason": "no LTP"})
             self._say(f"{what}: no price for {c['symbol']} - not traded", jid, True, "entry", "ERROR")
             return
+        lots, sizing = self._size(c, ltp)
+        if not lots:
+            self.store.update_job(jid, set_={"status": "rejected", "reject_reason": sizing, "sizing": sizing})
+            self._say(f"{what}: {sizing} - not traded", jid, True, "entry", "WARN")
+            return
+        qty = lots * c["lot_size"]
+        self._log("entry", f"{c['symbol']}: {lots} lot(s) = {qty} qty, LTP {ltp} (signal {sig['price']:g}) - {sizing}")
+        self.store.update_job(jid, set_={"lots": lots, "sizing": sizing})
         need = ltp * qty * 1.05
         funds = self.broker.funds()
         self._log("entry", f"funds check: need about Rs {need:,.0f} (LTP x qty + 5%), "
@@ -312,6 +317,27 @@ class BtstStrategy:
         self._say(f"BOUGHT {c['symbol']} x{q} @ {px:.2f} (Rs {px * q:,.0f}; signal {sig['price']:g}); "
                   f"target {target:.2f} = {mult:g} x the signal's price", jid, True, "entry", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target")
+
+    def _size(self, c, ltp):
+        """(lots, why). trade_amount (Rs 15,000) + amount_tolerance_pct (5%),
+        the same every trade - no compounding: the most lots costing at most
+        the amount + 5% (owner, 24 Oct 2026); none if one lot costs more. With
+        no trade_amount, a fixed `lots`."""
+        amount = float(self.c("trade_amount", 0) or 0)
+        per_lot = ltp * int(c["lot_size"])
+        if amount <= 0:
+            n = max(1, int(self.c("lots", 1)))
+            return n, f"fixed {n} lot(s) = Rs {n * per_lot:,.0f}"
+        tol = float(self.c("amount_tolerance_pct", 5.0))
+        hi, lo = amount * (1 + tol / 100.0), amount * (1 - tol / 100.0)
+        n = int(math.floor(hi / per_lot + 1e-9))
+        if n < 1:
+            return 0, (f"one lot ({c['lot_size']} x {ltp:g} = Rs {per_lot:,.0f}) costs more than Rs {hi:,.0f} "
+                       f"(Rs {amount:,.0f} + {tol:g}%)")
+        cost = n * per_lot
+        where = "within" if cost >= lo else "under"
+        return n, (f"{n} lot(s) x Rs {per_lot:,.0f} = Rs {cost:,.0f} for Rs {amount:,.0f} +/- {tol:g}% "
+                   f"({where} the band Rs {lo:,.0f} - {hi:,.0f}; never above)")
 
     def _place_target(self, job, price, kind):
         c, q = job["contract"], int(job["position"]["qty"])
@@ -932,4 +958,4 @@ class BtstStrategy:
                 "rules": {k: self.c(k) for k in ("decide_at", "exit_at", "avg_down_loss_pct", "deep_loss_pct",
                                                   "avg_target_pct", "deep_target_pct", "trail_step_points",
                                                   "trail_floor_points", "amo_at", "market_close",
-                                                  "session_refresh_at")}}
+                                                  "session_refresh_at", "trade_amount", "amount_tolerance_pct")}}
