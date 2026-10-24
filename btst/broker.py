@@ -198,6 +198,27 @@ class AngelBtstBroker:
         self.log(fmt("TRADE", "broker", f"AMO {oid} accepted for the next open: {(st or {}).get('status', '?')}"))
         return dict(order, ok=True, status=(st or {}).get("status", "amo"), error=None)
 
+    def modify_sell(self, order, c, qty, price):
+        """Move a resting LIMIT sell to `price` (the trailing target): Angel's
+        modifyOrder - one order all along, never a second sell."""
+        oid = order.get("order_id")
+        params = {"variety": order.get("variety") or "NORMAL", "orderid": oid, "ordertype": "LIMIT",
+                  "producttype": self.product, "duration": order.get("duration") or "DAY", "price": f"{price:.2f}",
+                  "quantity": str(int(qty)), "tradingsymbol": c["symbol"], "symboltoken": c["token"],
+                  "exchange": c["exchange"]}
+        self.log(fmt("TRADE", "broker", f"modify {oid}: SELL {c['symbol']} x{int(qty)} LIMIT -> {price:.2f}"))
+        try:
+            r = self.api.modifyOrder(params)
+        except Exception as e:
+            self.log(fmt("ERROR", "broker", f"modify {oid} failed: {e!r}"))
+            return {"ok": False, "error": f"modify failed: {e}"}
+        if isinstance(r, dict) and r.get("status") is not False and (r.get("data") or r.get("status")):
+            self.log(fmt("TRADE", "broker", f"modify {oid} accepted - target now {price:.2f}"))
+            return {"ok": True, "error": None}
+        why = (r or {}).get("message") if isinstance(r, dict) else r
+        self.log(fmt("ERROR", "broker", f"modify {oid} refused: {why} (answer {r})"))
+        return {"ok": False, "error": f"refused: {why}"}
+
     def cancel(self, order):
         """Cancel a resting order; its final state (it may have filled first).
         The order's own variety first (an AMO is cancelled as AMO), then the other."""
@@ -302,6 +323,18 @@ class PaperBtstBroker:
         self.log(fmt("TRADE", "broker", f"paper {oid} SELL {c['symbol']} x{qty} LIMIT {price:.2f} resting "
                                         f"(LTP {ltp}; fills when a trade reaches {price:.2f})"))
         return out
+
+    def modify_sell(self, order, c, qty, price):
+        """Move the resting paper target to `price`; the highest price is
+        counted again from now (a touch of the old, higher price never fills it)."""
+        o = self.orders.get(order.get("order_id"))
+        if o is None or o["status"] != "open":
+            return {"ok": False, "error": f"no open paper order {order.get('order_id')}"}
+        old, o["price"] = o["price"], float(price)
+        if self.watch is not None:
+            self.watch.mark()
+        self.log(fmt("TRADE", "broker", f"paper {order.get('order_id')} target {old:.2f} -> {price:.2f}"))
+        return {"ok": True, "error": None}
 
     def adopt(self, job):
         """After a restart: the open job's position and its resting target, from MongoDB."""

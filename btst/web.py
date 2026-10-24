@@ -44,14 +44,21 @@ PAGE = r"""<!DOCTYPE html>
   pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Menlo,monospace}
   a{color:inherit} .head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--rule);padding-bottom:6px;margin-bottom:4px}
   .head h1{border:0;padding:0;margin:0} a.btn{text-decoration:none;display:inline-block}
+  .pill{display:inline-block;border:1px solid var(--hair);background:var(--panel);padding:0 6px;font-size:11px;margin-left:4px;color:var(--dim)}
+  .pill.on{color:var(--up);border-color:var(--up)} .pill.bad{color:var(--down);border-color:var(--down)}
+  .n{font-size:12px;color:var(--dim)} .phase{margin:8px 0 2px;font-size:14px}
+  tr.det>td{background:var(--panel);text-align:left;white-space:normal;padding:8px 10px}
+  .det h4{margin:6px 0 2px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:600}
+  .det table{margin:2px 0 8px;font-size:12px} .linkbtn{border:0;background:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;font-size:12px;padding:0}
 </style>
 <div class="wrap">
   <div class="head"><h1>BTST Desk</h1><a class="btn" id="logbtn" href="/logs" target="_blank" rel="noopener">View logs</a></div>
   <p class="sub" id="sub">connecting…</p>
   <p id="ctl"></p>
   <h2>Open trade</h2><div id="open"></div>
+  <h2>Trades</h2><div class="tbl" id="days"></div>
   <h2>Statistics</h2><div id="stats"></div>
-  <h2>Every day</h2><div class="tbl" id="days"></div>
+  <h2>System</h2><div id="sys"></div>
   <h2 id="msgsh">Channel messages read</h2><div class="tbl" id="msgs"></div>
 </div>
 <script>
@@ -60,7 +67,14 @@ const n0 = x => x == null || isNaN(x) ? "–" : Number(x).toLocaleString("en-IN"
 const n2 = x => x == null || isNaN(x) ? "–" : Number(x).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const cls = x => x > 0 ? "up" : (x < 0 ? "down" : "");
 const rs = x => x == null ? "–" : (x < 0 ? "−₹" : "₹") + n0(Math.abs(x));
-let BUSY = false;
+const pc = x => x == null || isNaN(x) ? "–" : (x > 0 ? "+" : "") + n2(x) + "%";
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const tm = s => !s ? "–" : `${s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 19)}`;
+const SCEN = {hold: "up: target held", hold_small_loss: "down ≤ 20%: target held",
+  average_down: "down 20–50%: averaged, target avg + 20%", average_down_deep: "down > 50%: averaged, target avg + 10%, trailing",
+  average_down_failed: "average-down buy failed", average_down_skipped: "average down skipped", closed_on_entry_day: "closed on entry day"};
+const OPEN_ROWS = new Set();
+let BUSY = false, LAST = null;
 async function switchMode(to){
   if(!confirm(to === "live" ? "Switch BTST to LIVE - real orders with real money?" : "Switch BTST back to PAPER?")) return;
   BUSY = true;
@@ -68,6 +82,7 @@ async function switchMode(to){
   BUSY = false;
   alert(r.ok ? "BTST is now " + r.mode.toUpperCase() : "Not switched: " + r.error);
 }
+function toggle(id){ OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); if (LAST) drawTrades(LAST); }
 function statBlock(s){
   const box = (k, v, c) => `<div class="box"><div class="k">${k}</div><div class="v ${c||""}">${v}</div></div>`;
   return `<p class="sub"><b>${esc(s.mode.toUpperCase())}</b> · ${s.trades} closed trade(s)${s.open_or_failed ? ` · ${s.open_or_failed} open / not traded` : ""}</p>
@@ -75,8 +90,75 @@ function statBlock(s){
   ${box("Wins / losses", s.wins + " / " + s.losses)}${box("Avg per trade", rs(s.avg_pnl), cls(s.avg_pnl))}
   ${box("Avg % of invested", s.trades ? n2(s.avg_pct) + "%" : "–", cls(s.avg_pct))}${box("Best / worst", rs(s.best) + " / " + rs(s.worst))}
   ${box("Profit factor", s.profit_factor == null ? "–" : n2(s.profit_factor))}${box("Max drawdown", rs(s.max_drawdown))}
-  ${box("Target hit / 15:14 exit", s.target_hits + " / " + s.time_exits)}${box("Averaged down", s.averaged)}
+  ${box("Target hit / timed exit", s.target_hits + " / " + s.time_exits)}${box("Averaged down / trailed", s.averaged + " / " + (s.trailed || 0))}
   ${box("Invested (sum)", rs(s.invested_total))}${box("Charges", rs(s.charges))}</div>`;
+}
+function phase(d, j, r){
+  const today = (d.now || "").slice(0, 10), R = d.rules || {};
+  if (j.trade_date === today && !j.decision)
+    return `Entry day · the target is at Angel until ${esc(R.market_close)}` + (j.mode === "live" ? ` · the target goes back in as an AMO at ${esc(R.amo_at)}` : "")
+      + ` · next-day decision ${esc(d.next_session)} ${esc(R.decide_at)}`;
+  if (!j.decision) return `Waiting for the next session · decision at ${esc(R.decide_at)}` + (j.amo ? ` · AMO ${esc(j.amo.order_id)} at Angel` : "");
+  return `${esc(SCEN[j.decision.scenario] || j.decision.scenario)} (opened ${pc(j.decision.pnl_pct)}) · out at market at ${esc(R.exit_at)} if the target is not hit`;
+}
+function drawOpen(d){
+  const j = d.open_job, el = document.getElementById("open");
+  if (!j){ el.innerHTML = `<p class="dim">No trade open.</p>`; return; }
+  const r = (d.days || []).find(x => x.job_id === j.job_id) || {}, p = j.position || {}, c = j.contract || {};
+  const pr = d.price || {}, tr = j.trail, box = (k, v, n, c2) => `<div class="box"><div class="k">${k}</div><div class="v ${c2||""}" style="font-size:17px">${v}</div><div class="n">${n||""}</div></div>`;
+  const tKind = j.soft_target ? "watched (order refused)" : (j.target_order && j.target_order.kind === "amo_target" ? "AMO at Angel" : "limit order at Angel");
+  const toTarget = r.now_price && j.target_price ? 100 * (j.target_price - r.now_price) / r.now_price : null;
+  el.innerHTML = `<p class="phase"><b>${esc(c.symbol)}</b> <span class="${j.mode === "live" ? "live" : "paper"}">${esc((j.mode||"").toUpperCase())}</span>
+      <span class="pill">${esc(j.job_id)}</span> — ${phase(d, j, r)}</p>
+    <div class="grid">
+      ${box("Contract", esc(c.symbol), `${esc(c.exchange)} · expiry ${esc(c.expiry)} · lot ${esc(c.lot_size)}`)}
+      ${box("Signal", `${esc((j.signal||{}).indices)} ${esc((j.signal||{}).strike_price)} ${esc((j.signal||{}).side)} @ ${esc((j.signal||{}).price)}`, `posted ${tm((j.message||{}).date)} · read by ${esc((j.signal||{}).parsed_by)}`)}
+      ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `at ${tm(p.entry_at)}`)}
+      ${box("Average · invested", `${n2(p.avg_price)} · ${rs(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} at ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
+      ${box("Current price", n2(r.now_price), `${tm(j.last_ltp_at)} · via ${esc(pr.source || "–")}${pr.age_sec != null ? " · " + pr.age_sec + "s old" : ""}`)}
+      ${box("Profit / loss", `${rs(r.live_pnl)} · ${pc(r.live_pct)}`, "vs the average price", cls(r.live_pnl))}
+      ${box("High / low since entry", `${n2(j.ltp_high)} / ${n2(j.ltp_low)}`, `${pc(p.avg_price ? 100 * (j.ltp_high - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (j.ltp_low - p.avg_price) / p.avg_price : null)}`)}
+      ${box("Target", n2(j.target_price), `${tKind} · ${esc(j.target_last_status || "–")}${toTarget != null ? " · " + pc(toTarget) + " away" : ""}`)}
+      ${box("Trailing", tr ? (tr.active ? "on" : "stopped") : "–", tr ? `from ${n2(tr.initial)} · floor ${n2(tr.floor)} · ${(tr.steps||[]).length} step(s) · lowest ${n2(tr.low)} under ${n2(tr.ref)}` : "only when averaged at a loss over 50%", tr && tr.active ? "up" : "")}
+      ${box(j.amo && !(j.target_order && j.target_order.kind === "amo_target") ? "AMO (earlier, replaced)" : "AMO", j.amo ? esc(j.amo.order_id) : "–", j.amo ? `${n2(j.amo.price)} x${n0(j.amo.qty)} · placed ${tm(j.amo.placed_at)}${(j.amo_history||[]).length ? " · last check " + esc(j.amo_history.slice(-1)[0].slot) + " " + esc(j.amo_history.slice(-1)[0].action) : ""}` : (j.mode === "live" ? "placed at the AMO time while the trade waits" : "live only"))}
+    </div>`;
+}
+function detail(r){
+  const t = r.timeline; if (!t) return `<p class="dim">Older trade - see the log.</p>`;
+  const tbl = (head, rows) => rows.length ? `<table><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>${rows.join("")}</table>` : `<p class="dim">–</p>`;
+  return `<h4>Timeline</h4>` + tbl(["Time", "What"], t.events.map(e => `<tr><td>${tm(e.at)}</td><td class="l">${esc(e.text)}</td></tr>`))
+    + `<h4>Target history</h4>` + tbl(["Time", "Kind", "Price", "From", "Order", "Status", "Why"], t.targets.map(h => `<tr><td>${tm(h.at)}</td><td>${esc(h.kind)}</td><td>${n2(h.price)}</td><td>${n2(h.previous)}</td><td>${esc(h.order_id || (h.watched ? "watched" : ""))}</td><td>${esc(h.status || (h.ok === false ? "refused" : ""))}</td><td class="l">${esc(h.why || h.error || "")}</td></tr>`))
+    + `<h4>AMO checks</h4>` + tbl(["Time", "For", "Action", "Order", "Status", "Why / error"], t.amo.map(a => `<tr><td>${tm(a.at)}</td><td>${esc(a.slot)}</td><td>${esc(a.action)}</td><td>${esc(a.order_id || "")}</td><td>${esc(a.status || "")}</td><td class="l">${esc(a.why || a.error || "")}</td></tr>`))
+    + `<h4>Orders</h4>` + tbl(["Time", "Kind", "Side", "Qty", "Price", "Filled @", "Status", "Order", "Error"], t.orders.map(o => `<tr><td>${tm(o.at)}</td><td>${esc(o.kind)}${o.variety === "AMO" ? ' <span class="pill">AMO</span>' : ""}</td><td>${esc(o.side || "")}</td><td>${n0(o.qty)}</td><td>${n2(o.price_sent)}</td><td>${o.filled ? n0(o.filled) + " @ " + n2(o.avg_price) : ""}</td><td>${esc(o.status || "")}</td><td>${esc(o.order_id || "")}</td><td class="l">${esc(o.error || "")}</td></tr>`));
+}
+function drawTrades(d){
+  const rows = d.days || [];
+  const COLS = 17;
+  document.getElementById("days").innerHTML = !rows.length ? `<p class="dim">No BTST yet.</p>` :
+    `<table><tr><th>Date</th><th>Mode</th><th>Contract</th><th>Signal</th><th>Buy time</th><th>Buy @</th><th>Qty</th><th>Avg</th><th>Invested</th>
+     <th>Now / exit</th><th>P&L</th><th>%</th><th>Target</th><th>Next day</th><th>Exit</th><th>Status</th><th></th></tr>` +
+    rows.map(r => {
+      const open = r.status === "open", id = r.job_id;
+      const main = `<tr class="${id ? "" : "dim"}"><td>${esc(r.date)}</td><td>${esc(r.mode)}</td><td>${esc(r.symbol || "–")}</td><td class="l">${esc(r.signal)}<div class="n">${tm(r.signal_at)}</div></td>
+        <td>${tm(r.buy_at)}</td><td>${n2(r.entry_price)}</td><td>${n0(r.qty)}</td><td>${n2(r.avg_price)}${r.added_qty ? `<div class="n">+${n0(r.added_qty)} @ ${n2(r.added_price)}</div>` : ""}</td><td>${rs(r.invested)}</td>
+        <td>${n2(r.now_price)}<div class="n">${open ? "now" : tm(r.exit_at)}</div></td><td class="${cls(r.live_pnl)}">${rs(r.live_pnl)}</td><td class="${cls(r.live_pct)}">${pc(r.live_pct)}</td>
+        <td>${n2(r.target)}${r.target_kind === "amo_target" ? '<span class="pill">AMO</span>' : ""}${r.trail ? `<span class="pill ${r.trail.active ? "on" : ""}">trail ${r.trail.steps}</span>` : ""}</td>
+        <td class="l">${esc(SCEN[r.scenario] || r.scenario || "")}${r.opened_pct != null ? `<div class="n">opened ${pc(r.opened_pct)}</div>` : ""}</td>
+        <td class="l">${esc(r.exit_reason || "")}${r.exit_price ? `<div class="n">@ ${n2(r.exit_price)}</div>` : ""}</td>
+        <td class="l">${open ? '<b class="up">open</b>' : esc(r.status)}${r.reason ? " – " + esc(r.reason) : ""}</td>
+        <td>${id ? `<button class="linkbtn" onclick="toggle('${esc(id)}')">${OPEN_ROWS.has(id) ? "hide" : "details"}</button> · ` : ""}<a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></td></tr>`;
+      return main + (id && OPEN_ROWS.has(id) ? `<tr class="det"><td colspan="${COLS}">${detail(r)}</td></tr>` : "");
+    }).join("") + `</table>`;
+}
+function drawSys(d){
+  const h = d.health || {}, a = h.angel || {}, p = h.price || d.price || {}, ho = h.holidays || {};
+  const box = (k, v, n, c) => `<div class="box"><div class="k">${k}</div><div class="v ${c||""}" style="font-size:16px">${v}</div><div class="n">${n||""}</div></div>`;
+  document.getElementById("sys").innerHTML = `<div class="grid">
+    ${box("Angel session", a.logged_in_at ? "logged in " + tm(a.logged_in_at) : "–", `${a.logins || 0} login(s) · daily refresh ${esc((d.rules||{}).session_refresh_at || "")}${a.auth_refreshes ? " · " + a.auth_refreshes + " token re-login(s)" : ""}${a.last_error ? " · last error " + esc(a.last_error) : ""}`, a.last_error ? "down" : "")}
+    ${box("Websocket", p.websocket ? "connected" : (p.symbol ? "not connected" : "idle"), p.symbol ? `${esc(p.symbol)} · ${n0(p.ticks)} ticks · ${n0(p.ltp_calls)} LTP calls${p.ws_restarts ? " · " + p.ws_restarts + " restart(s)" : ""}` : "runs while a trade is open in market hours", p.symbol && !p.websocket ? "warn" : "")}
+    ${box("Telegram reader", h.reader || "–", esc(d.channel), h.reader === "DOWN" ? "down" : "up")}
+    ${box("Holidays", (ho.known_this_year ?? "–") + " this year", `${esc(ho.source || "")}${(ho.next || []).length ? " · next " + ho.next.map(esc).join(", ") : ""}${ho.error ? " · fetch error " + esc(ho.error) : ""}`)}
+  </div>`;
 }
 async function tick(){
   try{
@@ -88,30 +170,12 @@ async function tick(){
     document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">· ${lp} warning/error${lp > 1 ? "s" : ""} today</span>` : "");
     document.getElementById("ctl").innerHTML = d.open_job ? `<span class="dim">Mode can be switched once the open trade is closed.</span>`
       : `<button class="btn" ${BUSY ? "disabled" : ""} onclick="switchMode('${live ? "paper" : "live"}')">Switch to ${live ? "PAPER" : "LIVE"}</button>`;
-    const j = d.open_job;
-    document.getElementById("open").innerHTML = !j ? `<p class="dim">No trade open.</p>` : (() => {
-      const p = j.position || {}, c = j.contract || {}, dec = j.decision || {};
-      const pnl = j.last_ltp && p.avg_price ? (j.last_ltp - p.avg_price) * p.qty : null;
-      return `<div class="grid">
-        <div class="box"><div class="k">Contract</div><div class="v" style="font-size:16px">${esc(c.symbol)}</div><div class="dim">${esc(c.exchange)} · expiry ${esc(c.expiry)}</div></div>
-        <div class="box"><div class="k">Qty @ average</div><div class="v">${n0(p.qty)} @ ${n2(p.avg_price)}</div><div class="dim">invested ${rs(p.invested)}</div></div>
-        <div class="box"><div class="k">Target</div><div class="v">${n2(j.target_price)}</div><div class="dim">${j.soft_target ? "watched (order refused)" : (j.target_order && j.target_order.kind === "amo_target" ? "AMO at Angel for the next open" : "limit order at Angel")}${j.target_last_status ? " · " + esc(j.target_last_status) : ""}</div></div>
-        <div class="box"><div class="k">LTP / open P&L</div><div class="v ${cls(pnl)}">${n2(j.last_ltp)} · ${rs(pnl)}</div><div class="dim">at ${esc(j.last_ltp_at || "")}${d.price && d.price.source ? " · via " + esc(d.price.source) + (d.price.websocket ? " (" + n0(d.price.ticks) + " ticks)" : "") : ""}${d.price && d.price.peak_since_target ? " · highest since target " + n2(d.price.peak_since_target) : ""}</div></div>
-        <div class="box"><div class="k">Next-day decision</div><div class="v" style="font-size:16px">${esc(dec.scenario || "at the open")}</div><div class="dim">${dec.pnl_pct != null ? "opened " + n2(dec.pnl_pct) + "%" : ""}</div></div>
-      </div><p class="sub">${esc(j.job_id)} · signal: ${esc((j.signal||{}).indices)} ${esc((j.signal||{}).strike_price)} ${esc((j.signal||{}).side)} @ ${esc((j.signal||{}).price)}</p>`; })();
+    LAST = d;
+    drawOpen(d);
+    drawTrades(d);
+    drawSys(d);
     document.getElementById("stats").innerHTML = (d.stats || []).map(statBlock).join("")
       + `<p class="sub">Trading days with no signal (no trade): ${d.no_signal_days || 0}</p>`;
-    const rows = d.days || [];
-    document.getElementById("days").innerHTML = !rows.length ? `<p class="dim">No BTST yet.</p>` :
-      `<table><tr><th>Date</th><th>Mode</th><th>Signal</th><th>Contract</th><th>Qty</th><th>Avg</th><th>Invested</th><th>Target</th>
-       <th>Next day</th><th>Exit</th><th>Exit price</th><th>Net</th><th>%</th><th>Status</th><th>Log</th></tr>` +
-      rows.map(r => `<tr class="${r.job_id ? "" : "dim"}"><td>${esc(r.date)}</td><td>${esc(r.mode)}</td><td class="l">${esc(r.signal)}</td><td>${esc(r.symbol || "–")}</td>
-        <td>${n0(r.qty)}</td><td>${n2(r.avg_price)}</td><td>${rs(r.invested)}</td><td>${n2(r.target)}</td><td>${esc(r.scenario || "")}</td>
-        <td>${esc(r.exit_reason || "")}</td><td>${n2(r.exit_price)}</td><td class="${cls(r.net_pnl)}">${rs(r.net_pnl)}</td>
-        <td class="${cls(r.pnl_pct)}">${r.pnl_pct == null ? "–" : n2(r.pnl_pct) + "%"}</td>
-        <td class="l">${esc(r.status)}${r.reason ? " – " + esc(r.reason) : ""}</td>
-        <td><a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></td></tr>`).join("") + `</table>`;
-    document.getElementById("msgsh").textContent = "Channel messages read (" + (d.window || "") + " IST)";
     const ms = d.messages || [];
     document.getElementById("msgs").innerHTML = !ms.length ? `<p class="dim">Nothing read yet.</p>` :
       `<table><tr><th>Time</th><th>Signal?</th><th>Why</th><th>Message</th></tr>` +

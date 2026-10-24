@@ -12,6 +12,11 @@ went in is a trade at that price after it went in. So `peak()` - the highest
 price traded since `mark()` - is exact, whatever happened between two looks.
 (One blind spot: a day high already above the target when it was marked;
 then only the looks themselves count.)
+
+A socket that goes quiet in market hours for ws_dead_sec (90 s) is stopped
+and started again (on top of MarketFeed's own reconnects); a new Angel session
+(the daily refresh, a re-login) starts a new socket. Every switch between the
+websocket and the LTP call is logged.
 """
 import threading
 import time
@@ -43,11 +48,13 @@ class PriceWatch:
 
     def __init__(self, session_fn=None, rest_quote=None, log=print, ltp_poll_sec=1.0, ws_fresh_sec=5.0,
                  stale_sec=60.0, use_ws=True, clock=time.time, feed_cls=_Feed, today=lambda: now_ist().date(),
-                 hours=("09:15", "15:45")):
+                 hours=("09:15", "15:45"), ws_dead_sec=90.0):
         self.session_fn, self.rest_quote, self.log = session_fn, rest_quote, log
         self.ltp_poll_sec, self.ws_fresh_sec = float(ltp_poll_sec), float(ws_fresh_sec)
         self.stale_sec, self.use_ws, self.clock, self.feed_cls = float(stale_sec), use_ws, clock, feed_cls
-        self.today, self.hours = today, hours
+        self.today, self.hours, self.ws_dead_sec = today, hours, float(ws_dead_sec)
+        self.feed_started_at = self.last_ws_at = 0.0
+        self.restarts, self.used, self.switch_said_at = 0, None, 0.0
         self.lock = threading.Lock()
         self.token, self.symbol = None, None
         self.feed, self.feed_session, self.feed_failed_at = None, None, 0.0
@@ -66,6 +73,7 @@ class PriceWatch:
         with self.lock:
             if source == "websocket":
                 self.ticks += 1
+                self.last_ws_at = self.clock()
             if ltp > 0:
                 self.last.update(ltp=ltp, at=self.clock(), source=source)
             if high > 0:
@@ -130,7 +138,7 @@ class PriceWatch:
                               market_open=lambda: market_phase(start=self.hours[0], end=self.hours[1]) == "open")
             f.register(self.token, BSE_FO if c["exchange"] == "BFO" else NSE_FO)
             f.start()
-            self.feed, self.feed_session = f, sess
+            self.feed, self.feed_session, self.feed_started_at = f, sess, self.clock()
             self.log(fmt("INFO", "price", f"websocket started for {c['symbol']} - every tick; the LTP call "
                                           f"every {self.ltp_poll_sec:g} s only while it is quiet"))
         except Exception as e:
@@ -142,14 +150,37 @@ class PriceWatch:
         self.log(fmt("WARN" if any(w in str(text).lower() for w in ("error", "failed", "dead", "no ticks"))
                      else "INFO", "price", str(text)))
 
+    def _check_feed(self, c):
+        """A socket quiet for ws_dead_sec in market hours is started again."""
+        if self.feed is None or market_phase(start=self.hours[0], end=self.hours[1]) != "open":
+            return
+        quiet = self.clock() - max(self.last_ws_at, self.feed_started_at)
+        if quiet > self.ws_dead_sec:
+            self.restarts += 1
+            self.log(fmt("WARN", "price", f"websocket quiet for {quiet:.0f}s in market hours - starting it again "
+                                          f"(restart #{self.restarts}); the LTP call stands in meanwhile"))
+            self._stop_feed()
+            self.feed_failed_at = 0.0
+            self._ensure_feed(c)
+
     def price(self, c):
         """The latest price: the websocket's if it ticked in the last ws_fresh_sec,
         else an LTP call (at most every ltp_poll_sec). None if nothing recent."""
         self.follow(c)
+        self._check_feed(c)
         now = self.clock()
         with self.lock:
             fresh = (self.last.get("source") == "websocket" and self.last.get("at")
                      and now - self.last["at"] <= self.ws_fresh_sec)
+        used = "websocket" if fresh else "ltp call"
+        if used != self.used:
+            if (self.used is not None or used == "ltp call") and now - self.switch_said_at >= 30:
+                self.switch_said_at = now               # at most one switch line in 30 s (an illiquid strike)
+                self.log(fmt("INFO" if used == "websocket" else "WARN", "price",
+                             f"{self.symbol}: price from the websocket" if used == "websocket" else
+                             f"{self.symbol}: no fresh websocket tick - price from the LTP call every "
+                             f"{self.ltp_poll_sec:g}s"))
+            self.used = used
         if not fresh and self.rest_quote and now - self.last_rest >= self.ltp_poll_sec:
             self.last_rest = now
             self.rest_calls += 1
@@ -168,7 +199,8 @@ class PriceWatch:
                     "age_sec": age, "day_high": self.last.get("high"),
                     "peak_since_target": self.top if self.marked == self.today() else None,
                     "websocket": bool(self.feed and self.feed.connected.is_set()), "ticks": self.ticks,
-                    "ltp_calls": self.rest_calls}
+                    "ltp_calls": self.rest_calls, "ws_restarts": self.restarts,
+                    "ws_quiet_sec": round(self.clock() - self.last_ws_at, 1) if self.last_ws_at else None}
 
     def _stop_feed(self):
         f, self.feed, self.feed_session = self.feed, None, None

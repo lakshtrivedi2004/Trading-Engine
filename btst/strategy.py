@@ -9,11 +9,17 @@ market - the option it names, nearest expiry after today (btst/contracts.py),
 the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
 no trade (the day is still recorded, btst_days).
 
-Day D+1 (the next trading day), at decide_at:
+Day D+1 (the next trading day), at decide_at (owner, 24 Oct 2026):
     up, or down by avg_down_loss_pct (20%) or less: keep the target
-    down by more: buy again for about the amount first invested (whole lots,
-                  the count nearest that amount), and target the new average
-                  price + avg_target_pct (10%)
+    down 20% - 50% (deep_loss_pct): buy again for about the amount first
+        invested (whole lots, the count nearest that amount); target = the new
+        average + avg_target_pct (20%)
+    down more than 50%: the same buy; target = average + deep_target_pct (10%),
+        then trailed: 1 point lower for each point (trail_step_points) the
+        price falls below the second buy's price, never below average +
+        trail_floor_points (2) - there the trailing stops
+Every target change (placed, AMO, trailed, replaced) is kept on the job
+(target_history), and the trailing state (trail) with each step.
 The exchange cancels every order at the close. Live, the target goes back in
 at amo_at (17:00) on day D as an AMO for the next open, so an opening spike
 fills it; it stays through the decision (averaging down cancels it first -
@@ -27,10 +33,11 @@ for every trade not taken. No stop-loss, by the owner's design.
 Never more than one trade open; a job left half-entered by a crash is not
 retried - it is marked for a human to look at.
 """
+import math
 import queue
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from arb.instruments import IST, holidays, market_phase, now_ist
 from btst import signal as S
@@ -67,6 +74,8 @@ class BtstStrategy:
         self.last_order_check = 0.0
         self.touch_said = None
         self.managing = False
+        self.last_trail_modify = 0.0
+        self.health = {}                # the runner's view: session, websocket, reader, holidays
         self.last_status_log = 0.0
         self.window_said = {}           # day -> "open" / "closed" already logged
         self.status_note = "starting"
@@ -102,6 +111,20 @@ class BtstStrategy:
                 self.notifier.send(f"🌙 <b>BTST</b> {text}")
             except Exception as e:
                 self._log("telegram", f"alert not sent: {e!r}", "WARN")
+
+    def _history(self, jid, kind, **fields):
+        """One line of the job's target history (placed, amo, trail, cancel ...)."""
+        try:
+            self.store.update_job(jid, push={"target_history": dict(at=self._ts(), kind=kind, **fields)})
+        except Exception as e:
+            self._log("mongo", f"target history for {jid} not saved: {e!r}", "ERROR")
+
+    def _next_session(self, day):
+        """The first trading day after `day` (weekends and holidays skipped)."""
+        d = day + timedelta(days=1)
+        while d.weekday() >= 5 or d.isoformat() in holidays():
+            d += timedelta(days=1)
+        return d
 
     # ── messages (the Telegram reader's thread puts, step() takes) ─────────
     def on_message(self, msg):
@@ -298,6 +321,9 @@ class BtstStrategy:
         self.store.update_job(job["job_id"], set_={"target_price": price, "target_order": o,
                                                    "target_last_status": o.get("status"),
                                                    "soft_target": not o.get("ok")})
+        self._history(job["job_id"], kind, price=price, qty=q, order_id=o.get("order_id"),
+                      variety=o.get("variety", "NORMAL"), ok=bool(o.get("ok")), status=o.get("status"),
+                      error=o.get("error"), watched=not o.get("ok"))
         if o.get("ok"):
             self._say(f"target SELL {c['symbol']} x{q} @ {price:.2f} placed ({o.get('order_id')}, "
                       f"{o.get('status')})", job["job_id"], area="order", level="TRADE")
@@ -354,12 +380,21 @@ class BtstStrategy:
             return
         if now.date().isoformat() <= job["trade_date"]:
             return                              # the entry day: nothing more until tomorrow
+        planned = self._next_session(datetime.fromisoformat(job["trade_date"]).date())
+        if now.date() > planned:                # the desk was down on the planned day: out now
+            self._log("exit", f"the trade was due out on {planned} (the desk was not running then) - "
+                              f"closing at market now", "WARN")
+            self._exit_market(job, "overdue_exit")
+            return
         if not job.get("decision") and _secs(now) >= _hm(self.c("decide_at", "09:15:30")):
             self._decide(job, ltp)
             return
         if job.get("decision") and _secs(now) >= _hm(self.c("exit_at", "15:14")):
             self._log("exit", f"{self.c('exit_at', '15:14')} reached - target not hit, closing at market", "TRADE")
             self._exit_market(job, "time_exit")
+            return
+        if (job.get("trail") or {}).get("active"):
+            self._trail(job, ltp)
 
     def _status_line(self, job, ltp, st):
         """Every log_status_sec while a trade is open: where it stands."""
@@ -410,8 +445,10 @@ class BtstStrategy:
             return
         pnl_pct = 100.0 * (ltp - pos["avg_price"]) / pos["avg_price"]
         limit = float(self.c("avg_down_loss_pct", 20.0))
+        deep = float(self.c("deep_loss_pct", 50.0))
         self._log("decision", f"next-day open: LTP {ltp:.2f} vs average {pos['avg_price']:.2f} = {pnl_pct:+.2f}% "
-                              f"(average down below -{limit:g}%)")
+                              f"(hold down to -{limit:g}%; average down to target +{self.c('avg_target_pct', 20.0):g}% "
+                              f"to -{deep:g}%; beyond, target +{self.c('deep_target_pct', 10.0):g}% and trail)")
         decision = {"at": self._ts(), "ltp": ltp, "pnl_pct": round(pnl_pct, 2), "avg_before": pos["avg_price"]}
         if pnl_pct >= -limit:
             decision["scenario"] = "hold" if pnl_pct >= 0 else "hold_small_loss"
@@ -428,9 +465,14 @@ class BtstStrategy:
                 self._log("decision", f"the target order {to.get('order_id')} "
                                       f"({to.get('variety', 'NORMAL')}, {st['status']}) is still at the exchange - "
                                       f"kept, no second sell placed")
+                self._history(jid, "kept_at_decision", price=job["target_price"], order_id=to.get("order_id"),
+                              status=st["status"])
             else:
                 self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
             return
+        is_deep = -pnl_pct > deep
+        tier = "average_down_deep" if is_deep else "average_down"
+        tpct = float(self.c("deep_target_pct", 10.0) if is_deep else self.c("avg_target_pct", 20.0))
         gone = self._cancel_resting(job, "averaging down - a new target for the whole position follows")
         if gone == "closed":
             return
@@ -444,7 +486,8 @@ class BtstStrategy:
         per_lot = ltp * lot
         n = max(1, round(pos["invested"] / per_lot))
         add = n * lot
-        self._log("decision", f"average down: first invested Rs {pos['invested']:,.0f}, one lot now Rs {per_lot:,.0f} "
+        self._log("decision", f"{'over' if is_deep else 'between ' + format(limit, 'g') + '% and'} {deep:g}% down: "
+                              f"average down - first invested Rs {pos['invested']:,.0f}, one lot now Rs {per_lot:,.0f} "
                               f"-> {n} lot(s) = {add} qty = Rs {add * ltp:,.0f} "
                               f"({100.0 * (add * ltp - pos['invested']) / pos['invested']:+.1f}% vs the first amount)")
         self._log("order", f"BUY {c['symbol']} x{add} at market (average down)", "TRADE")
@@ -461,18 +504,98 @@ class BtstStrategy:
         q2, p2 = int(buy["filled"]), float(buy["avg_price"])
         q = pos["qty"] + q2
         avg = (pos["avg_price"] * pos["qty"] + p2 * q2) / q
-        target = tick_round(avg * (1 + float(self.c("avg_target_pct", 10.0)) / 100.0), c["tick"], up=True)
+        target = tick_round(avg * (1 + tpct / 100.0), c["tick"], up=True)
         self._log("order", f"average-down BUY filled {q2} @ {p2:.2f} (order {buy.get('order_id')}) - "
                            f"position {q} @ {avg:.2f}", "TRADE")
         new_pos = dict(pos, qty=q, avg_price=round(avg, 2), invested=round(pos["invested"] + p2 * q2, 2),
-                       added_qty=q2, added_price=round(p2, 2), added_amount=round(p2 * q2, 2))
-        decision.update(scenario="average_down", added_qty=q2, added_price=p2, avg_after=round(avg, 2),
-                        first_invested=pos["invested"], added_amount=round(p2 * q2, 2))
-        self.store.update_job(jid, set_={"decision": decision, "position": new_pos})
-        self._say(f"opened {pnl_pct:+.1f}% (over {limit:g}% down): bought {q2} more @ {p2:.2f} "
-                  f"(Rs {p2 * q2:,.0f} vs Rs {pos['invested']:,.0f} first) - average {avg:.2f}, "
-                  f"target {target:.2f} (+{self.c('avg_target_pct', 10.0):g}%)", jid, True, "decision", "TRADE")
+                       added_qty=q2, added_price=round(p2, 2), added_amount=round(p2 * q2, 2),
+                       added_at=buy["at"])
+        decision.update(scenario=tier, added_qty=q2, added_price=p2, avg_after=round(avg, 2),
+                        first_invested=pos["invested"], added_amount=round(p2 * q2, 2), target_pct=tpct)
+        upd = {"decision": decision, "position": new_pos}
+        floor = tick_round(avg + float(self.c("trail_floor_points", 2.0)), c["tick"], up=True)
+        if is_deep and target > floor:
+            upd["trail"] = {"active": True, "ref": round(p2, 2), "low": round(p2, 2), "initial": target,
+                            "floor": floor, "step": float(self.c("trail_step_points", 1.0)),
+                            "started_at": buy["at"], "steps": []}
+        self.store.update_job(jid, set_=upd)
+        self._say(f"opened {pnl_pct:+.1f}% ({'over ' + format(deep, 'g') if is_deep else 'over ' + format(limit, 'g')}% "
+                  f"down): bought {q2} more @ {p2:.2f} (Rs {p2 * q2:,.0f} vs Rs {pos['invested']:,.0f} first) - "
+                  f"average {avg:.2f}, target {target:.2f} (+{tpct:g}%)"
+                  + (f"; trailing 1 point per point below {p2:.2f}, never under {floor:.2f} (average + "
+                     f"{self.c('trail_floor_points', 2.0):g})" if "trail" in upd else ""),
+                  jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target_after_average")
+
+    # ── the trailing target (loss over deep_loss_pct, averaged down) ───────
+    def _trail(self, job, ltp):
+        """1 point lower for each point the price has fallen below the second
+        buy (the lowest since then), never under the floor (average + 2); at
+        the floor the trailing stops. It only ever comes down."""
+        tr = dict(job["trail"])
+        if not ltp:
+            return
+        jid, c = job["job_id"], job["contract"]
+        low = min(float(tr["low"]), float(ltp))
+        moved_low = low < float(tr["low"])
+        tr["low"] = round(low, 2)
+        drop = math.floor((float(tr["ref"]) - low) / float(tr["step"]) + 1e-9) * float(tr["step"])
+        want = max(float(tr["floor"]), tick_round(float(tr["initial"]) - max(0.0, drop), c["tick"], up=True))
+        cur = float(job["target_price"])
+        if want >= cur - 1e-9 or time.time() - self.last_trail_modify < float(self.c("trail_modify_gap_sec", 3)):
+            if moved_low:
+                self.store.update_job(jid, set_={"trail": tr})
+                job["trail"] = tr
+            return
+        self.last_trail_modify = time.time()
+        why = (f"price {ltp} - lowest {low:.2f}, {drop:g} point(s) below the second buy {float(tr['ref']):.2f}")
+        if not self._move_target(job, want, "trail", why):
+            self.store.update_job(jid, set_={"trail": tr})
+            return
+        tr["steps"] = list(tr.get("steps") or []) + [{"at": self._ts(), "ltp": ltp, "low": tr["low"],
+                                                     "from": cur, "to": want}]
+        if want <= float(tr["floor"]) + 1e-9:
+            tr.update(active=False, stopped_at=self._ts(),
+                      stop_reason=f"reached the floor {float(tr['floor']):.2f} (average + "
+                                  f"{self.c('trail_floor_points', 2.0):g}) - trailing stops")
+            self._say(f"target trailed to its floor {want:.2f} - trailing stops", jid, True, "trail", "TRADE")
+        self.store.update_job(jid, set_={"trail": tr})
+        job["trail"] = tr
+
+    def _move_target(self, job, price, kind, why):
+        """The resting target to `price` (modified in place: one sell all along).
+        True if the target is now `price`."""
+        jid, c = job["job_id"], job["contract"]
+        q, cur = int(job["position"]["qty"]), float(job["target_price"])
+        to = job.get("target_order") or {}
+        if job.get("soft_target") or not to.get("ok"):
+            self.store.update_job(jid, set_={"target_price": price})
+            job["target_price"] = price
+            self._history(jid, kind, price=price, previous=cur, watched=True, why=why)
+            self._log("trail", f"watched target {cur:.2f} -> {price:.2f} ({why})", "TRADE")
+            return True
+        r = self.broker.modify_sell(to, c, q, price)
+        if r.get("ok"):
+            to = dict(to, price=price, price_sent=price)
+            self.store.update_job(jid, set_={"target_price": price, "target_order": to})
+            job.update(target_price=price, target_order=to)
+            self._history(jid, kind, price=price, previous=cur, order_id=to.get("order_id"), why=why)
+            self._log("trail", f"target {cur:.2f} -> {price:.2f} ({why})", "TRADE")
+            return True
+        st = self.broker.order_state(to)
+        if st and st["status"] == "complete":
+            self._log("trail", "the target had filled before the modify - closing as a target hit", "TRADE")
+            self._close(job, "target", st["avg"] or cur, None)
+            return False
+        if st and st["final"]:
+            self._log("trail", f"the target {to.get('order_id')} is {st['status']} - placing a new one at {price:.2f}",
+                      "WARN")
+            self._place_target(job, price, "target_trail")
+            return True
+        self._log("trail", f"modify to {price:.2f} refused ({r.get('error')}) - trying again shortly", "WARN")
+        self._history(jid, kind + "_refused", price=price, previous=cur, order_id=to.get("order_id"),
+                      error=r.get("error"))
+        return False
 
     def _target_state(self, job):
         """The resting target's state at the broker, or None if there is none."""
@@ -512,50 +635,91 @@ class BtstStrategy:
         return None
 
     # ── after the close (live): the target as an AMO for the next open ─────
-    def _amo_due(self, job):
-        if (self.broker.mode != "live" or not self.c("amo_exit", True)
-                or not hasattr(self.broker, "place_amo_sell") or job.get("amo") or job.get("decision")):
-            return False
-        if int(job.get("amo_attempts") or 0) >= int(self.c("amo_tries", 3)):
-            return False
-        if job.get("amo_failed_at") and (self.now() - datetime.fromisoformat(job["amo_failed_at"])).total_seconds() \
-                < float(self.c("amo_retry_sec", 300)):
-            return False
-        now = self.now()
-        today, t = now.date().isoformat(), _secs(now)
-        if today == job["trade_date"]:
-            return t >= _hm(self.c("amo_at", "16:01"))
-        # the desk was down at amo_at: until shortly before the next open
-        return today > job["trade_date"] and t < _hm(self.c("amo_until", "08:55"))
+    def _amo_slot(self, now):
+        """The day of the latest amo_at (17:00): today's from 17:00, yesterday's
+        until amo_until (08:55) the next morning; None in between."""
+        t = _secs(now)
+        if t >= _hm(self.c("amo_at", "17:00")):
+            return now.date()
+        if t < _hm(self.c("amo_until", "08:55")):
+            return now.date() - timedelta(days=1)
+        return None
 
-    def _place_amo(self, job):
+    def _amo_check(self, job):
+        """Every day at amo_at - weekends and holidays too: Angel drops an AMO
+        over a weekend or a holiday - while a live trade waits for its next
+        session: the target AMO is kept if it is at Angel, placed if not."""
+        if (self.broker.mode != "live" or not self.c("amo_exit", True)
+                or not hasattr(self.broker, "place_amo_sell") or job.get("decision")):
+            return
+        now = self.now()
+        slot = self._amo_slot(now)
+        if slot is None or slot.isoformat() < job["trade_date"]:
+            return
+        jid, key = job["job_id"], slot.isoformat()
+        rec = job.get("amo_check") or {}
+        if rec.get("slot") == key:
+            if rec.get("done") or int(rec.get("attempts") or 0) >= int(self.c("amo_tries", 3)):
+                return
+            if rec.get("failed_at") and (now - datetime.fromisoformat(rec["failed_at"])).total_seconds() \
+                    < float(self.c("amo_retry_sec", 300)):
+                return
+        else:
+            rec = {"slot": key, "attempts": 0}
+        to = job.get("target_order") or {}
+        st = self._target_state(job)
+        if st and st["status"] == "complete":
+            self._close(job, "target", st["avg"] or job["target_price"], None)
+            return
+        if st and not st["final"] and to.get("kind") == "amo_target":
+            rec.update(done=True, checked_at=self._ts(), action="kept")
+            self.store.update_job(jid, set_={"amo_check": rec},
+                                  push={"amo_history": {"at": self._ts(), "slot": key, "action": "kept",
+                                                        "order_id": to.get("order_id"), "status": st["status"]}})
+            self._log("order", f"{key} {self.c('amo_at', '17:00')} check: the AMO target {to.get('order_id')} is at "
+                               f"Angel ({st['status']}) - kept")
+            return
+        why = ("no target order at Angel" if not to.get("ok") else
+               f"the target {to.get('order_id')} ({to.get('variety', 'NORMAL')}) is "
+               f"{(st or {}).get('status', 'unreadable')}")
+        o = self._place_amo(job, why)
+        rec["attempts"] = int(rec.get("attempts") or 0) + 1
+        hist = {"at": self._ts(), "slot": key, "action": "placed" if o.get("ok") else "refused", "why": why,
+                "order_id": o.get("order_id"), "status": o.get("status"), "error": o.get("error"),
+                "price": job["target_price"], "qty": int(job["position"]["qty"])}
+        if o.get("ok"):
+            rec.update(done=True, checked_at=self._ts(), action="placed")
+        else:
+            rec.update(failed_at=self._ts(), error=o.get("error"))
+            last = rec["attempts"] >= int(self.c("amo_tries", 3))
+            self._say(f"AMO target refused ({o.get('error')}) - "
+                      + ("no more tries: the target goes in normally at the open" if last
+                         else f"retrying in {float(self.c('amo_retry_sec', 300)) / 60:g} min "
+                              f"({rec['attempts']}/{self.c('amo_tries', 3)})"),
+                      jid, last, "order", "ERROR" if last else "WARN")
+        self.store.update_job(jid, set_={"amo_check": rec}, push={"amo_history": hist})
+
+    def _place_amo(self, job, why):
         jid, c = job["job_id"], job["contract"]
         q, tp = int(job["position"]["qty"]), float(job["target_price"])
-        self._log("order", f"AMO SELL {c['symbol']} x{q} LIMIT {tp:.2f} for the next open (after the close, "
-                           f"so an opening spike fills it)", "TRADE")
+        self._log("order", f"AMO SELL {c['symbol']} x{q} LIMIT {tp:.2f} for the next open ({why})", "TRADE")
         o = self.broker.place_amo_sell(c, q, tp)
         o.update(kind="amo_target", at=self._ts(), price=tp)
         self.store.add_order(jid, o)
         if o.get("ok"):
             amo = {"order_id": o.get("order_id"), "uid": o.get("uid"), "price": tp, "qty": q,
-                   "placed_at": o["at"], "status": o.get("status")}
+                   "placed_at": o["at"], "status": o.get("status"), "why": why}
             self.store.update_job(jid, set_={"amo": amo, "target_order": o, "target_last_status": o.get("status"),
                                              "soft_target": False})
+            self._history(jid, "amo_target", price=tp, qty=q, order_id=o.get("order_id"), variety="AMO",
+                          status=o.get("status"), why=why)
             self._say(f"AMO target SELL {c['symbol']} x{q} @ {tp:.2f} placed for the next open "
                       f"({o.get('order_id')}, {o.get('status')}); cancelled and sold at market at "
                       f"{self.c('exit_at', '15:14')} if not hit", jid, True, "order", "TRADE")
-            return
-        n = int(job.get("amo_attempts") or 0) + 1
-        self.store.update_job(jid, set_={"amo_attempts": n, "amo_failed_at": self._ts(), "amo_error": o.get("error")})
-        last = n >= int(self.c("amo_tries", 3))
-        self._say(f"AMO target refused ({o.get('error')}) - "
-                  + ("no more tries: the target goes in normally at the open" if last
-                     else f"retrying in {float(self.c('amo_retry_sec', 300)) / 60:g} min ({n}/{self.c('amo_tries', 3)})"),
-                  jid, last, "order", "ERROR" if last else "WARN")
+        return o
 
     def _after_close(self, job):
-        if self._amo_due(job):
-            self._place_amo(job)
+        self._amo_check(job)
 
     def _exit_market(self, job, reason):
         jid, c = job["job_id"], job["contract"]
@@ -593,6 +757,8 @@ class BtstStrategy:
             return
         self._log("order", f"SELL filled {sell['filled']} @ {sell['avg_price']:.2f} (order {sell.get('order_id')})",
                   "TRADE")
+        self._history(jid, "exit", price=float(sell["avg_price"]), qty=int(sell["filled"]),
+                      order_id=sell.get("order_id"), why=reason)
         self._close(job, reason, float(sell["avg_price"]), sell)
 
     # ── close and metrics ───────────────────────────────────────────────────
@@ -634,7 +800,14 @@ class BtstStrategy:
             "entry_slippage_pct": round(100.0 * (pos["entry_price"] - sig["price"]) / sig["price"], 2)
             if sig.get("price") else None,
             "scenario": dec.get("scenario", "closed_on_entry_day"),
-            "open_pnl_pct_next_day": dec.get("pnl_pct"), "averaged": dec.get("scenario") == "average_down",
+            "open_pnl_pct_next_day": dec.get("pnl_pct"),
+            "averaged": dec.get("scenario") in ("average_down", "average_down_deep"),
+            "trailed": bool((job.get("trail") or {}).get("steps")),
+            "trail_steps": len((job.get("trail") or {}).get("steps") or []),
+            "target_initial": (job.get("target_history") or [{}])[0].get("price"),
+            "target_changes": len(job.get("target_history") or []),
+            "amo_placed": sum(1 for a in job.get("amo_history") or [] if a.get("action") == "placed"),
+            "entry_at": pos.get("entry_at"),
             "added_qty": pos.get("added_qty", 0), "added_price": pos.get("added_price"),
             "max_ltp": hi, "min_ltp": lo,
             "mfe_pct": round(100.0 * (hi - avg) / avg, 2) if avg else 0.0,
@@ -721,4 +894,10 @@ class BtstStrategy:
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
                 "open_job": j, "jobs": self.store.recent_jobs(20),
                 "messages": self.store.recent_messages(20),
-                "price": self.prices.state() if self.prices is not None else None}
+                "price": self.prices.state() if self.prices is not None else None,
+                "health": dict(self.health),
+                "next_session": self._next_session(self.now().date()).isoformat(),
+                "rules": {k: self.c(k) for k in ("decide_at", "exit_at", "avg_down_loss_pct", "deep_loss_pct",
+                                                  "avg_target_pct", "deep_target_pct", "trail_step_points",
+                                                  "trail_floor_points", "amo_at", "market_close",
+                                                  "session_refresh_at")}}

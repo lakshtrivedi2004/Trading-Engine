@@ -908,20 +908,40 @@ class Exchange:
     def resting_sells(self):
         return [r for r in self.rows.values() if r["side"] == "SELL" and r["orderstatus"] in RESTING]
 
+    def modifyOrder(self, p):
+        self.events.append(("modify", p["orderid"], p["variety"], p["price"]))
+        row = next(r for r in self.rows.values() if r["orderid"] == p["orderid"])
+        if row["orderstatus"] not in RESTING:
+            return {"status": False, "message": "order not open", "data": None}
+        row["price"] = float(p["price"])
+        return {"status": True, "data": {"orderid": p["orderid"]}}
 
-def live_desk():
+    def drop_amos(self):
+        for r in self.rows.values():                      # what Angel does to an AMO over a weekend / holiday
+            if r["variety"] == "AMO" and r["orderstatus"] in RESTING:
+                r["orderstatus"] = "cancelled"
+
+    def tick(self, px):
+        self.px = px
+        for r in self.rows.values():
+            if r["side"] == "SELL" and r["orderstatus"] == "open" and px >= r["price"]:
+                self._fill(r, r["price"])
+
+
+def live_desk(day=22, cfg=None):
     ex = Exchange()
     store = MongoStore(client=_Client(), db_name="amo")
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
             "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55", "amo_tries": 3, "amo_retry_sec": 300}
+    conf.update(cfg or {})
     lg, sent = [], []
     s_ = BtstStrategy(conf, store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None), lambda: MASTER,
                       Model(GOOD), "btst_karo", log=lg.append, now=lambda: CLOCK["t"],
                       notifier=SimpleNamespace(send=sent.append), cost_model=CostModel.load())
-    at(2026, 10, 22, 15, 16)
-    s_.on_message(msg(3, SAMPLE, 15, 16))
+    at(2026, 10, day, 15, 16)
+    s_.on_message(msg(3, SAMPLE, 15, 16, day=day))
     s_.step()
     return s_, store, ex, lg, sent
 
@@ -1035,6 +1055,238 @@ sP.step()
 at(2026, 10, 22, 16, 1)
 sP.step()
 check("paper places no AMO (live only)", stP.open_job() and not stP.open_job().get("amo"))
+
+section("10. Owner's rules of 24 Oct 2026")
+from btst.session import AngelSessions, Api as SessApi, auth_failed   # noqa: E402
+from btst import holidays as H                                        # noqa: E402
+from btst.strategy import BtstStrategy as _BS                         # noqa: E402
+
+TCLK = {"t": 1000.0}
+
+
+class FakeSmart:
+    def __init__(self, n, bad_first=0, raise_first=0):
+        self.n, self.bad, self.raise_ = n, bad_first, raise_first
+
+    def ltpData(self, *a):
+        if self.raise_:
+            self.raise_ -= 1
+            raise Exception("Invalid Token")
+        if self.bad:
+            self.bad -= 1
+            return {"status": False, "errorcode": "AG8001", "message": "Invalid Token", "data": None}
+        return {"status": True, "data": {"ltp": "101.0", "session": self.n}}
+
+
+logins = {"n": 0, "fail": 0}
+
+
+def login_fn():
+    if logins["fail"]:
+        logins["fail"] -= 1
+        raise ConnectionError("login down")
+    logins["n"] += 1
+    return SimpleNamespace(api=FakeSmart(logins["n"]))
+
+
+slog = []
+at(2026, 10, 23, 8, 0)
+ss = AngelSessions(login_fn, log=slog.append, now=lambda: CLOCK["t"], clock=lambda: TCLK["t"])
+api_ = SessApi(ss)
+api_.ltpData("NSE", "NIFTY", "1")
+api_.ltpData("NSE", "NIFTY", "1")
+check("one Angel login for the day, reused", logins["n"] == 1)
+at(2026, 10, 23, 9, 13)
+ss.daily("09:14")
+n_before = logins["n"]
+at(2026, 10, 23, 9, 14, 2)
+TCLK["t"] += 4000
+ss.daily("09:14")
+at(2026, 10, 23, 9, 30)
+ss.daily("09:14")
+check("every trading day at 09:14: a fresh login before the open - once", n_before == 1 and logins["n"] == 2
+      and any("daily refresh" in x for x in slog))
+at(2026, 10, 24, 9, 20)
+TCLK["t"] += 4000
+ss.daily("09:14")
+check("...not on a Saturday", logins["n"] == 2 and ss.refreshed_on.isoformat() == "2026-10-23")
+api_.ltpData("NSE", "NIFTY", "1")
+check("...where the day's first call logs in (a new day)", logins["n"] == 3)
+TCLK["t"] += 4000
+ss.api.bad = 1
+r_ = api_.ltpData("NSE", "NIFTY", "1")
+check("a call refused for its token (AG8001 Invalid Token): logs in again and is sent once more",
+      r_["status"] is True and r_["data"]["session"] == 4 and ss.auth_refreshes == 1, str(r_))
+TCLK["t"] += 4000
+ss.api.raise_ = 1
+r_ = api_.ltpData("NSE", "NIFTY", "1")
+check("...the same for a call that raises 'Invalid Token'", r_["status"] is True and r_["data"]["session"] == 5
+      and ss.auth_refreshes == 2, str(r_))
+ss.api.bad = 5
+r_ = api_.ltpData("NSE", "NIFTY", "1")
+check("...but never a login storm: a token refused right after a login is not logged in again within 60 s",
+      logins["n"] == 5 and r_["status"] is False)
+check("auth errors told apart from others", auth_failed({"status": False, "errorcode": "AB1010"})
+      and not auth_failed({"status": False, "errorcode": "AB2001", "message": "Order rejected"})
+      and auth_failed(exc=Exception("Token Expired")) and not auth_failed(exc=Exception("timed out")))
+at(2026, 10, 26, 9, 0)
+TCLK["t"] += 4000
+logins["fail"] = 5
+try:
+    ss.ensure()
+except Exception:
+    pass
+calls_before = logins["fail"]
+try:
+    ss.ensure()
+    blocked = False
+except RuntimeError as e:
+    blocked = "next try in" in str(e)
+check("a failed login is not retried for 60 s (every call fails fast with the reason)",
+      blocked and logins["fail"] == calls_before)
+TCLK["t"] += 61
+logins["fail"] = 0
+check("...then tried again", ss.ensure() is not None and ss.failures == 1)
+
+ans = {"status": "success", "data": [
+    {"date": "2027-01-26", "holiday_type": "TRADING_HOLIDAY", "closed_exchanges": ["NSE", "NFO", "BSE", "BFO"]},
+    {"date": "2027-03-22", "holiday_type": "TRADING_HOLIDAY", "closed_exchanges": ["MCX"]},
+    {"date": "2027-04-01", "holiday_type": "SETTLEMENT_HOLIDAY", "closed_exchanges": ["NFO"]}]}
+check("Upstox holidays: only trading holidays that close NFO/BFO", H.parse(ans) == ["2027-01-26"])
+cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".holtest.json")
+hl = []
+Hd = H.Holidays(log=hl.append, fetch=lambda url: ans, cache=cache, now=lambda: CLOCK["t"])
+Hd.refresh()
+from arb.instruments import holidays as _hol, market_phase as _mp  # noqa: E402
+check("...fetched and added to the desk's holidays (2027-01-26 is now a holiday)",
+      "2027-01-26" in _hol() and _mp(datetime(2027, 1, 26, 10, 0, tzinfo=IST), "09:15", "15:45") == "holiday")
+H2 = H.Holidays(log=hl.append, fetch=lambda url: (_ for _ in ()).throw(OSError("403")), cache=cache,
+                now=lambda: CLOCK["t"])
+H2.refresh()
+check("...a failed fetch uses the cached answer", "cached" in H2.source and any("cached" in x for x in hl))
+os.remove(cache)
+check("the next trading day skips weekends and holidays (Fri 23 Oct -> Mon 26; Mon 9 Nov -> Wed 11, Diwali)",
+      st._next_session(date(2026, 10, 23)) == date(2026, 10, 26)
+      and st._next_session(date(2026, 11, 9)) == date(2026, 11, 11))
+
+TIERS = {"avg_down_loss_pct": 20.0, "avg_target_pct": 20.0, "deep_loss_pct": 50.0, "deep_target_pct": 10.0,
+         "trail_step_points": 1.0, "trail_floor_points": 2.0, "trail_modify_gap_sec": 0}
+
+
+def paper_day(open_px, cfg=None):
+    at(2026, 10, 22, 15, 16)
+    PRICE["ltp"] = 106.0
+    s_, st_, br_, lg_, sent_ = desk(cfg=dict(TIERS, **(cfg or {})))
+    s_.on_message(msg(3, SAMPLE, 15, 16))
+    s_.step()
+    at(2026, 10, 23, 9, 16)
+    PRICE["ltp"] = open_px
+    s_.step()
+    return s_, st_, br_, lg_
+
+
+s30, st30, br30, _ = paper_day(74.0)               # -30%
+j30 = st30.open_job()
+avg30 = j30["position"]["avg_price"]
+check("loss 20% - 50% (-30%): the same amount again, target = average + 20%, no trailing",
+      j30["decision"]["scenario"] == "average_down" and j30["target_price"] == tick_round(avg30 * 1.20, 0.05)
+      and not j30.get("trail"), f"avg {avg30} target {j30['target_price']}")
+s60, st60, br60, lg60 = paper_day(40.0)            # -62%
+j60 = st60.open_job()
+check("loss over 50% (-62%): 195 more @ 40 (Rs 7,800 vs Rs 6,890), average 56.50, target +10% = 62.15, "
+      "trailing from 40 with the floor 58.50",
+      j60["decision"]["scenario"] == "average_down_deep" and j60["position"]["qty"] == 260
+      and j60["position"]["avg_price"] == 56.5 and j60["target_price"] == 62.15
+      and j60["trail"]["active"] and j60["trail"]["ref"] == 40.0 and j60["trail"]["floor"] == 58.5,
+      str({k: j60.get(k) for k in ("target_price", "trail")}))
+oid60 = j60["target_order"]["order_id"]
+at(2026, 10, 23, 9, 30)
+PRICE["ltp"] = 37.6
+s60.step()
+j60 = st60.open_job()
+check("the price 2.4 points under the second buy: the target 2 points lower (60.15), the same order modified",
+      j60["target_price"] == 60.15 and br60.orders[oid60]["price"] == 60.15 and len(j60["trail"]["steps"]) == 1
+      and j60["target_history"][-1]["kind"] == "trail", str(j60["target_price"]))
+at(2026, 10, 23, 9, 40)
+PRICE["ltp"] = 45.0
+s60.step()
+check("...a bounce does not lift it back", st60.open_job()["target_price"] == 60.15)
+at(2026, 10, 23, 9, 50)
+PRICE["ltp"] = 30.0
+s60.step()
+j60 = st60.open_job()
+check("10 points under: the target stops at the floor, average + 2 = 58.50, and the trailing ends",
+      j60["target_price"] == 58.5 and not j60["trail"]["active"] and "floor" in j60["trail"]["stop_reason"])
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 25.0
+s60.step()
+check("...lower prices do not move it any more", st60.open_job()["target_price"] == 58.5)
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 58.6
+s60.step()
+j60 = st60.recent_jobs()[0]
+check("the price comes back to 58.50: CLOSED as a target hit, with the trail saved on the job",
+      j60["status"] == "closed" and j60["result"]["exit_reason"] == "target" and j60["result"]["exit_price"] == 58.5
+      and j60["result"]["trailed"] and j60["result"]["trail_steps"] == 2 and j60["result"]["averaged"],
+      str(j60.get("result", {}).get("exit_price")))
+check("every target change is in its history: placed at entry, after averaging, 2 trail steps",
+      [h["kind"] for h in j60["target_history"]] == ["target", "target_after_average", "trail", "trail"],
+      str([h["kind"] for h in j60["target_history"]]))
+
+sLT, stLT, exLT, _, _ = live_desk(cfg=TIERS)
+exLT.close_day()
+at(2026, 10, 22, 16, 1)
+sLT.step()
+exLT.open_market(40.0)
+at(2026, 10, 23, 9, 16)
+sLT.step()
+jLT = stLT.open_job()
+n_place = len([e for e in exLT.events if e[0] == "place"])
+at(2026, 10, 23, 9, 20)
+exLT.px = 37.2
+sLT.step()
+jLT2 = stLT.open_job()
+rsLT = exLT.resting_sells()
+check("live: the trailing target is Angel's modifyOrder on the one resting sell - no second sell",
+      jLT["decision"]["scenario"] == "average_down_deep" and len(rsLT) == 1 and rsLT[0]["price"] == jLT2["target_price"]
+      and jLT2["target_price"] == round(jLT["target_price"] - 2, 2)
+      and len([e for e in exLT.events if e[0] == "place"]) == n_place and any(e[0] == "modify" for e in exLT.events),
+      f"{jLT['target_price']} -> {jLT2['target_price']}, resting {[r['price'] for r in rsLT]}")
+
+sW, stW, exW, lgW, sentW = live_desk(day=23, cfg={"amo_at": "17:00"})     # a Friday
+exW.close_day()
+at(2026, 10, 23, 17, 0)
+sW.step()
+exW.drop_amos()                                    # Angel drops it on Saturday
+at(2026, 10, 24, 17, 0, 5)
+sW.step()
+at(2026, 10, 25, 17, 0, 5)                         # Sunday: still there
+sW.step()
+jW = stW.open_job()
+check("Friday entry: AMO at 17:00 Friday; dropped Saturday -> placed again Saturday 17:00; kept Sunday",
+      [a["action"] for a in jW["amo_history"]] == ["placed", "placed", "kept"]
+      and len([e for e in exW.events if e[0] == "place" and e[1] == "AMO"]) == 2
+      and "cancelled" in jW["amo_history"][1]["why"], str([(a["slot"], a["action"]) for a in jW.get("amo_history", [])]))
+at(2026, 10, 26, 8, 30)
+sW.step()
+check("...Monday 08:30: Sunday's check is done, nothing more", len(stW.open_job()["amo_history"]) == 3)
+exW.open_market(120.0)
+at(2026, 10, 26, 9, 16)
+sW.step()
+check("...Monday: the decision keeps the AMO (one sell at the exchange)",
+      stW.open_job()["decision"]["scenario"] == "hold" and len(exW.resting_sells()) == 1)
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sO, stO, brO, lgO, _ = desk()
+sO.on_message(msg(3, SAMPLE, 15, 16))
+sO.step()
+at(2026, 10, 26, 9, 15, 10)                        # the desk was down all of Friday 23
+PRICE["ltp"] = 99.0
+sO.step()
+jO = stO.recent_jobs()[0]
+check("the desk down on the planned day (Fri): out at market at the next open, 'overdue_exit'",
+      jO["status"] == "closed" and jO["result"]["exit_reason"] == "overdue_exit", str(jO.get("result", {}).get("exit_reason")))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

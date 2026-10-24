@@ -33,7 +33,9 @@ from arb.instruments import load_scrip_master, now_ist             # noqa: E402
 from arb.utils import read_channel_messages                        # noqa: E402
 from btst import web                                               # noqa: E402
 from btst.broker import AngelBtstBroker, PaperBtstBroker           # noqa: E402
+from btst.holidays import Holidays                                 # noqa: E402
 from btst.logbook import Logbook, fmt                              # noqa: E402
+from btst.session import AngelSessions, Api                        # noqa: E402
 from btst.ticks import PriceWatch                                  # noqa: E402
 from btst.strategy import BtstStrategy                             # noqa: E402
 from services.mongo import MongoStore                              # noqa: E402
@@ -54,39 +56,6 @@ def read_mode():
     except OSError:
         m = ""
     return "live" if m == "live" else "paper"
-
-
-class Session:
-    """One Angel login a day (the session token does not outlive it)."""
-
-    def __init__(self, creds):
-        self.creds, self.api, self.day, self.angel = creds, None, None, None
-        self.lock = threading.Lock()
-
-    def ensure(self):
-        with self.lock:
-            today = now_ist().date()
-            if self.api is None or self.day != today:
-                log(f"Angel login for {today} ({'first' if self.api is None else 'the new day'})", area="angel")
-                try:
-                    self.angel = AngelSession(self.creds).login(retry_for_sec=120.0, log=BOOK.sink("angel"))
-                    self.api = self.angel.api
-                except Exception as e:
-                    log(f"Angel login failed: {e!r}", "ERROR", "angel")
-                    raise
-                self.day = today
-                log("Angel login ok", area="angel")
-            return self.api
-
-
-class Api:
-    """The current day's SmartConnect, logging in again when the day turns."""
-
-    def __init__(self, session):
-        self._s = session
-
-    def __getattr__(self, name):
-        return getattr(self._s.ensure(), name)
 
 
 class DailyMaster:
@@ -160,7 +129,10 @@ def main():
         log(f"MongoDB unreachable: {e!r} - cannot start", "ERROR", "mongo")
         raise
     log(f"MongoDB ok (db {cfg.get('mongo_db', 'trading_btst')})", area="mongo")
-    sess = Session(creds)
+    hols = Holidays(log=BOOK.log)
+    hols.refresh()
+    sess = AngelSessions(lambda: AngelSession(creds).login(retry_for_sec=120.0, log=BOOK.sink("angel")),
+                         log=BOOK.log)
     sess.ensure()
     api = Api(sess)
     llm = make_llm(cfg, env)
@@ -169,13 +141,11 @@ def main():
 
     rest = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log)
 
-    def angel_session():
-        sess.ensure()
-        return sess.angel
-    prices = PriceWatch(session_fn=angel_session, rest_quote=rest.quote, log=BOOK.log,
+    prices = PriceWatch(session_fn=sess.session, rest_quote=rest.quote, log=BOOK.log,
                         ltp_poll_sec=float(cfg.get("ltp_poll_sec", 1)), ws_fresh_sec=float(cfg.get("ws_fresh_sec", 5)),
                         use_ws=bool(cfg.get("use_websocket", True)),
-                        hours=(cfg.get("market_open", "09:15"), cfg.get("market_close", "15:45")))
+                        hours=(cfg.get("market_open", "09:15"), cfg.get("market_close", "15:45")),
+                        ws_dead_sec=float(cfg.get("ws_dead_sec", 90)))
 
     def make_broker(mode):
         log(f"broker: {mode.upper()}" + (" - real orders, CARRYFORWARD" if mode == "live"
@@ -236,6 +206,13 @@ def main():
     reader, reader_at = start_reader(), time.time()
     beat_at, reader_down_said = time.time(), False
     while not stop.is_set():
+        try:
+            hols.refresh()                          # once a day
+            sess.daily(cfg.get("session_refresh_at", "09:14"))
+        except Exception as e:
+            log(f"daily refresh error: {e!r}", "ERROR", "angel")
+        strategy.health = {"angel": sess.state(), "reader": "up" if reader.is_alive() else "DOWN",
+                           "holidays": hols.state(), "price": prices.state()}
         if not reader.is_alive():
             strategy.status_note = "Telegram reader stopped (see the log) - retrying every 5 min"
             if not reader_down_said:

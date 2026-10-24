@@ -197,6 +197,14 @@ def holidays():
     return _HOLIDAYS
 
 
+def add_holidays(dates):
+    """More trading holidays on top of config/holidays.json (the BTST desk adds
+    the ones it fetches, btst/holidays.py). The set holidays() returns."""
+    hs = holidays()
+    hs.update(str(d)[:10] for d in dates or ())
+    return hs
+
+
 def market_phase(ref=None, start="09:15", end="15:15"):
     """'preopen' | 'open' | 'closed' | 'weekend' | 'holiday' for the given IST time."""
     ref = ref or now_ist()
