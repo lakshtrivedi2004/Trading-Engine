@@ -1155,6 +1155,12 @@ class BtstStrategy:
             bars, source = [], "none"
         out = CH.build(_no_channel(job), bars)
         out["source"] = source
+        base = float((job.get("position") or {}).get("entry_price") or 0)
+        if base:                                # the top-up levels, against the first buy price
+            l1, l2 = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
+            out["levels"] = [{"label": f"-{l1:g}% top-up", "price": round(base * (1 - l1 / 100), 2)},
+                             {"label": f"-{l2:g}% top-up", "price": round(base * (1 - l2 / 100), 2)}]
+            out["entry_price"] = base
         return out
 
     # ── GIFT Nifty, information only (btst/gift.py) ────────────────────────

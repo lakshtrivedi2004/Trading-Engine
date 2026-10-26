@@ -254,9 +254,23 @@ function loadChart(id, force){
   CHART_AT[id] = now;
   fetch("/api/chart?job=" + encodeURIComponent(id)).then(r => r.json()).then(d => { CHARTS[id] = d; if (LAST){ drawOpen(LAST); drawTrades(LAST); } if (HIST.open) drawHistory(); }).catch(() => {});
 }
+const CHART_SCALE = {};
 function chartHover(evt, id){
   const d = CHARTS[id], svg = evt.currentTarget; if (!d || !d.bars.length) return;
   const r = svg.getBoundingClientRect(), x = (evt.clientX - r.left) / r.width * 1000;
+  const sc = CHART_SCALE[id];
+  if (sc){                                       // the horizontal line at the pointer, with its value
+    const y = (evt.clientY - r.top) / r.height * sc.H, h = svg.querySelector(".curh"), lab = svg.querySelector(".curl"), bg = svg.querySelector(".curbg");
+    let txt = null;
+    if (y >= sc.T && y <= sc.T + sc.PH) txt = n2(sc.hi - (y - sc.T) / sc.PH * (sc.hi - sc.lo));
+    else if (y >= sc.P0 && y <= sc.P0 + sc.QH) txt = rs(sc.phi - (y - sc.P0) / sc.QH * (sc.phi - sc.plo));
+    if (h && lab && bg){
+      const show = txt !== null ? "" : "none";
+      h.setAttribute("y1", y); h.setAttribute("y2", y); h.style.display = show;
+      lab.setAttribute("y", y + 4); lab.textContent = txt || ""; lab.style.display = show;
+      bg.setAttribute("y", y - 7); bg.style.display = show;
+    }
+  }
   const n = d.bars.length, i = Math.max(0, Math.min(n - 1, Math.round((x - 56) / (1000 - 56 - 56) * (n - 1))));
   const b = d.bars[i], out = svg.parentNode.querySelector(".readout"), t = new Date(b.t);
   const hh = t.toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
@@ -278,8 +292,9 @@ function chartSvg(d, id){
   const n = B.length, X = i => L + i / (n - 1) * (W - L - R);
   const lows = B.map(b => b.l), highs = B.map(b => b.h), avgs = B.map(b => b.avg).filter(num);
   let lo = Math.min(...lows, ...avgs), hi = Math.max(...highs, ...avgs);
-  const tg = B.map(b => b.target).filter(num), tgIn = tg.filter(t => t <= hi * 1.6);
-  if (tgIn.length) hi = Math.max(hi, ...tgIn);
+  const tg = B.map(b => b.target).filter(num), lv = (d.levels || []).map(x => x.price).filter(num);
+  if (tg.length) hi = Math.max(hi, ...tg);                 // the target always on the chart
+  if (lv.length) lo = Math.min(lo, ...lv);                 // and the top-up levels
   const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
   const Y = v => T + (hi - Math.min(hi, Math.max(lo, v))) / (hi - lo) * PH;
   const pts = (vals) => vals.map((v, i) => num(v) ? `${X(i).toFixed(1)},${Y(v).toFixed(1)}` : null);
@@ -296,8 +311,10 @@ function chartSvg(d, id){
   [lo + pad, (lo + hi) / 2, hi - pad].forEach(v => { svg += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--track)"/><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${n2(v)}</text>`; });
   svg += line(B.map(b => b.avg), `stroke="var(--dim)" stroke-width="1" stroke-dasharray="4 3"`);
   svg += line(B.map(b => num(b.target) && b.target <= hi ? b.target : null), `stroke="var(--up)" stroke-width="1.4" stroke-dasharray="6 3"`);
-  const far = B.filter(b => num(b.target) && b.target > hi);
-  if (far.length) svg += `<text x="${W - R}" y="${T + 9}" text-anchor="end" style="fill:var(--up)">target ${n2(far[far.length - 1].target)} ↑ (above the chart)</text>`;
+  (d.levels || []).forEach(x => { svg += `<line x1="${L}" x2="${W - R}" y1="${Y(x.price)}" y2="${Y(x.price)}" stroke="#d97706" stroke-width="1" stroke-dasharray="2 4"/>`
+    + `<text x="${W - R - 2}" y="${Y(x.price) - 3}" text-anchor="end" style="fill:#d97706">${esc(x.label)} ${n2(x.price)}</text>`; });
+  const lastT = [...B].reverse().find(b => num(b.target));
+  if (lastT) svg += `<text x="${W - R - 2}" y="${Y(lastT.target) - 3}" text-anchor="end" style="fill:var(--up)">target ${n2(lastT.target)}</text>`;
   svg += line(B.map(b => b.c), `stroke="var(--ink)" stroke-width="1.5"`);
   // events
   const at = t => { let k = B.findIndex(b => b.t + 59999 >= t); return k < 0 ? n - 1 : k; };
@@ -322,7 +339,11 @@ function chartSvg(d, id){
   svg += pl(ppts("pnl"), `stroke="${(lastP || 0) >= 0 ? "var(--up)" : "var(--down)"}" stroke-width="1.6"`);
   svg += `<text x="${W - R + 4}" y="${PY(lastP || 0) + 3}" style="fill:${(lastP || 0) >= 0 ? "var(--up)" : "var(--down)"}">${rs(lastP)}</text>`;
   svg += `<text x="${L}" y="${P0 - 6}">P&amp;L (₹)</text>`;
-  svg += `<line class="cur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--link)" stroke-width="1" style="display:none"/></svg>`;
+  svg += `<line class="cur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--link)" stroke-width="1" style="display:none"/>`
+    + `<line class="curh" x1="${L}" x2="${W - R}" y1="0" y2="0" stroke="var(--link)" stroke-width="1" stroke-dasharray="3 2" style="display:none"/>`
+    + `<rect class="curbg" x="${W - R + 2}" y="0" width="${R - 2}" height="14" fill="var(--link)" style="display:none"/>`
+    + `<text class="curl" x="${W - R + 4}" y="0" style="fill:#fff;display:none"></text></svg>`;
+  CHART_SCALE[id] = {T, PH, P0, QH, H, lo, hi, plo, phi};
   const when = t => new Date(t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
   const off = outside.length ? `<div class="n">Outside the recorded minutes: ${outside.map(e => esc(when(e.t) + " " + e.label)).join(" · ")}${rec.status === "recording" ? " (Angel's 1-minute candles fill the gaps when the recording is saved)" : ""}</div>` : "";
   return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div>${off}</div>`;
