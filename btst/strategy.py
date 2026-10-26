@@ -607,8 +607,14 @@ class BtstStrategy:
         else:
             target = floor
         topups = list(job.get("topups") or []) + [{"at": buy["at"], "step": step, "pct": pct, "loss_pct": round(loss, 2),
-                                                   "qty": q2, "price": round(p2, 2), "amount": round(p2 * q2, 2),
-                                                   "order_id": buy.get("order_id")}]
+                                                   "ltp": round(float(ltp), 2), "qty": q2, "price": round(p2, 2),
+                                                   "amount": round(p2 * q2, 2), "order_id": buy.get("order_id"),
+                                                   "qty_before": int(pos["qty"]), "qty_after": q,
+                                                   "avg_before": round(float(pos["avg_price"]), 2),
+                                                   "avg_after": round(avg, 2),
+                                                   "invested_after": round(float(pos["invested"]) + p2 * q2, 2),
+                                                   "target_before": job.get("target_price"), "target_after": target,
+                                                   "floor": floor, "mode": job.get("mode")}]
         new_pos = dict(pos, qty=q, avg_price=round(avg, 2), invested=round(float(pos["invested"]) + p2 * q2, 2),
                        added_qty=int(pos.get("added_qty") or 0) + q2, added_price=round(p2, 2),
                        added_amount=round(float(pos.get("added_amount") or 0) + p2 * q2, 2), added_at=buy["at"])
@@ -905,17 +911,19 @@ class BtstStrategy:
                 gz_value = gz
             filled = sum(1 for b in merged if b.get("src") == "candle")
             fresh = self.store.get_job(jid) or job
+            ext = CH.extremes(fresh, merged)
             self.store.save_ticks({"job_id": jid, "symbol": r.get("symbol"), "token": r.get("token"),
                                    "exchange": r.get("exchange"), "from": r.get("from"), "until": r.get("until"),
                                    "count": len(ticks), "bars": merged, "gz": gz_value, "gz_bytes": len(gz),
-                                   "candle_minutes": filled, "events": CH.events(fresh), "saved_at": self._ts()})
+                                   "candle_minutes": filled, "events": CH.events(fresh), "extremes": ext,
+                                   "saved_at": self._ts()})
             check = self.store.get_ticks(jid)
             if not check or int(check.get("count", -1)) != len(ticks):
                 raise RuntimeError("the saved copy does not match the local file")
             self.recorder.remove(jid)
             self.store.update_job(jid, set_={"recording": dict(r, status="saved", count=len(ticks), bars=len(merged),
                                                                candle_minutes=filled, gz_bytes=len(gz),
-                                                               saved_at=self._ts())})
+                                                               extremes=ext, saved_at=self._ts())})
             self.rec_checked = 0.0
             self._log("record", f"{jid}: {len(ticks)} prices -> {len(merged)} 1-minute bars ({filled} from Angel's "
                                 f"candles), {len(gz):,} bytes gzipped - saved to MongoDB; local file removed")
@@ -923,6 +931,25 @@ class BtstStrategy:
             self.rec_failed[jid] = time.time()
             self._log("record", f"{jid}: recording not saved ({e!r}) - the local file stays; trying again in 5 min",
                       "ERROR")
+
+    def extremes(self, job):
+        """Max profit / max loss over the recorded window: saved with the
+        recording, or from the local file while it runs (cached 15 s)."""
+        rec = job.get("recording") or {}
+        if rec.get("status") == "saved":
+            return rec.get("extremes")
+        if rec.get("status") != "recording" or self.recorder is None:
+            return None
+        cache = getattr(self, "_ext_cache", {})
+        hit = cache.get(job["job_id"])
+        if hit and time.time() - hit[0] < 15:
+            return hit[1]
+        ext = CH.extremes(job, REC.bars(self.recorder.read(job["job_id"])))
+        if ext:
+            ext["basis"] = "recorded so far (the recording runs to " + rec.get("until", "?")[:16].replace("T", " ") + ")"
+        cache[job["job_id"]] = (time.time(), ext)
+        self._ext_cache = cache
+        return ext
 
     def chart(self, job_id):
         """The page's chart for a trade: from MongoDB once saved, from the local file while recording."""

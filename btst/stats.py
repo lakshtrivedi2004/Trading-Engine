@@ -88,6 +88,23 @@ def by_day(jobs, quiet_days=()):
             "charges": r.get("charges"), "held_hours": r.get("held_hours"), "mfe_pct": r.get("mfe_pct"),
             "mae_pct": r.get("mae_pct"), "reason": j.get("reject_reason", ""),
         }
+        ext = (j.get("recording") or {}).get("extremes")
+        if not ext and avg and p.get("qty"):        # no recording: the high / low seen while the trade was open
+            hi, lo = r.get("max_ltp") or j.get("ltp_high"), r.get("min_ltp") or j.get("ltp_low")
+            if hi and lo:
+                # times unknown: the high against the first buy (a top-up only follows a fall), the low
+                # against the final position
+                e_px, e_q = float(p.get("entry_price") or avg), int(p.get("entry_qty") or p["qty"])
+                topped = bool(j.get("topups"))
+                hp, hq = (e_px, e_q) if topped else (avg, p["qty"])
+                ext = {"max_profit": round((float(hi) - hp) * hq, 2), "max_profit_price": hi,
+                       "max_profit_pct": round(100.0 * (float(hi) - hp) / hp, 2),
+                       "max_loss": round((float(lo) - avg) * p["qty"], 2), "max_loss_price": lo,
+                       "max_loss_pct": round(100.0 * (float(lo) - avg) / avg, 2),
+                       "basis": "while the trade was open (no recording" + ("; approximate around the top-ups)"
+                                                                           if topped else ")")}
+        row["extremes"] = ext
+        row["topups"] = j.get("topups") or []
         if k < 30:                                  # the newest trades carry their whole story
             row["timeline"] = {"events": j.get("events") or [], "targets": j.get("target_history") or [],
                                "amo": j.get("amo_history") or [],

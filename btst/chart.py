@@ -43,21 +43,61 @@ def events(job):
     return sorted((e for e in ev if e["t"]), key=lambda e: e["t"])
 
 
-def build(job, bars):
-    """{job_id, symbol, bars: [{t, o, h, l, c, src, target, avg, qty, pnl, hold_pnl, open}], events, ...}."""
-    ev = events(job)
+def _positions(job):
+    """[(epoch ms, qty, average)]: the position after the buy and after each top-up."""
     p = job.get("position") or {}
-    r = job.get("result") or {}
-    exit_t = _ms(r.get("closed_at")) if r else None
-    # the position and the target as steps in time
     qty, avg = int(p.get("entry_qty") or p.get("qty") or 0), float(p.get("entry_price") or p.get("avg_price") or 0)
-    pos_steps = [(_ms(p.get("entry_at")) or 0, qty, avg)]
+    steps = [(_ms(p.get("entry_at")) or 0, qty, avg)]
     for u in sorted(job.get("topups") or [], key=lambda u: str(u.get("at"))):
         q2, p2 = int(u.get("qty") or 0), float(u.get("price") or 0)
         if q2:
             avg = (avg * qty + p2 * q2) / (qty + q2)
             qty += q2
-            pos_steps.append((_ms(u.get("at")) or 0, qty, avg))
+            steps.append((_ms(u.get("at")) or 0, qty, avg))
+    return steps
+
+
+def extremes(job, bars):
+    """The best and the worst the position could have shown over the recorded
+    window - the buy to the next session's close, past the exit too: P&L at each
+    minute's high and low, with the position held then (top-ups count; after
+    the exit, the position as it was at the exit)."""
+    steps = _positions(job)
+    r = job.get("result") or {}
+    exit_t = _ms(r.get("closed_at")) if r else None
+    best = worst = None
+    i = 0
+    for b in bars:
+        t = b["t"] + 59_999
+        if t < steps[0][0]:
+            continue
+        while i + 1 < len(steps) and steps[i + 1][0] <= t:
+            i += 1
+        _, q, a = steps[i]
+        if not q or not a:
+            continue
+        up, down = (b["h"] - a) * q, (b["l"] - a) * q
+        after = bool(exit_t and b["t"] >= exit_t)
+        if best is None or up > best[0]:
+            best = (up, b["h"], b["t"], after, round(100.0 * (b["h"] - a) / a, 2))
+        if worst is None or down < worst[0]:
+            worst = (down, b["l"], b["t"], after, round(100.0 * (b["l"] - a) / a, 2))
+    if best is None:
+        return None
+    iso = lambda ms: datetime.fromtimestamp(ms / 1000).astimezone().isoformat(timespec="minutes")
+    return {"max_profit": round(best[0], 2), "max_profit_price": best[1], "max_profit_at": iso(best[2]),
+            "max_profit_after_exit": best[3], "max_profit_pct": best[4],
+            "max_loss": round(worst[0], 2), "max_loss_price": worst[1], "max_loss_at": iso(worst[2]),
+            "max_loss_after_exit": worst[3], "max_loss_pct": worst[4], "minutes": len(bars),
+            "basis": "recorded prices, buy to the next session's close"}
+
+
+def build(job, bars):
+    """{job_id, symbol, bars: [{t, o, h, l, c, src, target, avg, qty, pnl, hold_pnl, open}], events, ...}."""
+    ev = events(job)
+    r = job.get("result") or {}
+    exit_t = _ms(r.get("closed_at")) if r else None
+    pos_steps = _positions(job)
     tgt_steps = [(e["t"], float(e["price"])) for e in ev if e["kind"] in ("target", "trail", "amo") and e.get("price")]
     out = []
     pi = ti = 0
@@ -78,6 +118,7 @@ def build(job, bars):
     c = job.get("contract") or {}
     return {"job_id": job.get("job_id"), "symbol": c.get("symbol"), "side": (job.get("signal") or {}).get("side"),
             "mode": job.get("mode"), "status": job.get("status"), "bars": out, "events": ev,
+            "extremes": extremes(job, bars),
             "recording": job.get("recording"), "exit": {"t": exit_t, "price": r.get("exit_price"),
                                                        "reason": r.get("exit_reason"), "net_pnl": r.get("net_pnl")}
             if exit_t else None}

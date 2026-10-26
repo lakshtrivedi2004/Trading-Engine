@@ -447,6 +447,12 @@ check(f"11:00 at 52 (-50.5%): the other 50% -> 1 lot (65 @ 52); 195 qty, average
       j["topped_pct"] == 100 and j["position"]["qty"] == 195 and j["position"]["avg_price"] == avg
       and j["target_price"] == tick_round(avg * 1.1) and not j["trail"]["active"] and len(j["topups"]) == 2
       and j["decision"]["scenario"] == "topup_100", str({k: j.get(k) for k in ("topped_pct", "target_price")}))
+u2 = j["topups"][1]
+check("each top-up saved with its before -> after: qty 130 -> 195, average 91.50 -> %.2f, target 155.50 -> %.2f, "
+      "the floor, the loss and the order" % (avg, tick_round(avg * 1.1)),
+      u2["qty_before"] == 130 and u2["qty_after"] == 195 and u2["avg_before"] == 91.5 and u2["avg_after"] == avg
+      and u2["target_before"] == 155.5 and u2["target_after"] == tick_round(avg * 1.1) and u2["loss_pct"] > 50
+      and u2["step"] == "second" and u2["order_id"] and j["topups"][0]["target_before"] == 210.0, str(u2))
 at(2026, 10, 23, 11, 5)
 PRICE["ltp"] = 40.0
 st.step()
@@ -1652,7 +1658,15 @@ check("the chart from MongoDB: P&L (price - average) x qty while open, the reali
       ch["source"] == "mongo" and b_open and b_open[-1]["pnl"] == round((211.0 - 106.0) * 65, 2)
       and b_after and b_after[-1]["pnl"] == ch["exit"]["net_pnl"] and b_after[-1]["hold_pnl"] == round((180 - 106) * 65, 2)
       and b_open[0]["target"] == 210.0, str([(b["c"], b["pnl"], b["hold_pnl"]) for b in ch["bars"]])[:300])
-check("...and the events for the markers: buy, the targets, the exit",
+ex = ch["extremes"]
+check("max profit / loss over the whole window: the best (+Rs 8,060 at 230, 13:00) came AFTER the exit at 211; "
+      "the worst stayed +Rs 65 (107, right after the buy)",
+      ex["max_profit"] == round((230 - 106) * 65, 2) and ex["max_profit_after_exit"] and ex["max_profit_price"] == 230.0
+      and ex["max_loss"] == 65.0 and not ex["max_loss_after_exit"], str(ex))
+rowR = [r for r in stats.by_day(stR.recent_jobs()) if r.get("job_id") == jR["job_id"]][0]
+check("...saved with the recording and shown in the trades table's row", rowR["extremes"]["max_profit"] == ex["max_profit"]
+      and "recorded" in rowR["extremes"]["basis"])
+check("the events for the markers: buy, the targets, the exit",
       [e["kind"] for e in ch["events"]][:1] == ["buy"] and ch["events"][-1]["kind"] == "exit"
       and any(e["kind"] == "target" for e in ch["events"]))
 at(2026, 10, 22, 15, 16)
@@ -1695,6 +1709,13 @@ for k in range(2):
 check("Angel's candles rate-limited: the save waits and tries again (the local file kept), then saves the ticks alone",
       first == "recording" and stK.get_job(jK["job_id"])["recording"]["status"] == "saved"
       and stK.get_ticks(jK["job_id"])["count"] == 1, f"{first} -> {stK.get_job(jK['job_id'])['recording']['status']}")
+old = {"job_id": "OLD", "trade_date": "2026-10-01", "status": "closed", "mode": "paper",
+       "position": {"qty": 50, "avg_price": 100.0, "entry_price": 100.0, "entry_qty": 50},
+       "result": {"max_ltp": 130.0, "min_ltp": 80.0, "net_pnl": 500}, "contract": {"symbol": "X"}, "signal": {}}
+rowO = stats.by_day([old])[0]
+check("a trade without a recording: max profit / loss from the high and low seen while it was open",
+      rowO["extremes"]["max_profit"] == 1500.0 and rowO["extremes"]["max_loss"] == -1000.0
+      and "no recording" in rowO["extremes"]["basis"])
 shutil.rmtree(tmpdir, ignore_errors=True)
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")

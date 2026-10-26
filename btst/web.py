@@ -122,6 +122,7 @@ PAGE = r"""<!DOCTYPE html>
   <p class="sub" id="sub"></p>
   <h2>Open trade</h2><div id="open"></div>
   <h2>Trades</h2><div class="tbl" id="days"></div>
+  <h2>Top-ups</h2><div class="tbl" id="topups"></div>
   <h2>Statistics</h2><div id="stats"></div>
   <h2>System</h2><div id="sys"></div>
   <h2>Channel messages</h2><div id="msgs"></div>
@@ -310,6 +311,24 @@ function chartSvg(d, id){
   const off = outside.length ? `<div class="n">Outside the recorded minutes: ${outside.map(e => esc(when(e.t) + " " + e.label)).join(" · ")}${rec.status === "recording" ? " (Angel's 1-minute candles fill the gaps when the recording is saved)" : ""}</div>` : "";
   return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div>${off}</div>`;
 }
+const STEP = {first: "first (50%)", second: "second (50%)", full: "full (100%)"};
+function topupTable(list, withTrade){
+  if (!list.length) return "";
+  return `<table><tr><th>Time</th>${withTrade ? "<th>Trade</th>" : ""}<th>Step</th><th>Down</th><th>Bought</th><th>Amount</th>
+      <th>Qty before → after</th><th>Avg before → after</th><th>Target before → after</th><th>Floor</th><th>Order</th></tr>` +
+    list.map(u => `<tr><td>${tms(u.at)}</td>${withTrade ? `<td class="l"><b>${esc(u._sym || "")}</b><span class="n">${esc(u._mode || u.mode || "")} · ${esc(u._job || "")}</span></td>` : ""}
+      <td class="l">${esc(STEP[u.step] || u.step)}</td><td class="down">${pc(-(u.loss_pct || 0))}</td>
+      <td>${n0(u.qty)} @ ${n2(u.price)}${num(u.ltp) && u.ltp !== u.price ? `<span class="n">LTP ${n2(u.ltp)}</span>` : ""}</td><td>${rsp(u.amount)}</td>
+      <td>${n0(u.qty_before)} → <b>${n0(u.qty_after)}</b></td><td>${n2(u.avg_before)} → <b>${n2(u.avg_after)}</b></td>
+      <td>${n2(u.target_before)} → <b>${n2(u.target_after)}</b></td><td>${n2(u.floor)}</td><td class="l">${esc(u.order_id || "")}</td></tr>`).join("") + `</table>`;
+}
+function drawTopups(d){
+  const all = [];
+  (d.days || []).forEach(r => (r.topups || []).forEach(u => all.push(Object.assign({_sym: r.signal || r.symbol, _mode: r.mode, _job: r.job_id}, u))));
+  all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  document.getElementById("topups").innerHTML = all.length ? topupTable(all, true)
+    : `<p class="empty">No top-up yet. A trade adds 50% when it first falls 25% below the buy price, and the rest at -50% (100% at once if it opens 50% down).</p>`;
+}
 function parkedHtml(d){
   const ps = d.parked || [];
   if (!ps.length) return "";
@@ -354,6 +373,7 @@ function drawOpen(d){
       ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
       ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
+    ${(j.topups || []).length ? `<div class="plan"><div class="k">Top-ups</div>${topupTable(j.topups, false)}</div>` : ""}
     ${plan(d, j, p)}
     ${chartSvg(CHARTS[j.job_id], j.job_id)}
   </div>` + parkedHtml(d);
@@ -363,17 +383,26 @@ function drawOpen(d){
 function detail(r){
   const t = r.timeline; if (!t) return `<p class="empty">Older trade — see the log.</p>`;
   const tbl = (head, rows) => rows.length ? `<table><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>${rows.join("")}</table>` : `<p class="empty">none</p>`;
-  return `<h4>Timeline</h4>` + tbl(["Time", "What happened"], t.events.map(e => `<tr><td>${tms(e.at)}</td><td class="l">${esc(e.text)}</td></tr>`))
+  return ((r.topups || []).length ? `<h4>Top-ups</h4>` + topupTable(r.topups, false) : "")
+    + `<h4>Timeline</h4>` + tbl(["Time", "What happened"], t.events.map(e => `<tr><td>${tms(e.at)}</td><td class="l">${esc(e.text)}</td></tr>`))
     + `<h4>Target history</h4>` + tbl(["Time", "Kind", "Price", "From", "Order", "Status", "Why"], t.targets.map(h => `<tr><td>${tms(h.at)}</td><td class="l">${esc(h.kind)}</td><td>${n2(h.price)}</td><td>${n2(h.previous)}</td><td class="l">${esc(h.order_id || (h.watched ? "watched" : ""))}</td><td class="l">${esc(h.status || (h.ok === false ? "refused" : ""))}</td><td class="l">${esc(h.why || h.error || "")}</td></tr>`))
     + `<h4>AMO checks</h4>` + tbl(["Time", "For", "Action", "Order", "Status", "Why / error"], t.amo.map(a => `<tr><td>${tms(a.at)}</td><td class="l">${esc(a.slot)}</td><td class="l">${esc(a.action)}</td><td class="l">${esc(a.order_id || "")}</td><td class="l">${esc(a.status || "")}</td><td class="l">${esc(a.why || a.error || "")}</td></tr>`))
     + `<h4>Orders</h4>` + tbl(["Time", "Kind", "Side", "Qty", "Price", "Filled", "Status", "Order", "Error"], t.orders.map(o => `<tr><td>${tms(o.at)}</td><td class="l">${esc(o.kind)}${o.variety === "AMO" ? ' <span class="tag">AMO</span>' : ""}</td><td class="l">${esc(o.side || "")}</td><td>${n0(o.qty)}</td><td>${n2(o.price_sent)}</td><td>${o.filled ? n0(o.filled) + " @ " + n2(o.avg_price) : ""}</td><td class="l">${esc(o.status || "")}</td><td class="l">${esc(o.order_id || "")}</td><td class="l">${esc(o.error || "")}</td></tr>`));
 }
 
 function drawTrades(d){
-  const rows = d.days || [], COLS = 10;
+  const rows = d.days || [], COLS = 11;
+  const ext = x => { if (!x) return `<span class="n">–</span>`;
+    const hm = s => s ? s.slice(11, 16) + " " + day(s).replace(/^\w+ /, "") : "";
+    const tag = a => a ? ` <span class="tag" title="after the trade was closed">after exit</span>` : "";
+    return `<span class="up">${rs(x.max_profit)}</span> <span class="n" style="display:inline">${pc(x.max_profit_pct)}</span>${tag(x.max_profit_after_exit)}`
+      + `<span class="n">@ ${n2(x.max_profit_price)}${x.max_profit_at ? " · " + hm(x.max_profit_at) : ""}</span>`
+      + `<span class="down">${rs(x.max_loss)}</span> <span class="n" style="display:inline">${pc(x.max_loss_pct)}</span>${tag(x.max_loss_after_exit)}`
+      + `<span class="n">@ ${n2(x.max_loss_price)}${x.max_loss_at ? " · " + hm(x.max_loss_at) : ""}</span>`
+      + `<span class="n" title="${esc(x.basis || "")}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}</span>`; };
   if (!rows.length){ document.getElementById("days").innerHTML = `<p class="empty">No BTST yet.</p>`; return; }
   document.getElementById("days").innerHTML = `<table><tr><th>Date</th><th>Trade</th><th>Bought</th><th>Avg · invested</th>
-      <th>Now / exit</th><th>P&amp;L</th><th>Target</th><th>Next day</th><th>Result</th><th></th></tr>` +
+      <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th>Next day</th><th>Result</th><th></th></tr>` +
     rows.map(r => {
       if (!r.job_id) return `<tr class="quiet"><td>${day(r.date)}</td><td class="l" colspan="${COLS - 1}">No signal — ${n0(r.messages_read)} message(s) read in the scan window · no trade</td></tr>`;
       const open = r.status === "open", parkedRow = r.status === "parked", rej = !open && !parkedRow && r.status !== "closed";
@@ -387,6 +416,7 @@ function drawTrades(d){
         <td>${n2(r.avg_price)}<span class="n">${rsp(r.invested)}${r.added_qty ? " · +" + n0(r.added_qty) + " @ " + n2(r.added_price) : ""}</span></td>
         <td>${n2(r.now_price)}<span class="n">${nowNote}</span></td>
         <td class="${cls(r.live_pnl)}">${rs(r.live_pnl)}<span class="n ${cls(r.live_pct)}">${pc(r.live_pct)}</span></td>
+        <td class="l">${ext(r.extremes)}</td>
         <td>${n2(r.target)}<span class="n">${r.target_kind === "amo_target" ? "AMO" : (r.watched ? "watched" : (r.target ? "limit" : ""))}${r.trail ? " · trail " + r.trail.steps : ""}</span></td>
         <td class="l">${esc(SCEN[r.scenario] || r.scenario || (open ? "pending" : ""))}${num(r.opened_pct) ? `<span class="n">opened ${pc(r.opened_pct)}</span>` : ""}</td>
         <td class="l">${result}</td>
@@ -437,7 +467,7 @@ async function tick(){
   try{
     const d = await (await fetch("/api/state")).json();
     LAST = d;
-    drawHead(d); drawOpen(d); drawTrades(d); drawStats(d); drawSys(d); drawMsgs(d);
+    drawHead(d); drawOpen(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
   }catch(e){ document.getElementById("chips").innerHTML = `<span class="chip bad"><i></i>disconnected</span>`; }
 }
 tick(); setInterval(tick, 3000);
@@ -534,6 +564,14 @@ def state(strategy, store, book=None):
     s["stats"] = [stats.summary(jobs, "live"), stats.summary(jobs, "paper")]
     quiet = store.recent_days()
     s["days"] = stats.by_day(jobs, quiet)
+    by_id = {j.get("job_id"): j for j in jobs}
+    for row in s["days"]:                           # a recording still running: max profit / loss so far
+        j = by_id.get(row.get("job_id"))
+        if j and (j.get("recording") or {}).get("status") == "recording" and hasattr(strategy, "extremes"):
+            try:
+                row["extremes"] = strategy.extremes(j) or row.get("extremes")
+            except Exception:
+                pass
     s["no_signal_days"] = sum(1 for r in s["days"] if not r.get("job_id"))
     if book is not None:
         try:
