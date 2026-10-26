@@ -37,6 +37,7 @@ from btst import modes, web                                        # noqa: E402
 from btst.broker import AngelBtstBroker, PaperBtstBroker           # noqa: E402
 from btst.holidays import Holidays                                 # noqa: E402
 from btst.logbook import Logbook, fmt                              # noqa: E402
+from btst.recorder import TickRecorder                             # noqa: E402
 from btst.session import AngelSessions, Api                        # noqa: E402
 from btst.ticks import PriceWatch                                  # noqa: E402
 from btst.strategy import BtstStrategy                             # noqa: E402
@@ -166,8 +167,23 @@ def main():
         log("Telegram alerts off", area="telegram")
 
     mode = read_mode()
+    def candles(c, a, b):
+        """Angel's 1-minute candles for contract c between a and b - the gaps in a recording."""
+        from datetime import datetime as _dt
+        r = api.getCandleData({"exchange": c["exchange"], "symboltoken": str(c["token"]), "interval": "ONE_MINUTE",
+                               "fromdate": a.strftime("%Y-%m-%d %H:%M"), "todate": b.strftime("%Y-%m-%d %H:%M")}) or {}
+        out = []
+        for row in r.get("data") or []:
+            t = int(_dt.fromisoformat(str(row[0])).timestamp() * 1000)
+            out.append({"t": t - t % 60000, "o": float(row[1]), "h": float(row[2]), "l": float(row[3]),
+                        "c": float(row[4]), "n": 0})
+        if not out and isinstance(r, dict) and r.get("status") is False:
+            raise RuntimeError(r.get("message"))
+        return out
+
     strategy = BtstStrategy(cfg, store, make_broker(mode), master, llm, channel, log=BOOK.log,
-                            notifier=notifier, cost_model=CostModel.load(), prices=prices)
+                            notifier=notifier, cost_model=CostModel.load(), prices=prices,
+                            recorder=TickRecorder() if cfg.get("record_ticks", True) else None, candles=candles)
     strategy.resume()
     lock = threading.Lock()
 

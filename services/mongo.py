@@ -48,6 +48,7 @@ class MongoStore:
         self.jobs = self.db["btst_jobs"]
         self.messages = self.db["btst_messages"]
         self.days = self.db["btst_days"]
+        self.ticks = self.db["btst_ticks"]      # a trade's recorded prices, by job id (btst/recorder.py)
 
     def ensure_indexes(self):
         from pymongo import ASCENDING, DESCENDING
@@ -56,6 +57,8 @@ class MongoStore:
         self.jobs.create_index([("status", ASCENDING)])
         self.messages.create_index([("channel", ASCENDING), ("msg_id", ASCENDING)], unique=True)
         self.days.create_index([("date", ASCENDING)], unique=True)
+        self.ticks.create_index([("job_id", ASCENDING)], unique=True)
+        self.jobs.create_index([("recording.status", ASCENDING)])
 
     def ping(self):
         return self.client.admin.command("ping")
@@ -99,6 +102,18 @@ class MongoStore:
         A paper trade parked by a switch to live does not count."""
         return self.jobs.find_one({"trade_date": trade_date,
                                    "status": {"$nin": ["rejected", "parked"]}}, {"_id": 0})
+
+    def recording_jobs(self):
+        """Trades whose prices are still being recorded (btst/recorder.py)."""
+        return list(self.jobs.find({"recording.status": "recording"}, {"_id": 0}))
+
+    def save_ticks(self, doc):
+        """A trade's recorded prices (1-minute bars, the gzipped ticks, its events), by job id."""
+        self.ticks.update_one({"job_id": doc["job_id"]}, {"$set": doc}, upsert=True)
+
+    def get_ticks(self, job_id, raw=False):
+        proj = {"_id": 0} if raw else {"_id": 0, "gz": 0}
+        return self.ticks.find_one({"job_id": job_id}, proj)
 
     def parked_jobs(self, mode=None):
         """Trades parked by a mode switch (saved, not managed), newest first."""

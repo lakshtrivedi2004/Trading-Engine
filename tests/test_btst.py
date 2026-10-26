@@ -55,9 +55,15 @@ def section(t):
 
 
 # ── an in-memory MongoDB, enough of pymongo for MongoStore ───────────────────
+def _get(doc, key):
+    for part in key.split("."):                      # "recording.status" -> doc["recording"]["status"]
+        doc = doc.get(part) if isinstance(doc, dict) else None
+    return doc
+
+
 def _match(doc, flt):
     for k, v in flt.items():
-        val = doc.get(k)
+        val = _get(doc, k)
         if isinstance(v, dict):
             if "$in" in v and val not in v["$in"]:
                 return False
@@ -1549,6 +1555,147 @@ check("the page's next session is the trade's (Mon 26 at 02:00 for a Friday trad
       web.state(sG, stG)["next_session"] == "2026-10-26")
 check("...information only: the trade, its target and its orders are untouched",
       jG["status"] == "open" and jG["target_price"] == 210.0 and not jG.get("topups") and not jG.get("decision"))
+
+section("13. Recording a trade's prices, and its chart")
+import shutil                                                    # noqa: E402
+from btst import recorder as REC                                 # noqa: E402
+
+tmpdir = tempfile.mkdtemp(prefix="btst_rec_")
+rc = REC.TickRecorder(folder=tmpdir)
+base_s = datetime(2026, 10, 23, 10, 0, tzinfo=IST).timestamp()
+wrote = [rc.record("J1", base_s, 100.0), rc.record("J1", base_s + 5, 100.0), rc.record("J1", base_s + 10, 101.5),
+         rc.record("J1", base_s + 45, 101.5), rc.record("J1", base_s + 70, 99.0)]
+tk = rc.read("J1")
+check("the local file: a line when the price changes, or after 30 s unchanged", wrote == [True, False, True, True, True]
+      and [p_ for _, p_ in tk] == [100.0, 101.5, 101.5, 99.0], str(wrote))
+bb = REC.bars(tk)
+check("1-minute bars from the ticks: open/high/low/close per minute",
+      len(bb) == 2 and bb[0]["o"] == 100.0 and bb[0]["h"] == 101.5 and bb[0]["c"] == 101.5 and bb[1]["c"] == 99.0)
+mg = REC.merge(bb, [{"t": bb[0]["t"], "o": 1, "h": 1, "l": 1, "c": 1}, {"t": bb[1]["t"] + 60000, "o": 98, "h": 98.5, "l": 97, "c": 98}])
+check("...a minute with no ticks is filled from Angel's candle, a minute with ticks keeps them",
+      len(mg) == 3 and mg[0]["c"] == 101.5 and mg[2]["src"] == "candle")
+check("the gzip round trip gives the ticks back", REC.unzip(rc.compress("J1")) == tk)
+
+rw = PriceWatch(rest_quote=None, log=lambda *_: None, use_ws=False, today=lambda: CLOCK["t"].date())
+seen_ticks = []
+rw.on_tick = lambda tok, px, ts: seen_ticks.append((tok, px))
+rw.set_extra([{"token": "77", "symbol": "X77", "exchange": "NFO"}])
+rw.see("77", 12.5, 13.0, "websocket")
+rw.see("88", 9.0, 9.0, "websocket")
+check("the socket's ticks for a recorded contract go to the recorder (others do not)", seen_ticks == [("77", 12.5)])
+
+
+def rec_desk():
+    at(2026, 10, 22, 15, 16)
+    PRICE["ltp"] = 106.0
+    s_, st_, br_, lg_, sent_ = desk()
+    s_.recorder = REC.TickRecorder(folder=tmpdir)
+    s_.candles_fn = lambda c, a, b: [{"t": int(datetime(2026, 10, 23, 14, 0, tzinfo=IST).timestamp() * 1000),
+                                      "o": 150.0, "h": 151.0, "l": 149.0, "c": 150.5, "n": 0}] if a.date() == date(2026, 10, 23) else []
+    s_.on_message(msg(3, SAMPLE, 15, 16))
+    s_.step()
+    return s_, st_, br_, lg_
+
+
+sR, stR, brR, lgR = rec_desk()
+jR = stR.open_job()
+check("the buy starts the recording: until 15:45 of the next trading day", jR["recording"]["status"] == "recording"
+      and jR["recording"]["until"] == "2026-10-23T15:45:00+05:30", str(jR.get("recording")))
+tokR = jR["contract"]["token"]
+
+
+def tick_at(h, m, sec, px):
+    at(2026, 10, 23, h, m, sec)
+    sR._on_tick(tokR, px, CLOCK["t"].timestamp())
+
+
+sR.rec_checked = 0
+sR.step()
+check("...the contract is followed for it", tokR in sR.rec_map)
+at(2026, 10, 22, 15, 20)
+sR._on_tick(tokR, 107.0, CLOCK["t"].timestamp())
+tick_at(9, 15, 5, 120.0)
+at(2026, 10, 23, 9, 15, 6)
+PRICE["ltp"] = 120.0
+sR.step()
+tick_at(10, 30, 0, 190.0)
+tick_at(11, 0, 0, 211.0)
+at(2026, 10, 23, 11, 0, 1)
+PRICE["ltp"] = 211.0
+sR.step()
+check("the target hit at 11:00 closes the trade...", stR.get_job(jR["job_id"])["status"] == "closed")
+sR.rec_checked = 0
+at(2026, 10, 23, 13, 0)
+sR.step()
+tick_at(13, 0, 0, 230.0)
+tick_at(15, 30, 0, 180.0)
+check("...but the recording goes on past the exit (until 15:45)", stR.get_job(jR["job_id"])["recording"]["status"] == "recording"
+      and tokR in sR.rec_map and len(sR.recorder.read(jR["job_id"])) == 6, str(len(sR.recorder.read(jR["job_id"]))))
+live_chart = sR.chart(jR["job_id"])
+check("while recording, the chart comes from the local file", live_chart["source"] == "recording" and len(live_chart["bars"]) == 6)
+at(2026, 10, 23, 15, 48)
+sR.rec_checked = 0
+sR.step()
+jR = stR.get_job(jR["job_id"])
+tdoc = stR.get_ticks(jR["job_id"], raw=True)
+check("after 15:45: saved to MongoDB - 6 prices, 7 one-minute bars (one gap from Angel's candles), gzipped, "
+      "with the events; the local file removed",
+      jR["recording"]["status"] == "saved" and tdoc["count"] == 6 and len(tdoc["bars"]) == 7
+      and tdoc["candle_minutes"] == 1 and REC.unzip(tdoc["gz"])[-1][1] == 180.0
+      and [e["kind"] for e in tdoc["events"]][0] == "buy" and tdoc["events"][-1]["kind"] == "exit"
+      and not os.path.exists(sR.recorder.path(jR["job_id"])), str({k: tdoc.get(k) for k in ("count", "candle_minutes")}))
+ch = sR.chart(jR["job_id"])
+b_open = [b for b in ch["bars"] if b["open"]]
+b_after = [b for b in ch["bars"] if not b["open"]]
+check("the chart from MongoDB: P&L (price - average) x qty while open, the realised P&L after the exit, "
+      "'if held' still moving",
+      ch["source"] == "mongo" and b_open and b_open[-1]["pnl"] == round((211.0 - 106.0) * 65, 2)
+      and b_after and b_after[-1]["pnl"] == ch["exit"]["net_pnl"] and b_after[-1]["hold_pnl"] == round((180 - 106) * 65, 2)
+      and b_open[0]["target"] == 210.0, str([(b["c"], b["pnl"], b["hold_pnl"]) for b in ch["bars"]])[:300])
+check("...and the events for the markers: buy, the targets, the exit",
+      [e["kind"] for e in ch["events"]][:1] == ["buy"] and ch["events"][-1]["kind"] == "exit"
+      and any(e["kind"] == "target" for e in ch["events"]))
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sN, stN, brN, lgN, _ = desk()                       # a desk without a recorder: the trade is not recorded
+sN.on_message(msg(3, SAMPLE, 15, 16))
+sN.step()
+no_rec = not stN.open_job().get("recording")
+sN2 = BtstStrategy(sN.cfg, stN, brN, lambda: MASTER, None, "test_channel", log=lgN.append, now=lambda: CLOCK["t"],
+                   recorder=REC.TickRecorder(folder=tmpdir))
+sN2.resume()
+check("a restart with an open trade that was never recorded starts its recording (to the next session's 15:45)",
+      no_rec and stN.open_job()["recording"]["status"] == "recording"
+      and stN.open_job()["recording"]["until"] == "2026-10-23T15:45:00+05:30")
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sK, stK, _, lgK, _ = desk()
+sK.recorder = REC.TickRecorder(folder=tmpdir)
+kcalls = {"n": 0}
+
+
+def flaky_candles(c, a, b):
+    kcalls["n"] += 1
+    raise RuntimeError("Access denied because of exceeding access rate")
+
+
+sK.candles_fn = flaky_candles
+sK.on_message(msg(3, SAMPLE, 15, 16))
+sK.step()
+jK = stK.open_job()
+sK._on_tick(jK["contract"]["token"], 106.5, CLOCK["t"].timestamp())
+at(2026, 10, 23, 15, 48)
+sK.rec_checked = 0
+sK.step()
+first = stK.get_job(jK["job_id"])["recording"]["status"]
+for k in range(2):
+    sK.rec_failed[jK["job_id"]] = 0.0
+    sK.rec_checked = 0
+    sK.step()
+check("Angel's candles rate-limited: the save waits and tries again (the local file kept), then saves the ticks alone",
+      first == "recording" and stK.get_job(jK["job_id"])["recording"]["status"] == "saved"
+      and stK.get_ticks(jK["job_id"])["count"] == 1, f"{first} -> {stK.get_job(jK['job_id'])['recording']['status']}")
+shutil.rmtree(tmpdir, ignore_errors=True)
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

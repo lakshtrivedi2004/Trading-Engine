@@ -7,6 +7,8 @@
                        it was or was not a signal, every order, every decision,
                        every error - filtered by kind, day and text
     GET  /api/logs?limit=&group=errors|trades|signals|ai&q=&day=YYYY-MM-DD
+    GET  /api/chart?job=ID   a trade's recorded prices as 1-minute bars, its target,
+                       average, position and P&L at each minute, and its events
     POST /api/mode?to=paper|live[&exit=1]   switch mode (btst/modes.py): exit=1 sells an
                        open live trade at market first; an open paper trade is parked
 """
@@ -89,6 +91,11 @@ PAGE = r"""<!DOCTYPE html>
   .empty{color:var(--dim);font-style:italic;padding:6px 0}
   pre{white-space:pre-wrap;margin:0;font:12px/1.4 ui-monospace,Menlo,monospace;max-height:8.6em;overflow:auto}
   details.msgs summary{cursor:pointer;color:var(--dim);font-size:13px;margin-bottom:6px}
+  .chartbox{margin-top:10px;border:1px solid var(--hair);background:var(--surface);padding:8px 10px}
+  .chartbox svg{width:100%;height:auto;display:block}
+  .chartbox .legend{font-size:11px;color:var(--dim);display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .chartbox .readout{font-size:12px;min-height:18px;color:var(--ink)}
+  .chartbox text{font:10px -apple-system,"Segoe UI",Roboto,sans-serif;fill:var(--dim)}
   @media (max-width:640px){.hero{text-align:left}.hero .pnl{font-size:24px}.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
 <script>
@@ -222,6 +229,84 @@ function plan(d, j, p){
     <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}</table></div>`;
 }
 
+const CHARTS = {}, CHART_AT = {};
+function loadChart(id, force){
+  const c = CHARTS[id], now = Date.now();
+  const live = !c || !c.recording || c.recording.status === "recording";
+  if (!force && CHART_AT[id] && (!live || now - CHART_AT[id] < 15000)) return;
+  CHART_AT[id] = now;
+  fetch("/api/chart?job=" + encodeURIComponent(id)).then(r => r.json()).then(d => { CHARTS[id] = d; if (LAST){ drawOpen(LAST); drawTrades(LAST); } }).catch(() => {});
+}
+function chartHover(evt, id){
+  const d = CHARTS[id], svg = evt.currentTarget; if (!d || !d.bars.length) return;
+  const r = svg.getBoundingClientRect(), x = (evt.clientX - r.left) / r.width * 1000;
+  const n = d.bars.length, i = Math.max(0, Math.min(n - 1, Math.round((x - 56) / (1000 - 56 - 56) * (n - 1))));
+  const b = d.bars[i], out = svg.parentNode.querySelector(".readout"), t = new Date(b.t);
+  const hh = t.toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+  if (out) out.innerHTML = `${esc(hh)} · price <b>${n2(b.c)}</b> (h ${n2(b.h)} l ${n2(b.l)})${b.target ? " · target " + n2(b.target) : ""} · avg ${n2(b.avg)} x${n0(b.qty)} · `
+    + (b.open ? `P&L <b class="${cls(b.pnl)}">${rs(b.pnl)}</b>` : `closed: <b class="${cls(b.pnl)}">${rs(b.pnl)}</b> · if held <span class="${cls(b.hold_pnl)}">${rs(b.hold_pnl)}</span>`)
+    + (b.src === "candle" ? " · from Angel's candle" : "");
+  const cur = svg.querySelector(".cur"); if (cur){ const xx = 56 + i / Math.max(1, n - 1) * (1000 - 112); cur.setAttribute("x1", xx); cur.setAttribute("x2", xx); cur.style.display = ""; }
+}
+function chartSvg(d, id){
+  if (!d) return `<div class="chartbox"><p class="empty">Loading the chart…</p></div>`;
+  if (d.error) return `<div class="chartbox"><p class="empty">${esc(d.error)}</p></div>`;
+  const B = d.bars || [];
+  const rec = d.recording || {};
+  const head = `<div class="legend"><span><b style="color:var(--ink)">—</b> price</span><span><b style="color:var(--up)">- -</b> target (steps = trailing)</span><span><b>- -</b> average</span>
+    <span style="color:#3366cc">▲ buy</span><span style="color:#d97706">▲ top-up</span><span style="color:var(--up)">● trail step</span><span>▼ exit</span><span>· · if held (after the exit)</span>
+    <span style="margin-left:auto">${rec.status === "saved" ? "saved in MongoDB · " + n0(rec.count) + " prices" : (rec.status === "recording" ? "recording until " + tm(rec.until) : "")}</span></div>`;
+  if (B.length < 2) return `<div class="chartbox">${head}<p class="empty">No prices recorded yet — the recording runs from the buy to ${esc(tm(rec.until) || "the next session's close")}.</p></div>`;
+  const W = 1000, L = 56, R = 56, T = 12, PH = 200, GAP = 26, QH = 100, BOT = 22, H = T + PH + GAP + QH + BOT;
+  const n = B.length, X = i => L + i / (n - 1) * (W - L - R);
+  const lows = B.map(b => b.l), highs = B.map(b => b.h), avgs = B.map(b => b.avg).filter(num);
+  let lo = Math.min(...lows, ...avgs), hi = Math.max(...highs, ...avgs);
+  const tg = B.map(b => b.target).filter(num), tgIn = tg.filter(t => t <= hi * 1.6);
+  if (tgIn.length) hi = Math.max(hi, ...tgIn);
+  const pad = (hi - lo) * 0.06 || 1; lo -= pad; hi += pad;
+  const Y = v => T + (hi - Math.min(hi, Math.max(lo, v))) / (hi - lo) * PH;
+  const pts = (vals) => vals.map((v, i) => num(v) ? `${X(i).toFixed(1)},${Y(v).toFixed(1)}` : null);
+  const line = (vals, style) => { const segs = []; let cur = []; pts(vals).forEach(p => { if (p) cur.push(p); else if (cur.length){ segs.push(cur); cur = []; } }); if (cur.length) segs.push(cur);
+    return segs.map(sg => `<polyline fill="none" ${style} points="${sg.join(" ")}"/>`).join(""); };
+  let svg = `<svg viewBox="0 0 ${W} ${H}" onmousemove="chartHover(evt,'${esc(id)}')" role="img" aria-label="price and P&L chart">`;
+  // sessions and hours
+  let prevDay = "";
+  B.forEach((b, i) => { const t = new Date(b.t), dd = t.toLocaleDateString("en-GB", {timeZone: "Asia/Kolkata"}), hm = t.toLocaleTimeString("en-GB", {timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false});
+    if (dd !== prevDay){ prevDay = dd; const lab = t.toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short"}) + " " + hm;
+      svg += `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${T + PH + GAP + QH}" stroke="var(--hair)" stroke-dasharray="3 3"/><text x="${X(i) + 3}" y="${H - 6}">${esc(lab)}</text>`; }
+    else if (hm.endsWith(":00")) svg += `<text x="${X(i)}" y="${H - 6}" text-anchor="middle">${hm}</text>`; });
+  // price panel
+  [lo + pad, (lo + hi) / 2, hi - pad].forEach(v => { svg += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--track)"/><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${n2(v)}</text>`; });
+  svg += line(B.map(b => b.avg), `stroke="var(--dim)" stroke-width="1" stroke-dasharray="4 3"`);
+  svg += line(B.map(b => num(b.target) && b.target <= hi ? b.target : null), `stroke="var(--up)" stroke-width="1.4" stroke-dasharray="6 3"`);
+  const far = B.filter(b => num(b.target) && b.target > hi);
+  if (far.length) svg += `<text x="${W - R}" y="${T + 9}" text-anchor="end" style="fill:var(--up)">target ${n2(far[far.length - 1].target)} ↑ (above the chart)</text>`;
+  svg += line(B.map(b => b.c), `stroke="var(--ink)" stroke-width="1.5"`);
+  // events
+  const at = t => { let k = B.findIndex(b => b.t + 59999 >= t); return k < 0 ? n - 1 : k; };
+  (d.events || []).forEach(e => { const i = at(e.t), x = X(i), p = num(e.price) ? e.price : B[i].c, y = Y(p), tip = `<title>${esc(new Date(e.t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false}))} - ${esc(e.label)}</title>`;
+    if (e.kind === "buy") svg += `<path d="M${x},${y - 9} l6,10 h-12z" fill="#3366cc">${tip}</path>`;
+    else if (e.kind === "topup") svg += `<path d="M${x},${y - 9} l6,10 h-12z" fill="#d97706">${tip}</path>`;
+    else if (e.kind === "trail") svg += `<circle cx="${x}" cy="${Math.max(T + 3, y)}" r="3.2" fill="var(--up)">${tip}</circle>`;
+    else if (e.kind === "exit") svg += `<path d="M${x},${y + 9} l6,-10 h-12z" fill="${(e.pnl || 0) >= 0 ? "var(--up)" : "var(--down)"}" stroke="var(--ink)" stroke-width=".6">${tip}</path>`;
+    else svg += `<rect x="${x - 3}" y="${Math.max(T, y) - 3}" width="6" height="6" transform="rotate(45 ${x} ${Math.max(T, y)})" fill="none" stroke="var(--up)">${tip}</rect>`; });
+  // P&L panel
+  const P0 = T + PH + GAP, pv = B.map(b => b.pnl).concat(B.map(b => b.hold_pnl)).filter(num);
+  let plo = Math.min(0, ...pv), phi = Math.max(0, ...pv); if (plo === phi){ plo -= 1; phi += 1; }
+  const PY = v => P0 + (phi - v) / (phi - plo) * QH;
+  svg += `<line x1="${L}" x2="${W - R}" y1="${PY(0)}" y2="${PY(0)}" stroke="var(--rule)"/><text x="${L - 4}" y="${PY(0) + 3}" text-anchor="end">₹0</text>`
+    + (Math.abs(PY(phi) - PY(0)) > 12 ? `<text x="${L - 4}" y="${P0 + 8}" text-anchor="end">${rs(phi)}</text>` : "")
+    + (Math.abs(PY(plo) - PY(0)) > 12 ? `<text x="${L - 4}" y="${P0 + QH}" text-anchor="end">${rs(plo)}</text>` : "");
+  const ppts = (key, onlyClosed) => B.map((b, i) => num(b[key]) && (!onlyClosed || !b.open) ? `${X(i).toFixed(1)},${PY(b[key]).toFixed(1)}` : null);
+  const pl = (arr, style) => { const segs = []; let cur = []; arr.forEach(p => { if (p) cur.push(p); else if (cur.length){ segs.push(cur); cur = []; } }); if (cur.length) segs.push(cur); return segs.map(sg => `<polyline fill="none" ${style} points="${sg.join(" ")}"/>`).join(""); };
+  svg += pl(ppts("hold_pnl", true), `stroke="var(--dim)" stroke-width="1" stroke-dasharray="2 3"`);
+  const lastP = B[n - 1].pnl;
+  svg += pl(ppts("pnl"), `stroke="${(lastP || 0) >= 0 ? "var(--up)" : "var(--down)"}" stroke-width="1.6"`);
+  svg += `<text x="${W - R + 4}" y="${PY(lastP || 0) + 3}" style="fill:${(lastP || 0) >= 0 ? "var(--up)" : "var(--down)"}">${rs(lastP)}</text>`;
+  svg += `<text x="${L}" y="${P0 - 6}">P&amp;L (₹)</text>`;
+  svg += `<line class="cur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--link)" stroke-width="1" style="display:none"/></svg>`;
+  return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div></div>`;
+}
 function parkedHtml(d){
   const ps = d.parked || [];
   if (!ps.length) return "";
@@ -267,7 +352,9 @@ function drawOpen(d){
       ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
     ${plan(d, j, p)}
+    ${chartSvg(CHARTS[j.job_id], j.job_id)}
   </div>` + parkedHtml(d);
+  loadChart(j.job_id);
 }
 
 function detail(r){
@@ -301,7 +388,8 @@ function drawTrades(d){
         <td class="l">${esc(SCEN[r.scenario] || r.scenario || (open ? "pending" : ""))}${num(r.opened_pct) ? `<span class="n">opened ${pc(r.opened_pct)}</span>` : ""}</td>
         <td class="l">${result}</td>
         <td><button class="linkbtn" onclick="toggle('${esc(r.job_id)}')">${OPEN_ROWS.has(r.job_id) ? "hide" : "details"}</button><span class="n"><a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></span></td></tr>`;
-      return main + (OPEN_ROWS.has(r.job_id) ? `<tr class="det"><td colspan="${COLS}">${detail(r)}</td></tr>` : "");
+      if (OPEN_ROWS.has(r.job_id)) loadChart(r.job_id);
+      return main + (OPEN_ROWS.has(r.job_id) ? `<tr class="det"><td colspan="${COLS}">${chartSvg(CHARTS[r.job_id], r.job_id)}${detail(r)}</td></tr>` : "");
     }).join("") + `</table>`;
 }
 
@@ -489,6 +577,9 @@ def make_handler(strategy, store, switch_mode, book=None):
                     self._send(PAGE, "text/html; charset=utf-8")
                 elif path == "/api/state":
                     self._send(json.dumps(state(strategy, store, book), default=str))
+                elif path == "/api/chart":
+                    jid = (parse_qs(urlparse(self.path).query).get("job") or [""])[0]
+                    self._send(json.dumps(strategy.chart(jid), default=str))
                 elif path == "/logs":
                     self._send(LOGS_PAGE, "text/html; charset=utf-8")
                 elif path == "/api/logs":

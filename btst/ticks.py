@@ -44,7 +44,8 @@ class _Feed(MarketFeed):
 
 
 class PriceWatch:
-    """One contract at a time: the open job's."""
+    """The open job's contract (the price, the peak), plus `extra` contracts
+    that are only recorded (btst/recorder.py) - all on one websocket."""
 
     def __init__(self, session_fn=None, rest_quote=None, log=print, ltp_poll_sec=1.0, ws_fresh_sec=5.0,
                  stale_sec=60.0, use_ws=True, clock=time.time, feed_cls=_Feed, today=lambda: now_ist().date(),
@@ -61,10 +62,24 @@ class PriceWatch:
         self.last = {}                  # ltp, high, at, source
         self.marked, self.base_high, self.top = None, None, None   # marked: the day of the mark
         self.last_rest, self.ticks, self.rest_calls = 0.0, 0, 0
+        self.contract = None            # the open job's contract (self.token)
+        self.extra = {}                 # token -> contract, recorded only
+        self.extra_seen = {}            # token -> clock of its last price
+        self.feed_tokens = frozenset()
+        self.on_tick = None             # (token, price, epoch seconds) for every price seen
+        self.extra_poll_sec = 15.0
 
     # ── what was seen ───────────────────────────────────────────────────────
     def see(self, token, ltp, high, source):
         """A look at the price: a websocket tick or an LTP answer."""
+        token = str(token)
+        if self.on_tick is not None and ltp and ltp > 0 and (token == self.token or token in self.extra):
+            if token in self.extra:
+                self.extra_seen[token] = self.clock()
+            try:
+                self.on_tick(token, round(float(ltp), 2), time.time())
+            except Exception:
+                pass                                # recording never stops the price
         if token != self.token:
             return
         # to the paisa: the socket's paise x 0.01 (358.65000000000003) and the LTP
@@ -107,40 +122,69 @@ class PriceWatch:
         """Contract c is the one watched (a new one forgets the old one's mark)."""
         tok = str(c["token"])
         if tok != self.token:
-            self.stop()
             with self.lock:
-                self.token, self.symbol, self.last = tok, c["symbol"], {}
+                self.token, self.symbol, self.last, self.contract = tok, c["symbol"], {}, c
                 self.marked, self.base_high, self.top = None, None, None
             self.log(fmt("INFO", "price", f"watching {c['symbol']} ({tok}, {c['exchange']})"))
 
-    def follow(self, c):
-        """Watch contract c (and only c), on the websocket when there is one."""
-        self.track(c)
-        self._ensure_feed(c)
+    def release(self):
+        """No open job any more (the recorded contracts stay on the socket)."""
+        if self.token is not None:
+            with self.lock:
+                self.token, self.symbol, self.contract, self.last = None, None, None, {}
+                self.marked, self.base_high, self.top = None, None, None
 
-    def _ensure_feed(self, c):
-        if not self.use_ws or self.session_fn is None:
+    def set_extra(self, contracts):
+        """The contracts to record besides the open job's (the socket follows)."""
+        new = {str(c["token"]): c for c in contracts}
+        if set(new) != set(self.extra):
+            added = [c["symbol"] for t, c in new.items() if t not in self.extra]
+            gone = [c["symbol"] for t, c in self.extra.items() if t not in new]
+            self.extra = new
+            if added or gone:
+                self.log(fmt("INFO", "price", "recording " + ", ".join(c["symbol"] for c in new.values())
+                             if new else "recording nothing"))
+
+    def _tokens(self):
+        out = dict(self.extra)
+        if self.token and self.contract:
+            out[self.token] = self.contract
+        return out
+
+    def follow(self, c):
+        """Watch contract c (the open job's), on the websocket when there is one."""
+        self.track(c)
+        self._ensure_feed()
+
+    def _ensure_feed(self, c=None):
+        tokens = self._tokens()
+        if not self.use_ws or self.session_fn is None or not tokens:
             return
         try:
             sess = self.session_fn()
         except Exception as e:
             self.log(fmt("WARN", "price", f"no Angel session for the websocket: {e!r}"))
             return
-        if self.feed is not None and self.feed_session is sess:
+        if self.feed is not None and self.feed_session is sess and self.feed_tokens == frozenset(tokens):
             return
         if self.feed is None and self.clock() - self.feed_failed_at < 60:
             return
-        if self.feed is not None:                    # a new day's login: the old tokens are dead
-            self.log(fmt("INFO", "price", "new Angel session - reconnecting the websocket"))
+        if self.feed is not None:                    # a new login, or a contract more or less
+            self.log(fmt("INFO", "price", "new Angel session - reconnecting the websocket"
+                         if self.feed_session is not sess else "contracts changed - reconnecting the websocket"))
             self._stop_feed()
         try:
-            f = self.feed_cls(self, sess, 4, correlation_id="btstfeed01", log=self._feed_log, stale_sec=30.0,
+            f = self.feed_cls(self, sess, max(4, len(tokens) + 2), correlation_id="btstfeed01", log=self._feed_log,
+                              stale_sec=30.0,
                               market_open=lambda: market_phase(start=self.hours[0], end=self.hours[1]) == "open")
-            f.register(self.token, BSE_FO if c["exchange"] == "BFO" else NSE_FO)
+            for tok, con in tokens.items():
+                f.register(tok, BSE_FO if con["exchange"] == "BFO" else NSE_FO)
             f.start()
             self.feed, self.feed_session, self.feed_started_at = f, sess, self.clock()
-            self.log(fmt("INFO", "price", f"websocket started for {c['symbol']} - every tick; the LTP call "
-                                          f"every {self.ltp_poll_sec:g} s only while it is quiet"))
+            self.feed_tokens = frozenset(tokens)
+            self.log(fmt("INFO", "price", f"websocket started for {', '.join(c_['symbol'] for c_ in tokens.values())}"
+                                          f" - every tick; the LTP call every {self.ltp_poll_sec:g} s only while "
+                                          f"it is quiet"))
         except Exception as e:
             self.feed, self.feed_failed_at = None, self.clock()
             self.log(fmt("WARN", "price", f"websocket not started ({e!r}) - LTP call every "
@@ -150,7 +194,27 @@ class PriceWatch:
         self.log(fmt("WARN" if any(w in str(text).lower() for w in ("error", "failed", "dead", "no ticks"))
                      else "INFO", "price", str(text)))
 
-    def _check_feed(self, c):
+    def pulse(self):
+        """Every pass in market hours: the socket for whatever is watched or
+        recorded, and an LTP call every extra_poll_sec for a recorded contract
+        the socket has not priced (so the recording has no holes)."""
+        if not self._tokens():
+            if self.feed is not None:
+                self.stop()
+            return
+        self._ensure_feed()
+        self._check_feed()
+        now = self.clock()
+        for tok, c in list(self.extra.items()):
+            if tok == self.token or now - self.extra_seen.get(tok, 0.0) < self.extra_poll_sec or not self.rest_quote:
+                continue
+            self.extra_seen[tok] = now
+            self.rest_calls += 1
+            q = self.rest_quote(c)
+            if q and q.get("ltp"):
+                self.see(tok, float(q["ltp"]), float(q.get("high") or 0), "ltp call")
+
+    def _check_feed(self, c=None):
         """A socket quiet for ws_dead_sec in market hours is started again."""
         if self.feed is None or market_phase(start=self.hours[0], end=self.hours[1]) != "open":
             return
@@ -161,13 +225,13 @@ class PriceWatch:
                                           f"(restart #{self.restarts}); the LTP call stands in meanwhile"))
             self._stop_feed()
             self.feed_failed_at = 0.0
-            self._ensure_feed(c)
+            self._ensure_feed()
 
     def price(self, c):
         """The latest price: the websocket's if it ticked in the last ws_fresh_sec,
         else an LTP call (at most every ltp_poll_sec). None if nothing recent."""
         self.follow(c)
-        self._check_feed(c)
+        self._check_feed()
         now = self.clock()
         with self.lock:
             fresh = (self.last.get("source") == "websocket" and self.last.get("at")
@@ -200,10 +264,11 @@ class PriceWatch:
                     "peak_since_target": self.top if self.marked == self.today() else None,
                     "websocket": bool(self.feed and self.feed.connected.is_set()), "ticks": self.ticks,
                     "ltp_calls": self.rest_calls, "ws_restarts": self.restarts,
+                    "recording": [c["symbol"] for c in self.extra.values()],
                     "ws_quiet_sec": round(self.clock() - self.last_ws_at, 1) if self.last_ws_at else None}
 
     def _stop_feed(self):
-        f, self.feed, self.feed_session = self.feed, None, None
+        f, self.feed, self.feed_session, self.feed_tokens = self.feed, None, None, frozenset()
         if f is not None:
             try:
                 f.stop()
@@ -213,5 +278,5 @@ class PriceWatch:
     def stop(self):
         """Nothing to watch (no open trade, or the market is shut)."""
         if self.feed is not None:
-            self.log(fmt("INFO", "price", f"websocket stopped for {self.symbol}"))
+            self.log(fmt("INFO", "price", f"websocket stopped ({', '.join(c['symbol'] for c in self._tokens().values())})"))
         self._stop_feed()

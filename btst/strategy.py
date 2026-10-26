@@ -40,10 +40,12 @@ import queue
 import threading
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, time as dtime, timedelta
 
 from arb.instruments import IST, holidays, market_phase, now_ist
+from btst import chart as CH
 from btst import gift as G
+from btst import recorder as REC
 from btst import signal as S
 from btst.contracts import days_left, find_option, tick_round
 from btst.logbook import fmt
@@ -84,7 +86,7 @@ def _first_line(text, n=90):
 
 class BtstStrategy:
     def __init__(self, cfg, store, broker, master_fn, llm, channel, log=print, now=now_ist,
-                 notifier=None, cost_model=None, prices=None):
+                 notifier=None, cost_model=None, prices=None, recorder=None, candles=None):
         self.cfg, self.store, self.broker = cfg, store, broker
         self.master_fn, self.llm, self.channel = master_fn, llm, channel
         self.log, self.now, self.notifier = log, now, notifier
@@ -100,6 +102,12 @@ class BtstStrategy:
         self.last_offhours_price = 0.0     # 0: the first pass after a start fetches at once
         self.gift_fetch = G.fetch           # GIFT Nifty (btst/gift.py); tests replace it
         self.gift_failed_at = 0.0
+        self.recorder = recorder            # btst/recorder.py: every price of a trade's option
+        self.candles_fn = candles           # (contract, from, to) -> 1-minute bars, to fill gaps
+        self.rec_jobs, self.rec_map, self.rec_checked, self.rec_failed = [], {}, 0.0, {}
+        self.rec_candle_tries = {}          # job_id -> saves put off for Angel's candles
+        if self.prices is not None and self.recorder is not None:
+            self.prices.on_tick = self._on_tick
         self.health = {}                # the runner's view: session, websocket, reader, holidays
         self.lock = threading.RLock()   # one pass of step() or one mode switch at a time
         self.last_status_log = 0.0
@@ -338,6 +346,7 @@ class BtstStrategy:
                "entry_price": round(px, 2), "entry_qty": q, "entry_at": self._ts()}
         self.store.update_job(jid, set_={"status": "open", "position": pos, "target_price": target,
                                          "target_mult": mult, "ltp_high": px, "ltp_low": px})
+        self._start_recording(jid, c, pos["entry_at"], today)
         self._say(f"BOUGHT {c['symbol']} x{q} @ {px:.2f} (Rs {px * q:,.0f}; signal {sig['price']:g}); "
                   f"target {target:.2f} = {mult:g} x the signal's price", jid, True, "entry", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target")
@@ -817,6 +826,120 @@ class BtstStrategy:
         self._amo_check(job)
         self._gift(job)
 
+    # ── recording a trade's prices (btst/recorder.py) ──────────────────────
+    def _start_recording(self, jid, c, start_iso, trade_day):
+        """From the fill to market_close of the next trading day - past the exit too."""
+        if self.recorder is None:
+            return
+        until = datetime.combine(self._next_session(trade_day), dtime.fromisoformat(self.c("market_close", "15:45")),
+                                 tzinfo=IST)
+        rec = {"status": "recording", "token": str(c["token"]), "symbol": c["symbol"], "exchange": c["exchange"],
+               "from": start_iso, "until": until.isoformat(timespec="seconds"), "file": self.recorder.path(jid)}
+        self.store.update_job(jid, set_={"recording": rec})
+        self.rec_checked = 0.0
+        self._log("record", f"recording {c['symbol']}'s prices for {jid} until {rec['until']} (every tick, "
+                            f"saved to MongoDB after that)")
+
+    def _on_tick(self, token, price, ts):
+        """The websocket's thread (and LTP calls): a price for each trade recording this contract."""
+        for jid in self.rec_map.get(str(token), ()):
+            self.recorder.record(jid, ts, price)
+
+    def _recording_pass(self):
+        if self.recorder is None:
+            return
+        if time.time() - self.rec_checked >= 10:
+            self.rec_checked = time.time()
+            try:
+                self.rec_jobs = self.store.recording_jobs()
+            except Exception as e:
+                self._log("record", f"recording list unreadable: {e!r}", "WARN")
+        now, live, rec_map = self.now(), [], {}
+        for j in self.rec_jobs:
+            r = j.get("recording") or {}
+            until = datetime.fromisoformat(r["until"])
+            if now >= until + timedelta(minutes=2):
+                if time.time() - self.rec_failed.get(j["job_id"], 0.0) >= 300:
+                    self._finalize_recording(j)
+                continue
+            live.append(j)
+            rec_map.setdefault(r["token"], []).append(j["job_id"])
+        self.rec_map = rec_map
+        if self.prices is not None:
+            self.prices.set_extra([j["contract"] for j in live if j.get("contract")])
+
+    def _finalize_recording(self, job):
+        """The window is over: 1-minute bars (gaps from Angel's candles), the
+        gzipped ticks and the trade's events into MongoDB; the local file goes
+        once the copy is checked."""
+        jid, r, c = job["job_id"], job["recording"], job.get("contract") or {}
+        try:
+            ticks = self.recorder.read(jid)
+            tick_bars = REC.bars(ticks)
+            candle_bars = []
+            if self.candles_fn is not None:
+                start, end = datetime.fromisoformat(r["from"]), datetime.fromisoformat(r["until"])
+                d = start.date()
+                while d <= end.date():
+                    if d.weekday() < 5 and d.isoformat() not in holidays():
+                        a = max(start, datetime.combine(d, dtime.fromisoformat(self.c("market_open", "09:15")), tzinfo=IST))
+                        b = min(end, datetime.combine(d, dtime.fromisoformat(self.c("market_close", "15:45")), tzinfo=IST))
+                        if a < b:
+                            try:
+                                candle_bars += self.candles_fn(c, a, b) or []
+                            except Exception as e:
+                                tries = self.rec_candle_tries.get(jid, 0) + 1
+                                self.rec_candle_tries[jid] = tries
+                                if tries < 3:           # often a rate limit: the save waits and tries again
+                                    raise RuntimeError(f"Angel's 1-minute candles for {d} not read ({e!r}); "
+                                                       f"try {tries} of 3")
+                                self._log("record", f"{jid}: Angel's 1-minute candles for {d} not read ({e!r}) - "
+                                                    f"saved with the ticks alone", "WARN")
+                    d += timedelta(days=1)
+            merged = REC.merge(tick_bars, candle_bars)
+            gz = self.recorder.compress(jid)
+            try:
+                from bson import Binary
+                gz_value = Binary(gz)
+            except ImportError:
+                gz_value = gz
+            filled = sum(1 for b in merged if b.get("src") == "candle")
+            fresh = self.store.get_job(jid) or job
+            self.store.save_ticks({"job_id": jid, "symbol": r.get("symbol"), "token": r.get("token"),
+                                   "exchange": r.get("exchange"), "from": r.get("from"), "until": r.get("until"),
+                                   "count": len(ticks), "bars": merged, "gz": gz_value, "gz_bytes": len(gz),
+                                   "candle_minutes": filled, "events": CH.events(fresh), "saved_at": self._ts()})
+            check = self.store.get_ticks(jid)
+            if not check or int(check.get("count", -1)) != len(ticks):
+                raise RuntimeError("the saved copy does not match the local file")
+            self.recorder.remove(jid)
+            self.store.update_job(jid, set_={"recording": dict(r, status="saved", count=len(ticks), bars=len(merged),
+                                                               candle_minutes=filled, gz_bytes=len(gz),
+                                                               saved_at=self._ts())})
+            self.rec_checked = 0.0
+            self._log("record", f"{jid}: {len(ticks)} prices -> {len(merged)} 1-minute bars ({filled} from Angel's "
+                                f"candles), {len(gz):,} bytes gzipped - saved to MongoDB; local file removed")
+        except Exception as e:
+            self.rec_failed[jid] = time.time()
+            self._log("record", f"{jid}: recording not saved ({e!r}) - the local file stays; trying again in 5 min",
+                      "ERROR")
+
+    def chart(self, job_id):
+        """The page's chart for a trade: from MongoDB once saved, from the local file while recording."""
+        job = self.store.get_job(job_id)
+        if not job:
+            return {"error": f"no job {job_id}"}
+        saved = self.store.get_ticks(job_id) if (job.get("recording") or {}).get("status") == "saved" else None
+        if saved:
+            bars, source = saved.get("bars") or [], "mongo"
+        elif self.recorder is not None:
+            bars, source = REC.bars(self.recorder.read(job_id)), "recording"
+        else:
+            bars, source = [], "none"
+        out = CH.build(_no_channel(job), bars)
+        out["source"] = source
+        return out
+
     # ── GIFT Nifty, information only (btst/gift.py) ────────────────────────
     def _gift_read(self, what):
         if time.time() - self.gift_failed_at < float(self.c("gift_retry_sec", 300)):
@@ -1052,6 +1175,9 @@ class BtstStrategy:
         elif j:
             self._say(f"resuming {j['job_id']} ({j['contract']['symbol']} x{j['position']['qty']} "
                       f"@ {j['position']['avg_price']}, target {j.get('target_price')})", area="resume")
+            if self.recorder is not None and not j.get("recording"):
+                self._start_recording(j["job_id"], j["contract"], j["position"].get("entry_at") or self._ts(),
+                                      datetime.fromisoformat(j["trade_date"]).date())
             if hasattr(self.broker, "adopt"):
                 self.broker.adopt(j)            # paper: the position and target lived in the old process
         else:
@@ -1099,8 +1225,14 @@ class BtstStrategy:
             else:
                 self.status_note = (f"waiting for a signal ({self.c('scan_start', '15:15')} - "
                                     f"{self.c('scan_end', '15:30')})")
-            if not self.managing and self.prices is not None:
-                self.prices.stop()              # no trade, or the market is shut: no socket
+            self._recording_pass()
+            if self.prices is not None:
+                if not self.managing:
+                    self.prices.release()       # no open trade: the socket keeps only what is recorded
+                if self._market_open(self.now()) and (self.managing or self.prices.extra):
+                    self.prices.pulse()
+                else:
+                    self.prices.stop()          # the market shut, or nothing to watch: no socket
         except Exception as e:
             self._log("manage", f"error: {e!r}\n{traceback.format_exc()}", "ERROR")
 
