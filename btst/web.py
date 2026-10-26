@@ -284,7 +284,8 @@ function chartSvg(d, id){
   svg += line(B.map(b => b.c), `stroke="var(--ink)" stroke-width="1.5"`);
   // events
   const at = t => { let k = B.findIndex(b => b.t + 59999 >= t); return k < 0 ? n - 1 : k; };
-  (d.events || []).forEach(e => { const i = at(e.t), x = X(i), p = num(e.price) ? e.price : B[i].c, y = Y(p), tip = `<title>${esc(new Date(e.t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false}))} - ${esc(e.label)}</title>`;
+  const t0 = B[0].t - 60000, t1 = B[n - 1].t + 120000, outside = (d.events || []).filter(e => e.t < t0 || e.t > t1);
+  (d.events || []).filter(e => e.t >= t0 && e.t <= t1).forEach(e => { const i = at(e.t), x = X(i), p = num(e.price) ? e.price : B[i].c, y = Y(p), tip = `<title>${esc(new Date(e.t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false}))} - ${esc(e.label)}</title>`;
     if (e.kind === "buy") svg += `<path d="M${x},${y - 9} l6,10 h-12z" fill="#3366cc">${tip}</path>`;
     else if (e.kind === "topup") svg += `<path d="M${x},${y - 9} l6,10 h-12z" fill="#d97706">${tip}</path>`;
     else if (e.kind === "trail") svg += `<circle cx="${x}" cy="${Math.max(T + 3, y)}" r="3.2" fill="var(--up)">${tip}</circle>`;
@@ -305,7 +306,9 @@ function chartSvg(d, id){
   svg += `<text x="${W - R + 4}" y="${PY(lastP || 0) + 3}" style="fill:${(lastP || 0) >= 0 ? "var(--up)" : "var(--down)"}">${rs(lastP)}</text>`;
   svg += `<text x="${L}" y="${P0 - 6}">P&amp;L (₹)</text>`;
   svg += `<line class="cur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--link)" stroke-width="1" style="display:none"/></svg>`;
-  return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div></div>`;
+  const when = t => new Date(t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+  const off = outside.length ? `<div class="n">Outside the recorded minutes: ${outside.map(e => esc(when(e.t) + " " + e.label)).join(" · ")}${rec.status === "recording" ? " (Angel's 1-minute candles fill the gaps when the recording is saved)" : ""}</div>` : "";
+  return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div>${off}</div>`;
 }
 function parkedHtml(d){
   const ps = d.parked || [];
