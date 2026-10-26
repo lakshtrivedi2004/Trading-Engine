@@ -1793,5 +1793,78 @@ check("the final save: the whole window from ticks + candles (every minute 09:15
       f"{len(tA['bars'])} bars, {tA['candle_minutes']} from candles")
 shutil.rmtree(tmp2, ignore_errors=True)
 
+section("15. A top-up missed (the desk down, or a dip between two looks) is done when seen")
+tmp3 = tempfile.mkdtemp(prefix="btst_miss_")
+DIP = int(datetime(2026, 10, 23, 9, 40, tzinfo=IST).timestamp() * 1000)
+
+
+def dip_candles(c, a, b):
+    out, t = [], int(a.timestamp()) // 60 * 60_000
+    while t < int(b.timestamp() * 1000):
+        px = 75.0 if t == DIP else 92.0
+        out.append({"t": t, "o": px + 2, "h": px + 3, "l": px, "c": px + 1, "n": 0})
+        t += 60_000
+    return out
+
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 105.0
+sM1, stM1, brM1, lgM1, sentM1 = desk()
+sM1.recorder = REC.TickRecorder(folder=tmp3)
+sM1.candles_fn = dip_candles
+sM1.on_message(msg(3, SAMPLE, 15, 16))
+sM1.step()
+jM = stM1.open_job()
+tokM = jM["contract"]["token"]
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 95.0
+sM1.step()                                          # the open: -9.5%, hold
+for mm in range(15, 21):
+    sM1._on_tick(tokM, 95.0, datetime(2026, 10, 23, 9, mm, 30, tzinfo=IST).timestamp())
+# the desk is down 09:21 - 10:00; the price touched 75 (-28.6%) at 09:40 and came back to 90
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 90.0
+sM2 = BtstStrategy(sM1.cfg, stM1, brM1, lambda: MASTER, None, "test_channel", log=lgM1.append, now=lambda: CLOCK["t"],
+                   notifier=SimpleNamespace(send=sentM1.append), recorder=REC.TickRecorder(folder=tmp3), candles=dip_candles)
+sM2.broker = PaperBtstBroker(lambda c: PRICE["ltp"], log=lambda *_: None, today=lambda: CLOCK["t"].date())
+sM2.resume()
+sM2.step()                                          # the gap is filled from Angel's candles in this pass
+at(2026, 10, 23, 10, 0, 2)
+sM2.step()                                          # the next pass sees the dip
+jM = stM1.open_job()
+u = (jM.get("topups") or [{}])[0]
+check("back at 10:00 after a crash: Angel's candles show the price touched 75 (-28.6%) at 09:40 - the missed "
+      "50% top-up is done now, at the market (90), and said",
+      jM.get("topped_pct") == 50 and u.get("missed") and u.get("low") == 75.0 and u.get("price") == 90.0
+      and (u.get("low_at") or "").startswith("2026-10-23T09:40") and any("missed top-up" in x for x in sentM1),
+      str({k: u.get(k) for k in ("missed", "low", "low_at", "price", "loss_pct")}))
+check("...target cut 25% (210 -> 157.50), trailing from that buy (90)", jM["target_price"] == 157.5
+      and jM["trail"]["ref"] == 90.0)
+check("...and the session's low is kept on the trade (75, 09:40)", jM["session_low"] == 75.0
+      and jM["session_low_day"] == "2026-10-23")
+shutil.rmtree(tmp3, ignore_errors=True)
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 100.0
+sT, stT, brT, lgT, _ = desk()
+sT.recorder = REC.TickRecorder(folder=tempfile.mkdtemp(prefix="btst_tick_"))
+sT.on_message(msg(3, SAMPLE, 15, 16))
+sT.step()
+jT = stT.open_job()
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 95.0
+sT.step()
+sT.rec_checked = 0
+sT.step()
+sT._on_tick(jT["contract"]["token"], 74.0, datetime(2026, 10, 23, 9, 20, 1, tzinfo=IST).timestamp())   # between passes
+at(2026, 10, 23, 9, 20, 2)
+PRICE["ltp"] = 76.0                                 # the pass sees -24%
+sT.step()
+jT = stT.open_job()
+check("a dip to 74 (-26%) between two looks (a websocket tick), the pass seeing 76 (-24%): topped up",
+      jT.get("topped_pct") == 50 and jT["topups"][0]["missed"] and jT["topups"][0]["low"] == 74.0,
+      str(jT.get("topups")))
+shutil.rmtree(sT.recorder.folder, ignore_errors=True)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

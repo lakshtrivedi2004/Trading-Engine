@@ -317,7 +317,8 @@ function topupTable(list, withTrade){
   return `<table><tr><th>Time</th>${withTrade ? "<th>Trade</th>" : ""}<th>Step</th><th>Down</th><th>Bought</th><th>Amount</th>
       <th>Qty before → after</th><th>Avg before → after</th><th>Target before → after</th><th>Floor</th><th>Order</th></tr>` +
     list.map(u => `<tr><td>${tms(u.at)}</td>${withTrade ? `<td class="l"><b>${esc(u._sym || "")}</b><span class="n">${esc(u._mode || u.mode || "")} · ${esc(u._job || "")}</span></td>` : ""}
-      <td class="l">${esc(STEP[u.step] || u.step)}</td><td class="down">${pc(-(u.loss_pct || 0))}</td>
+      <td class="l">${esc(STEP[u.step] || u.step)}${u.missed ? ' <span class="tag rej" title="the price crossed the level while the desk was down or between two looks; topped up when seen">missed</span>' : ""}</td>
+      <td class="down">${pc(-(u.loss_pct || 0))}${u.missed && num(u.low) ? `<span class="n">low ${n2(u.low)}${u.low_at ? " at " + esc(String(u.low_at).slice(11, 16)) : ""}</span>` : ""}</td>
       <td>${n0(u.qty)} @ ${n2(u.price)}${num(u.ltp) && u.ltp !== u.price ? `<span class="n">LTP ${n2(u.ltp)}</span>` : ""}</td><td>${rsp(u.amount)}</td>
       <td>${n0(u.qty_before)} → <b>${n0(u.qty_after)}</b></td><td>${n2(u.avg_before)} → <b>${n2(u.avg_after)}</b></td>
       <td>${n2(u.target_before)} → <b>${n2(u.target_after)}</b></td><td>${n2(u.floor)}</td><td class="l">${esc(u.order_id || "")}</td></tr>`).join("") + `</table>`;

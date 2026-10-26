@@ -107,6 +107,7 @@ class BtstStrategy:
         self.rec_jobs, self.rec_map, self.rec_checked, self.rec_failed = [], {}, 0.0, {}
         self.rec_candle_tries = {}          # job_id -> saves put off for Angel's candles
         self.rec_backfill_at = {}           # job_id -> clock of its last gap check (none yet: at once)
+        self.sess_low = {}                  # job_id -> (session date, lowest price, epoch ms) - the top-up rule
         if self.prices is not None and self.recorder is not None:
             self.prices.on_tick = self._on_tick
         self.health = {}                # the runner's view: session, websocket, reader, holidays
@@ -549,8 +550,10 @@ class BtstStrategy:
         if not ltp or job.get("status") != "open":
             return False
         base = float(job["position"]["entry_price"])
-        loss = 100.0 * (base - float(ltp)) / base
+        low, low_ms = self._session_low(job, ltp)
+        loss = 100.0 * (base - float(low)) / base        # the session's worst so far - a dip missed counts
         done = float(job.get("topped_pct") or 0.0)
+        self._missed = (low < float(ltp) - 1e-9, low, low_ms)
         first, second = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
         half = float(self.c("topup_first_pct", 50.0))
         if done <= 0 and loss >= second:
@@ -560,6 +563,39 @@ class BtstStrategy:
         if 0 < done < 100 and loss >= second:
             return self._topup(job, ltp, 100.0 - done, loss, "second")
         return False
+
+    def _session_low(self, job, ltp):
+        """(the lowest price of the next session so far, its epoch ms): this
+        pass's price, every websocket tick, Angel's candles for minutes the desk
+        was down - and kept on the job, so a restart does not forget it."""
+        jid = job["job_id"]
+        day = self.now().date()
+        cur = self.sess_low.get(jid)
+        if not cur or cur[0] != day or getattr(self, "_low_dirty", {}).get(jid):
+            low, at = float(job.get("session_low") or 0) or None, None
+            if job.get("session_low_day") != day.isoformat():
+                low = None
+            if self.recorder is not None:
+                start = datetime.combine(day, dtime.fromisoformat(self.c("market_open", "09:15")), tzinfo=IST)
+                s_ms = int(start.timestamp() * 1000)
+                for ms, px in self.recorder.read(jid):
+                    if ms >= s_ms and (low is None or px < low):
+                        low, at = px, ms
+                for b in self.recorder.read_candles(jid)["bars"].values():
+                    if b["t"] >= s_ms and (low is None or b["l"] < low):
+                        low, at = b["l"], b["t"]
+            cur = (day, low if low is not None else float(ltp), at)
+            self.sess_low[jid] = cur
+            getattr(self, "_low_dirty", {}).pop(jid, None)
+        if float(ltp) < cur[1]:
+            cur = (day, float(ltp), int(self.now().timestamp() * 1000))
+            self.sess_low[jid] = cur
+        if cur[1] != job.get("session_low") or job.get("session_low_day") != day.isoformat():
+            self.store.update_job(jid, set_={"session_low": cur[1], "session_low_day": day.isoformat(),
+                                             "session_low_at": (datetime.fromtimestamp(cur[2] / 1000, tz=IST)
+                                                                .isoformat(timespec="seconds") if cur[2] else None)})
+            job["session_low"], job["session_low_day"] = cur[1], day.isoformat()
+        return cur[1], cur[2]
 
     def _topup(self, job, ltp, pct, loss, step):
         """Add pct% of the first amount at market (whole lots, the count nearest
@@ -580,6 +616,11 @@ class BtstStrategy:
         amount = first_amount * pct / 100.0
         n = max(1, round(amount / (ltp * lot)))
         add = n * lot
+        missed, low, low_ms = getattr(self, "_missed", (False, None, None))
+        if missed:
+            when = datetime.fromtimestamp(low_ms / 1000, tz=IST).strftime("%H:%M:%S") if low_ms else "?"
+            self._say(f"missed top-up: the price reached {low:.2f} ({-loss:.1f}%) at {when} - the desk was down or "
+                      f"between looks; topping up now at the market (~{ltp:.2f})", jid, True, "decision", "WARN")
         self._log("decision", f"{-loss:.1f}% below the buy {pos['entry_price']:.2f}: top up {pct:g}% of "
                               f"Rs {first_amount:,.0f} = Rs {amount:,.0f} -> {n} lot(s) = {add} qty @ ~{ltp:.2f} "
                               f"(Rs {add * ltp:,.0f})", "TRADE")
@@ -608,6 +649,9 @@ class BtstStrategy:
         else:
             target = floor
         topups = list(job.get("topups") or []) + [{"at": buy["at"], "step": step, "pct": pct, "loss_pct": round(loss, 2),
+                                                   "missed": bool(missed), "low": low,
+                                                   "low_at": (datetime.fromtimestamp(low_ms / 1000, tz=IST)
+                                                              .isoformat(timespec="seconds") if low_ms else None),
                                                    "ltp": round(float(ltp), 2), "qty": q2, "price": round(p2, 2),
                                                    "amount": round(p2 * q2, 2), "order_id": buy.get("order_id"),
                                                    "qty_before": int(pos["qty"]), "qty_after": q,
@@ -851,6 +895,9 @@ class BtstStrategy:
         """The websocket's thread (and LTP calls): a price for each trade recording this contract."""
         for jid in self.rec_map.get(str(token), ()):
             self.recorder.record(jid, ts, price)
+            low = self.sess_low.get(jid)
+            if low and low[0] == datetime.fromtimestamp(ts, tz=IST).date() and price < low[1]:
+                self.sess_low[jid] = (low[0], price, int(ts * 1000))   # the socket's thread: read by _topup_rules
 
     def _recording_pass(self):
         if self.recorder is None:
@@ -941,6 +988,9 @@ class BtstStrategy:
             asked += len(want)
         if asked:
             self.recorder.save_candles(jid, cache)
+            if not hasattr(self, "_low_dirty"):
+                self._low_dirty = {}
+            self._low_dirty[jid] = True             # a dip while the desk was down may be in them
             self._log("record", f"{jid}: {asked} minute(s) with no tick (the desk down or the socket silent) "
                                 f"asked from Angel's 1-minute candles - {filled} had trades, filled")
         return sum(1 for t in gaps if t not in cache["checked"])
