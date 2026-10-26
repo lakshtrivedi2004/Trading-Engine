@@ -106,6 +106,7 @@ class BtstStrategy:
         self.candles_fn = candles           # (contract, from, to) -> 1-minute bars, to fill gaps
         self.rec_jobs, self.rec_map, self.rec_checked, self.rec_failed = [], {}, 0.0, {}
         self.rec_candle_tries = {}          # job_id -> saves put off for Angel's candles
+        self.rec_backfill_at = {}           # job_id -> clock of its last gap check (none yet: at once)
         if self.prices is not None and self.recorder is not None:
             self.prices.on_tick = self._on_tick
         self.health = {}                # the runner's view: session, websocket, reader, holidays
@@ -870,9 +871,79 @@ class BtstStrategy:
                 continue
             live.append(j)
             rec_map.setdefault(r["token"], []).append(j["job_id"])
+            self._backfill_gaps(j)
         self.rec_map = rec_map
         if self.prices is not None:
             self.prices.set_extra([j["contract"] for j in live if j.get("contract")])
+
+    def _window_minutes(self, start, end):
+        """Every minute (epoch ms of its start) the market traded between start and end."""
+        out = []
+        o, c = dtime.fromisoformat(self.c("market_open", "09:15")), dtime.fromisoformat(self.c("market_close", "15:45"))
+        d = start.date()
+        while d <= end.date():
+            if d.weekday() < 5 and d.isoformat() not in holidays():
+                a = max(start, datetime.combine(d, o, tzinfo=IST))
+                b = min(end, datetime.combine(d, c, tzinfo=IST))
+                t = int(a.timestamp()) // 60 * 60_000
+                while t < int(b.timestamp() * 1000):
+                    out.append(t)
+                    t += 60_000
+            d += timedelta(days=1)
+        return out
+
+    def _backfill_gaps(self, job, force=False, final=False):
+        """The minutes of the window with no tick - the desk down, the socket
+        silent - from Angel's 1-minute candles, into the recording's candle
+        cache. Right after a start and every backfill_every_sec (300 s); a
+        minute asked once is not asked again (no candle = no trade). At most
+        backfill_calls (3) requests a pass outside the final save. Returns the
+        minutes still not asked for."""
+        if self.recorder is None or self.candles_fn is None:
+            return 0
+        jid = job["job_id"]
+        if not force and time.time() - self.rec_backfill_at.get(jid, 0.0) < float(self.c("backfill_every_sec", 300)):
+            return 0
+        self.rec_backfill_at[jid] = time.time()
+        r, c = job["recording"], job.get("contract") or {}
+        start = datetime.fromisoformat(r["from"])
+        until = datetime.fromisoformat(r["until"])
+        end = until if final else min(until, self.now() - timedelta(minutes=2))   # whole minutes Angel has closed
+        if end <= start:
+            return 0
+        have = {ms - ms % 60_000 for ms, _ in self.recorder.read(jid)}
+        cache = self.recorder.read_candles(jid)
+        gaps = [t for t in self._window_minutes(start, end) if t not in have and t not in cache["checked"]]
+        if not gaps:
+            return 0
+        by_day = {}                            # one request per trading day: its first to its last gap
+        for t in gaps:
+            by_day.setdefault(datetime.fromtimestamp(t / 1000, tz=IST).date(), []).append(t)
+        filled = asked = calls = 0
+        for day_, mins in sorted(by_day.items()):
+            if not final and calls >= int(self.c("backfill_calls", 3)):
+                break
+            calls += 1
+            a, b = min(mins), max(mins)
+            a_dt, b_dt = datetime.fromtimestamp(a / 1000, tz=IST), datetime.fromtimestamp(b / 1000 + 60, tz=IST)
+            try:
+                got = self.candles_fn(c, a_dt, b_dt) or []
+            except Exception as e:
+                self._log("record", f"{jid}: Angel's candles {a_dt:%d %b %H:%M}-{b_dt:%H:%M} not read ({e!r}) - "
+                                    f"tried again later", "WARN")
+                break
+            want = set(mins)
+            for bar in got:
+                if bar["t"] in want:
+                    cache["bars"][bar["t"]] = dict(bar, src="candle")
+                    filled += 1
+            cache["checked"].update(want)
+            asked += len(want)
+        if asked:
+            self.recorder.save_candles(jid, cache)
+            self._log("record", f"{jid}: {asked} minute(s) with no tick (the desk down or the socket silent) "
+                                f"asked from Angel's 1-minute candles - {filled} had trades, filled")
+        return sum(1 for t in gaps if t not in cache["checked"])
 
     def _finalize_recording(self, job):
         """The window is over: 1-minute bars (gaps from Angel's candles), the
@@ -881,27 +952,16 @@ class BtstStrategy:
         jid, r, c = job["job_id"], job["recording"], job.get("contract") or {}
         try:
             ticks = self.recorder.read(jid)
+            missing = self._backfill_gaps(job, force=True, final=True)
+            if missing and self.candles_fn is not None:
+                tries = self.rec_candle_tries.get(jid, 0) + 1
+                self.rec_candle_tries[jid] = tries
+                if tries < 3:                   # often a rate limit: the save waits and tries again
+                    raise RuntimeError(f"{missing} minute(s) still unfilled from Angel's candles; try {tries} of 3")
+                self._log("record", f"{jid}: {missing} minute(s) could not be filled from Angel's candles - "
+                                    f"saved with what there is", "WARN")
             tick_bars = REC.bars(ticks)
-            candle_bars = []
-            if self.candles_fn is not None:
-                start, end = datetime.fromisoformat(r["from"]), datetime.fromisoformat(r["until"])
-                d = start.date()
-                while d <= end.date():
-                    if d.weekday() < 5 and d.isoformat() not in holidays():
-                        a = max(start, datetime.combine(d, dtime.fromisoformat(self.c("market_open", "09:15")), tzinfo=IST))
-                        b = min(end, datetime.combine(d, dtime.fromisoformat(self.c("market_close", "15:45")), tzinfo=IST))
-                        if a < b:
-                            try:
-                                candle_bars += self.candles_fn(c, a, b) or []
-                            except Exception as e:
-                                tries = self.rec_candle_tries.get(jid, 0) + 1
-                                self.rec_candle_tries[jid] = tries
-                                if tries < 3:           # often a rate limit: the save waits and tries again
-                                    raise RuntimeError(f"Angel's 1-minute candles for {d} not read ({e!r}); "
-                                                       f"try {tries} of 3")
-                                self._log("record", f"{jid}: Angel's 1-minute candles for {d} not read ({e!r}) - "
-                                                    f"saved with the ticks alone", "WARN")
-                    d += timedelta(days=1)
+            candle_bars = list(self.recorder.read_candles(jid)["bars"].values())
             merged = REC.merge(tick_bars, candle_bars)
             gz = self.recorder.compress(jid)
             try:
@@ -944,7 +1004,7 @@ class BtstStrategy:
         hit = cache.get(job["job_id"])
         if hit and time.time() - hit[0] < 15:
             return hit[1]
-        ext = CH.extremes(job, REC.bars(self.recorder.read(job["job_id"])))
+        ext = CH.extremes(job, self.recorder.all_bars(job["job_id"]))
         if ext:
             ext["basis"] = "recorded so far (the recording runs to " + rec.get("until", "?")[:16].replace("T", " ") + ")"
         cache[job["job_id"]] = (time.time(), ext)
@@ -960,7 +1020,7 @@ class BtstStrategy:
         if saved:
             bars, source = saved.get("bars") or [], "mongo"
         elif self.recorder is not None:
-            bars, source = REC.bars(self.recorder.read(job_id)), "recording"
+            bars, source = self.recorder.all_bars(job_id), "recording"
         else:
             bars, source = [], "none"
         out = CH.build(_no_channel(job), bars)

@@ -67,7 +67,7 @@ def extremes(job, bars):
     steps = _positions(job)
     r = job.get("result") or {}
     exit_t = _ms(r.get("closed_at")) if r else None
-    best = worst = None
+    best = worst = hi = lo = None
     i = 0
     for b in bars:
         t = b["t"] + 59_999
@@ -78,6 +78,10 @@ def extremes(job, bars):
         _, q, a = steps[i]
         if not q or not a:
             continue
+        if hi is None or b["h"] > hi[0]:
+            hi = (b["h"], b["t"])
+        if lo is None or b["l"] < lo[0]:
+            lo = (b["l"], b["t"])
         up, down = (b["h"] - a) * q, (b["l"] - a) * q
         after = bool(exit_t and b["t"] >= exit_t)
         if best is None or up > best[0]:
@@ -91,6 +95,8 @@ def extremes(job, bars):
             "max_profit_after_exit": best[3], "max_profit_pct": best[4],
             "max_loss": round(worst[0], 2), "max_loss_price": worst[1], "max_loss_at": iso(worst[2]),
             "max_loss_after_exit": worst[3], "max_loss_pct": worst[4], "minutes": len(bars),
+            "high": hi[0], "high_at": iso(hi[1]), "low": lo[0], "low_at": iso(lo[1]),
+            "candle_minutes": sum(1 for b in bars if b.get("src") == "candle"),
             "basis": "recorded prices, buy to the next session's close"}
 
 

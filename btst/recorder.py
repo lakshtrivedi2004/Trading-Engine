@@ -9,8 +9,16 @@ day - past the exit too. Then the desk (btst/strategy.py) reads it back, makes
 1-minute bars (gaps - the desk down - filled from Angel's 1-minute candles),
 gzips the ticks and stores both, with the trade's events, in MongoDB
 (btst_ticks, by job id); the local file is removed once the copy is checked.
+
+A crash or a restart loses no tick already written. The minutes the desk was
+down (or the socket silent) are found right after a start and every few
+minutes, and filled from Angel's 1-minute candles into a cache beside the
+file (<job_id>.candles.json: the bars, and every minute already asked for, so
+a minute with no trade is not asked again) - the page's chart and figures use
+ticks + candles while the recording runs, and the final save reuses them.
 """
 import gzip
+import json
 import os
 import threading
 
@@ -58,6 +66,31 @@ class TickRecorder:
         out.sort()
         return out
 
+    def candles_path(self, job_id):
+        return os.path.join(self.folder, f"{job_id}.candles.json")
+
+    def read_candles(self, job_id):
+        """{"bars": {minute_ms: bar}, "checked": [minute_ms]} - Angel's candles for the gaps."""
+        try:
+            with open(self.candles_path(job_id)) as fh:
+                d = json.load(fh)
+            return {"bars": {int(k): v for k, v in (d.get("bars") or {}).items()},
+                    "checked": set(int(x) for x in d.get("checked") or [])}
+        except (FileNotFoundError, ValueError):
+            return {"bars": {}, "checked": set()}
+
+    def save_candles(self, job_id, data):
+        os.makedirs(self.folder, exist_ok=True)
+        tmp = self.candles_path(job_id) + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump({"bars": {str(k): v for k, v in data["bars"].items()},
+                       "checked": sorted(data["checked"])}, fh)
+        os.replace(tmp, self.candles_path(job_id))        # never a half-written cache after a crash
+
+    def all_bars(self, job_id):
+        """1-minute bars from the ticks, the gaps from the cached candles."""
+        return merge(bars(self.read(job_id)), list(self.read_candles(job_id)["bars"].values()))
+
     def raw(self, job_id):
         try:
             with open(self.path(job_id), "rb") as fh:
@@ -71,10 +104,11 @@ class TickRecorder:
     def remove(self, job_id):
         with self.lock:
             self.last.pop(job_id, None)
-            try:
-                os.remove(self.path(job_id))
-            except FileNotFoundError:
-                pass
+            for f in (self.path(job_id), self.candles_path(job_id)):
+                try:
+                    os.remove(f)
+                except FileNotFoundError:
+                    pass
 
 
 def bars(ticks, minute_ms=60_000):

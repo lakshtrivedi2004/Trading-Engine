@@ -369,7 +369,9 @@ function drawOpen(d){
       ${box("Average · invested", `${n2(p.avg_price)} · ${rsp(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
       ${box("Target", n2(j.target_price), `${tKind} · ${esc(j.target_last_status || "–")}${num(away) ? " · " + pc(away) + " away" : ""}`)}
       ${box("Signal", `@ ${esc(s.price)}`, `posted ${tm((j.message || {}).date)} · read by ${esc(s.parsed_by)}`)}
-      ${box("High / low since entry", `${n2(j.ltp_high)} / ${n2(j.ltp_low)}`, `${pc(p.avg_price ? 100 * (j.ltp_high - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (j.ltp_low - p.avg_price) / p.avg_price : null)}`)}
+      ${(() => { const x = r.extremes || {}, rec = num(x.high) && num(x.low), hi = rec ? Math.max(x.high, j.ltp_high || 0) : j.ltp_high, lo = rec ? Math.min(x.low, j.ltp_low || x.low) : j.ltp_low;
+        return box("High / low since entry", `${n2(hi)} / ${n2(lo)}`, `${pc(p.avg_price ? 100 * (hi - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (lo - p.avg_price) / p.avg_price : null)}`
+          + (rec ? ` · recorded${x.candle_minutes ? ", " + n0(x.candle_minutes) + " min from Angel's candles" : ""}` : "")); })()}
       ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
       ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
@@ -399,7 +401,7 @@ function drawTrades(d){
       + `<span class="n">@ ${n2(x.max_profit_price)}${x.max_profit_at ? " · " + hm(x.max_profit_at) : ""}</span>`
       + `<span class="${cls(x.max_loss)}">${rs(x.max_loss)}</span> <span class="n" style="display:inline">${pc(x.max_loss_pct)}</span>${tag(x.max_loss_after_exit)}`
       + `<span class="n">@ ${n2(x.max_loss_price)}${x.max_loss_at ? " · " + hm(x.max_loss_at) : ""}</span>`
-      + `<span class="n" title="${esc(x.basis || "")}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}</span>`; };
+      + `<span class="n" title="${esc((x.basis || "") + (x.candle_minutes ? " - " + x.candle_minutes + " minute(s) from Angel's 1-minute candles (the desk down or the socket silent)" : ""))}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}${x.candle_minutes ? " · " + n0(x.candle_minutes) + " min candles" : ""}</span>`; };
   if (!rows.length){ document.getElementById("days").innerHTML = `<p class="empty">No BTST yet.</p>`; return; }
   document.getElementById("days").innerHTML = `<table><tr><th>Date</th><th>Trade</th><th>Bought</th><th>Avg · invested</th>
       <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th>Next day</th><th>Result</th><th></th></tr>` +

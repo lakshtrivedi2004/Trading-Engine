@@ -1719,5 +1719,79 @@ check("a trade without a recording: max profit / loss from the high and low seen
       and "no recording" in rowO["extremes"]["basis"])
 shutil.rmtree(tmpdir, ignore_errors=True)
 
+section("14. A crash or downtime during a recording: the missing minutes from Angel's candles")
+tmp2 = tempfile.mkdtemp(prefix="btst_gap_")
+asks = []
+NO_TRADE = {int(datetime(2026, 10, 23, 9, 40, tzinfo=IST).timestamp() * 1000)}
+
+
+def gap_candles(c, a, b):
+    asks.append((a, b))
+    out, t = [], int(a.timestamp()) // 60 * 60_000
+    while t < int(b.timestamp() * 1000):
+        if t not in NO_TRADE:
+            px = 120.0 if t != int(datetime(2026, 10, 23, 9, 30, tzinfo=IST).timestamp() * 1000) else 260.0
+            out.append({"t": t, "o": px, "h": px + 1, "l": px - 1, "c": px, "n": 0})
+        t += 60_000
+    return out
+
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sA, stA2, brA, lgA, _ = desk()
+sA.recorder = REC.TickRecorder(folder=tmp2)
+sA.candles_fn = gap_candles
+sA.on_message(msg(3, SAMPLE, 15, 16))
+sA.step()
+jA2 = stA2.open_job()
+tokA = jA2["contract"]["token"]
+for mm in range(16, 46):                            # the entry day: a tick every minute to the close
+    sA._on_tick(tokA, 106.0 + mm / 10, datetime(2026, 10, 22, 15, mm, 20, tzinfo=IST).timestamp())
+for mm in range(15, 21):                            # the next morning 09:15 - 09:20 ...
+    sA._on_tick(tokA, 110.0, datetime(2026, 10, 23, 9, mm, 20, tzinfo=IST).timestamp())
+asks.clear()
+# ... then the desk crashes; it is back at 10:00 - a new process, the same files
+at(2026, 10, 23, 10, 0)
+sB = BtstStrategy(sA.cfg, stA2, brA, lambda: MASTER, None, "test_channel", log=lgA.append, now=lambda: CLOCK["t"],
+                  recorder=REC.TickRecorder(folder=tmp2), candles=gap_candles)
+sB.resume()
+sB.step()
+cache = sB.recorder.read_candles(jA2["job_id"])
+ticks_kept = len(sB.recorder.read(jA2["job_id"]))
+check("after the crash every tick written before it is still there (36), and the minutes the desk was down "
+      "(09:21 - 09:57) are filled from Angel's candles at once - one request",
+      ticks_kept == 36 and len(asks) == 1 and asks[0][0].strftime("%H:%M") == "09:21"
+      and len(cache["bars"]) == 36 and len(cache["checked"]) == 37, f"{ticks_kept} ticks, {len(asks)} asks, "
+      f"{len(cache['bars'])} bars, {len(cache['checked'])} checked")
+chA = sB.chart(jA2["job_id"])
+check("the live chart: ticks + candles, the candle minutes marked", len(chA["bars"]) == 30 + 6 + 36
+      and sum(1 for x in chA["bars"] if x.get("src") == "candle") == 36, str(len(chA["bars"])))
+exA = sB.extremes(stA2.get_job(jA2["job_id"]))
+check("...max profit counts the downtime too: 261 at 09:30 (a candle) - " + str(exA and exA.get("max_profit")),
+      exA["max_profit_price"] == 261.0 and exA["max_profit_at"] == "2026-10-23T09:30+05:30" and exA["high"] == 261.0,
+      str(exA))
+n_asks = len(asks)
+at(2026, 10, 23, 10, 3)
+sB.step()
+check("...not asked again within 5 minutes", len(asks) == n_asks)
+sB.rec_backfill_at[jA2["job_id"]] = 0
+at(2026, 10, 23, 10, 10)
+sB.step()
+check("5 minutes on, only the new silent minutes (09:58 - 10:07) are asked - never 09:40 again (no trade then)",
+      len(asks) == n_asks + 1 and asks[-1][0].strftime("%H:%M") == "09:58"
+      and int(datetime(2026, 10, 23, 9, 40, tzinfo=IST).timestamp() * 1000) in sB.recorder.read_candles(jA2["job_id"])["checked"],
+      str([(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in asks[-2:]]))
+at(2026, 10, 23, 15, 48)
+sB.rec_checked = 0
+sB.step()
+jA3 = stA2.get_job(jA2["job_id"])
+tA = stA2.get_ticks(jA2["job_id"], raw=True)
+check("the final save: the whole window from ticks + candles (every minute 09:15 - 15:45 there, but the no-trade "
+      "one), the cache reused, its file removed",
+      jA3["recording"]["status"] == "saved" and tA["count"] == 36 and len(tA["bars"]) == 30 + 389
+      and tA["candle_minutes"] == 389 - 6 and not os.path.exists(sB.recorder.candles_path(jA2["job_id"])),
+      f"{len(tA['bars'])} bars, {tA['candle_minutes']} from candles")
+shutil.rmtree(tmp2, ignore_errors=True)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)
