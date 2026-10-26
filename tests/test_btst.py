@@ -170,7 +170,7 @@ def desk(model=None, cfg=None):
     broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None, today=lambda: CLOCK["t"].date())
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
-            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0}
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "trail_modify_gap_sec": 0}
     conf.update(cfg or {})
     logs, sent = [], []
     st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "test_channel",
@@ -393,8 +393,8 @@ at(2026, 10, 23, 9, 15, 40)
 PRICE["ltp"] = 90.0
 st.step()
 j = store.open_job()
-check("opened -10%: within 20%, target stays 210", j["decision"]["scenario"] == "hold_small_loss"
-      and j["target_price"] == 210.0, str(j.get("decision")))
+check("opened -10% (above -25%): no top-up, the target stays 210", j["decision"]["scenario"] == "hold"
+      and j["target_price"] == 210.0 and not j.get("topups"), str(j.get("decision")))
 at(2026, 10, 23, 15, 14, 2)
 PRICE["ltp"] = 95.0
 st.step()
@@ -404,32 +404,70 @@ check("15:14: target cancelled, sold at market (95), CLOSED time_exit with a los
       done["status"] == "closed" and r["exit_reason"] == "time_exit" and r["exit_price"] == 95.0
       and r["net_pnl"] < 0 and [o["kind"] for o in done["orders"]][-2:] == ["target_cancel", "exit"], str(r)[:120])
 
-section("4c. Next day, down 33%: about the same amount again, target average + 10%")
+section("4c. Next day, live: -25% -> +50%, target cut 25%, trailing; -50% -> +50% more, target average + 10%")
 at(2026, 10, 22, 15, 18)
 PRICE["ltp"] = 105.0
 st, store, broker, logs, sent = desk()
 st.on_message(msg(20, SAMPLE, 15, 18))
 st.step()
-at(2026, 10, 23, 9, 15, 40)
-PRICE["ltp"] = 70.0
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 95.0
 st.step()
 j = store.open_job()
-d = j["decision"]
-avg = (105 * 65 + 70 * 130) / 195
-check("opened -33%: Rs 6,825 invested, Rs 4,550 a lot now -> 2 lots (Rs 9,100, the nearest whole lots)",
-      d["scenario"] == "average_down" and d["added_qty"] == 130 and d["added_price"] == 70.0, str(d))
-check("...average %.2f, target average + 10%% = %.2f on the tick" % (avg, tick_round(avg * 1.1)),
-      abs(j["position"]["avg_price"] - round(avg, 2)) < 1e-6 and j["position"]["qty"] == 195
-      and j["target_price"] == tick_round(avg * 1.1) and j["orders"][-1]["kind"] == "target_after_average",
-      f"avg {j['position']['avg_price']}, target {j['target_price']}")
+check("the open at 95 (-9.5% vs the buy 105): no top-up yet, the target 210 back in for the day",
+      j["decision"]["scenario"] == "hold" and j["target_price"] == 210.0 and not j.get("topups"), str(j.get("decision")))
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 78.0
+st.step()
+j = store.open_job()
+check("10:00 at 78 (-25.7%): +50% of Rs 6,825 -> 1 lot (65 @ 78); average 91.50; target 210 -> 157.50 (cut 25%); "
+      "trailing from 78, floor 91.50 + 10% = 100.65",
+      j["topped_pct"] == 50 and j["position"]["qty"] == 130 and j["position"]["avg_price"] == 91.5
+      and j["target_price"] == 157.5 and j["trail"]["active"] and j["trail"]["ref"] == 78.0
+      and j["trail"]["floor"] == 100.65 and j["decision"]["scenario"] == "topup_50",
+      str({k: j.get(k) for k in ("topped_pct", "target_price", "trail")})[:200])
+at(2026, 10, 23, 10, 30)
+PRICE["ltp"] = 75.5
+st.step()
+check("...75.50, 2.5 points under that buy: the target 2 points lower, 155.50",
+      store.open_job()["target_price"] == 155.5)
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 52.0
+st.step()
+j = store.open_job()
+avg = round((6825 + 5070 + 3380) / 195, 2)
+check(f"11:00 at 52 (-50.5%): the other 50% -> 1 lot (65 @ 52); 195 qty, average {avg}; target = average + 10% "
+      f"= {tick_round(avg * 1.1)}; trailing ends",
+      j["topped_pct"] == 100 and j["position"]["qty"] == 195 and j["position"]["avg_price"] == avg
+      and j["target_price"] == tick_round(avg * 1.1) and not j["trail"]["active"] and len(j["topups"]) == 2
+      and j["decision"]["scenario"] == "topup_100", str({k: j.get(k) for k in ("topped_pct", "target_price")}))
+at(2026, 10, 23, 11, 5)
+PRICE["ltp"] = 40.0
+st.step()
+check("...no third top-up (100% is the most)", len(store.open_job()["topups"]) == 2)
 at(2026, 10, 23, 13, 0)
-PRICE["ltp"] = 92.0
+PRICE["ltp"] = 87.0
 st.step()
 done = store.get_job(j["job_id"])
 r = done.get("result") or {}
-check("the new target fills: CLOSED in profit on the averaged position",
-      done["status"] == "closed" and r["target_hit"] and r["averaged"] and r["qty"] == 195 and r["net_pnl"] > 0,
-      str(r)[:140])
+check("the target fills: CLOSED in profit on 195 qty, with the top-ups in the metrics",
+      done["status"] == "closed" and r["target_hit"] and r["averaged"] and r["qty"] == 195 and r["net_pnl"] > 0
+      and r["topped_pct"] == 100 and r["topups"] == 2, str(r)[:160])
+
+at(2026, 10, 22, 15, 18)
+PRICE["ltp"] = 105.0
+st, store, broker, logs, sent = desk()
+st.on_message(msg(21, SAMPLE, 15, 18))
+st.step()
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 50.0
+st.step()
+j = store.open_job()
+avg = round((6825 + 6500) / 195, 2)
+check(f"a gap-down open at 50 (-52%): 100% at once -> 2 lots (130 @ 50, the nearest to Rs 6,825); average {avg}; "
+      f"target = average + 10% = {tick_round(avg * 1.1)}; no trailing",
+      j["topped_pct"] == 100 and j["position"]["qty"] == 195 and j["target_price"] == tick_round(avg * 1.1)
+      and not j.get("trail") and j["topups"][0]["step"] == "full", str({k: j.get(k) for k in ("topped_pct", "target_price")}))
 
 section("4d. SENSEX: target 3 x")
 at(2026, 10, 22, 15, 19)
@@ -775,8 +813,10 @@ j9 = st9.open_job()
 at(2026, 10, 23, 9, 15, 10)                  # next morning, before decide_at
 QUOTE.update(ltp=120.0, high=125.0)
 s9.step()
-check("yesterday's DAY target died at the close (as at the exchange); nothing filled",
-      st9.get_job(j9["job_id"])["target_last_status"] == "cancelled" and st9.open_job())
+j9o = st9.get_job(j9["job_id"])
+check("yesterday's DAY target died at the close (as at the exchange); a new one for the day at the open",
+      br9.orders[j9["target_order"]["order_id"]]["status"] == "cancelled" and j9o["target_order"]["kind"] == "target_day2"
+      and st9.open_job(), str(j9o.get("target_order", {}).get("kind")))
 at(2026, 10, 23, 9, 16)
 s9.step()                                    # the decision: hold, the target 210 placed again for today
 # a restart: a new paper broker and price watch, the same MongoDB
@@ -1015,8 +1055,8 @@ iC = next(i for i, e in enumerate(exC.events) if e[0] == "cancel")
 iB = next(i for i, e in enumerate(exC.events) if e[0] == "place" and e[2] == "BUY" and i > iC - 1 and e[1] == "NORMAL"
           and i > 2)
 rs = exC.resting_sells()
-check("opened -34%: the AMO cancelled (as AMO) BEFORE the average-down buy; then one target for the whole position",
-      exC.events[iC][2] == "AMO" and iC < iB and jC["decision"]["scenario"] == "average_down"
+check("opened -34%: the AMO cancelled (as AMO) BEFORE the top-up buy; then one target for the whole position",
+      exC.events[iC][2] == "AMO" and iC < iB and jC["decision"]["scenario"] == "topup_50"
       and len(rs) == 1 and rs[0]["qty"] == jC["position"]["qty"] and rs[0]["variety"] == "NORMAL"
       and rs[0]["price"] == jC["target_price"], str(exC.events[-4:]))
 
@@ -1175,8 +1215,8 @@ check("the next trading day skips weekends and holidays (Fri 23 Oct -> Mon 26; M
       st._next_session(date(2026, 10, 23)) == date(2026, 10, 26)
       and st._next_session(date(2026, 11, 9)) == date(2026, 11, 11))
 
-TIERS = {"avg_down_loss_pct": 20.0, "avg_target_pct": 20.0, "deep_loss_pct": 50.0, "deep_target_pct": 10.0,
-         "trail_step_points": 1.0, "trail_floor_points": 2.0, "trail_modify_gap_sec": 0}
+TIERS = {"topup_first_loss_pct": 25.0, "topup_first_pct": 50.0, "topup_second_loss_pct": 50.0,
+         "target_cut_pct": 25.0, "floor_target_pct": 10.0, "trail_step_points": 1.0, "trail_modify_gap_sec": 0}
 
 
 def paper_day(open_px, cfg=None):
@@ -1191,70 +1231,78 @@ def paper_day(open_px, cfg=None):
     return s_, st_, br_, lg_
 
 
-s30, st30, br30, _ = paper_day(74.0)               # -30%
-j30 = st30.open_job()
-avg30 = j30["position"]["avg_price"]
-check("loss 20% - 50% (-30%): the same amount again, target = average + 20%, no trailing",
-      j30["decision"]["scenario"] == "average_down" and j30["target_price"] == tick_round(avg30 * 1.20, 0.05)
-      and not j30.get("trail"), f"avg {avg30} target {j30['target_price']}")
-s60, st60, br60, lg60 = paper_day(40.0)            # -62%
+s60, st60, br60, lg60 = paper_day(79.0)            # -25.5% at the open
 j60 = st60.open_job()
-check("loss over 50% (-62%): 195 more @ 40 (Rs 7,800 vs Rs 6,890), average 56.50, target +10% = 62.15, "
-      "trailing from 40 with the floor 58.50",
-      j60["decision"]["scenario"] == "average_down_deep" and j60["position"]["qty"] == 260
-      and j60["position"]["avg_price"] == 56.5 and j60["target_price"] == 62.15
-      and j60["trail"]["active"] and j60["trail"]["ref"] == 40.0 and j60["trail"]["floor"] == 58.5,
-      str({k: j60.get(k) for k in ("target_price", "trail")}))
+check("-25.5% at the open: +1 lot @ 79 (50% of Rs 6,890), average 92.50, target 157.50, trailing from 79, "
+      "floor 92.50 + 10% = 101.75",
+      j60["topped_pct"] == 50 and j60["position"]["qty"] == 130 and j60["position"]["avg_price"] == 92.5
+      and j60["target_price"] == 157.5 and j60["trail"]["ref"] == 79.0 and j60["trail"]["floor"] == 101.75,
+      str({k: j60.get(k) for k in ("target_price", "trail")})[:200])
 oid60 = j60["target_order"]["order_id"]
 at(2026, 10, 23, 9, 30)
-PRICE["ltp"] = 37.6
+PRICE["ltp"] = 76.6
 s60.step()
 j60 = st60.open_job()
-check("the price 2.4 points under the second buy: the target 2 points lower (60.15), the same order modified",
-      j60["target_price"] == 60.15 and br60.orders[oid60]["price"] == 60.15 and len(j60["trail"]["steps"]) == 1
+check("2.4 points under the top-up buy: the target 2 points lower (155.50), the same order modified",
+      j60["target_price"] == 155.5 and br60.orders[oid60]["price"] == 155.5 and len(j60["trail"]["steps"]) == 1
       and j60["target_history"][-1]["kind"] == "trail", str(j60["target_price"]))
 at(2026, 10, 23, 9, 40)
-PRICE["ltp"] = 45.0
+PRICE["ltp"] = 85.0
 s60.step()
-check("...a bounce does not lift it back", st60.open_job()["target_price"] == 60.15)
+check("...a bounce does not lift it back", st60.open_job()["target_price"] == 155.5)
 at(2026, 10, 23, 9, 50)
-PRICE["ltp"] = 30.0
+PRICE["ltp"] = 60.0
+s60.step()
+check("...60 (-43%, not yet -50%): 19 points under 79 -> target 138.50", st60.open_job()["target_price"] == 138.5)
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 52.0
 s60.step()
 j60 = st60.open_job()
-check("10 points under: the target stops at the floor, average + 2 = 58.50, and the trailing ends",
-      j60["target_price"] == 58.5 and not j60["trail"]["active"] and "floor" in j60["trail"]["stop_reason"])
-at(2026, 10, 23, 10, 0)
-PRICE["ltp"] = 25.0
-s60.step()
-check("...lower prices do not move it any more", st60.open_job()["target_price"] == 58.5)
+avg60 = round((6890 + 5135 + 3380) / 195, 2)
+check(f"52 (-50.9%): the other 50% (65 @ 52) - average {avg60}, target = average + 10% = {tick_round(avg60 * 1.1)}, "
+      f"trailing stopped",
+      j60["topped_pct"] == 100 and j60["position"]["avg_price"] == avg60 and j60["target_price"] == tick_round(avg60 * 1.1)
+      and not j60["trail"]["active"] and "top-up to 100%" in j60["trail"]["stop_reason"])
 at(2026, 10, 23, 11, 0)
-PRICE["ltp"] = 58.6
+PRICE["ltp"] = 88.0
 s60.step()
 j60 = st60.recent_jobs()[0]
-check("the price comes back to 58.50: CLOSED as a target hit, with the trail saved on the job",
-      j60["status"] == "closed" and j60["result"]["exit_reason"] == "target" and j60["result"]["exit_price"] == 58.5
-      and j60["result"]["trailed"] and j60["result"]["trail_steps"] == 2 and j60["result"]["averaged"],
-      str(j60.get("result", {}).get("exit_price")))
-check("every target change is in its history: placed at entry, after averaging, 2 trail steps",
-      [h["kind"] for h in j60["target_history"]] == ["target", "target_after_average", "trail", "trail"],
+check("the price comes back over the target: CLOSED as a target hit, the trail and the top-ups saved",
+      j60["status"] == "closed" and j60["result"]["exit_reason"] == "target" and j60["result"]["trailed"]
+      and j60["result"]["trail_steps"] == 2 and j60["result"]["topups"] == 2, str(j60.get("result", {}).get("exit_price")))
+check("every target change is in its history: entry, the day's, after each top-up, 2 trail steps",
+      [h["kind"] for h in j60["target_history"]] == ["target", "target_day2", "target_after_topup_first", "trail",
+                                                      "trail", "target_after_topup_second"],
       str([h["kind"] for h in j60["target_history"]]))
+sF, stF, brF, _ = paper_day(79.0, {"topup_second_loss_pct": 95.0})
+at(2026, 10, 23, 9, 30)
+PRICE["ltp"] = 20.0
+sF.step()
+jF = stF.open_job()
+check("trailing never goes under the new average + 10%: there it stops (101.75)",
+      jF["target_price"] == 101.75 and not jF["trail"]["active"] and "floor" in jF["trail"]["stop_reason"],
+      str(jF["target_price"]))
+at(2026, 10, 23, 9, 40)
+PRICE["ltp"] = 15.0
+sF.step()
+check("...and stays there", stF.open_job()["target_price"] == 101.75)
 
 sLT, stLT, exLT, _, _ = live_desk(cfg=TIERS)
 exLT.close_day()
 at(2026, 10, 22, 16, 1)
 sLT.step()
-exLT.open_market(40.0)
+exLT.open_market(79.0)
 at(2026, 10, 23, 9, 16)
 sLT.step()
 jLT = stLT.open_job()
 n_place = len([e for e in exLT.events if e[0] == "place"])
 at(2026, 10, 23, 9, 20)
-exLT.px = 37.2
+exLT.px = 76.6
 sLT.step()
 jLT2 = stLT.open_job()
 rsLT = exLT.resting_sells()
 check("live: the trailing target is Angel's modifyOrder on the one resting sell - no second sell",
-      jLT["decision"]["scenario"] == "average_down_deep" and len(rsLT) == 1 and rsLT[0]["price"] == jLT2["target_price"]
+      jLT["decision"]["scenario"] == "topup_50" and len(rsLT) == 1 and rsLT[0]["price"] == jLT2["target_price"]
       and jLT2["target_price"] == round(jLT["target_price"] - 2, 2)
       and len([e for e in exLT.events if e[0] == "place"]) == n_place and any(e[0] == "modify" for e in exLT.events),
       f"{jLT['target_price']} -> {jLT2['target_price']}, resting {[r['price'] for r in rsLT]}")
@@ -1447,6 +1495,60 @@ except ValueError:
 srv.server_close()
 check("...the page server ignores a client hang-up, and logs any other request error as one line",
       len(wlog) == 1 and "bad request line" in wlog[0] and "web |" in wlog[0], str(wlog))
+
+section("12. GIFT Nifty (information only)")
+from btst import gift as G                                       # noqa: E402
+
+check("GIFT direction: a fall is against a CE, a rise against a PE",
+      G.against("CE", -80) == "against" and G.against("PE", 80) == "against" and G.against("CE", 60) == "with"
+      and G.against("PE", -60) == "with" and G.against("CE", 0.4) == "flat")
+GQ = {"price": 22683.0}
+gcalls = {"n": 0, "fail": 0}
+
+
+def fake_gift(today):
+    gcalls["n"] += 1
+    if gcalls["fail"]:
+        gcalls["fail"] -= 1
+        raise OSError("nseix down")
+    return {"price": GQ["price"], "prev_close": 22565.0, "day_change": GQ["price"] - 22565.0, "underlying": 22600.0,
+            "expiry": "27-Oct-2026", "high": 22795.5, "low": 22451.5}
+
+
+at(2026, 10, 23, 15, 16)                            # a Friday CE trade
+PRICE["ltp"] = 106.0
+sG, stG, brG, lgG, sentG = desk()
+sG.gift_fetch = fake_gift
+sG.on_message(msg(3, SAMPLE, 15, 16, day=23))
+sG.step()
+at(2026, 10, 23, 15, 50)
+sG.step()
+jG = stG.open_job()
+check("the entry day's close: GIFT Nifty's baseline saved (22,683)", jG["gift_close"]["price"] == 22683.0)
+at(2026, 10, 24, 1, 0)                              # Saturday 01:00: not the next session's date
+sG.step()
+check("...no check on a night that is not before the next session (Saturday)", not stG.open_job().get("gift_check"))
+at(2026, 10, 26, 1, 0, 5)                           # Monday 01:00
+GQ["price"] = 22603.0
+gcalls["fail"] = 1
+sG.step()
+check("Monday 01:00: a failed read is logged and does not stop anything", not stG.open_job().get("gift_check")
+      and any("GIFT Nifty check not read" in x for x in lgG))
+sG.gift_failed_at -= 400
+at(2026, 10, 26, 1, 6)
+sG.step()
+jG = stG.open_job()
+check("...read again 5 min later: -80 points since the close - AGAINST our CE, said on Telegram, saved",
+      jG["gift_check"]["move"] == -80.0 and jG["gift_check"]["verdict"] == "against"
+      and any("AGAINST our CE" in x for x in sentG), str(jG.get("gift_check")))
+n_calls = gcalls["n"]
+at(2026, 10, 26, 2, 0)
+sG.step()
+check("...once a night", gcalls["n"] == n_calls)
+check("the page's next session is the trade's (Mon 26 at 02:00 for a Friday trade), not the day after today",
+      web.state(sG, stG)["next_session"] == "2026-10-26")
+check("...information only: the trade, its target and its orders are untouched",
+      jG["status"] == "open" and jG["target_price"] == 210.0 and not jG.get("topups") and not jG.get("decision"))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

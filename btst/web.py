@@ -133,10 +133,10 @@ const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const tm = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 16)}`;
 const tms = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 19)}`;
 const day = s => { if (!s) return "–"; const d = new Date(s.slice(0, 10) + "T12:00:00Z"); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
-const SCEN = {hold: "Opened up — target held", hold_small_loss: "Down ≤ 20% — target held",
-  average_down: "Down 20–50% — averaged, target avg + 20%", average_down_deep: "Down > 50% — averaged, target avg + 10%, trailing",
-  average_down_failed: "Average-down buy failed — target kept", average_down_skipped: "Average down skipped (cancel unconfirmed)",
-  closed_on_entry_day: "Closed on the entry day"};
+const SCEN = {hold: "No top-up (above -25%)", topup_50: "Topped up 50% at -25%: target cut 25%, trailing",
+  topup_100: "Topped up 100%: target = average + 10%",
+  hold_small_loss: "Down ≤ 20%: target held", average_down: "Averaged (old rule)", average_down_deep: "Averaged, trailing (old rule)",
+  average_down_failed: "Average-down buy failed", average_down_skipped: "Average down skipped", closed_on_entry_day: "Closed on the entry day"};
 const EXIT = {target: "Target hit", "target (watched)": "Target hit (watched)", time_exit: "15:14 exit", overdue_exit: "Exit at the next open (missed day)"};
 const MARKET = {open: ["Market open", "ok"], preopen: ["Pre-open", "mid"], closed: ["Market closed", ""], weekend: ["Weekend", ""], holiday: ["Holiday", ""]};
 const OPEN_ROWS = new Set();
@@ -200,22 +200,26 @@ function bar(avg, now, target, low, tr){
 }
 
 function plan(d, j, p){
-  const R = d.rules || {}, avg = p.avg_price, t = j.target_price;
+  const R = d.rules || {}, base = p.entry_price, t = j.target_price, first = (p.entry_price || 0) * (p.entry_qty || 0);
+  const l1 = R.topup_first_loss_pct, l2 = R.topup_second_loss_pct, half = R.topup_first_pct, cut = R.target_cut_pct, fl = R.floor_target_pct;
+  const gift = j.gift_check || j.gift_close;
+  const giftRow = gift ? `<tr><td>GIFT Nifty</td><td>${n2(gift.price)}${num(gift.move) ? ` · ${gift.move > 0 ? "+" : ""}${n0(gift.move)} points ${esc(gift.measured || "")} · <b class="${gift.verdict === "against" ? "down" : (gift.verdict === "with" ? "up" : "")}">${esc(gift.verdict)}</b> our ${esc((j.signal || {}).side)}` : " · the close (baseline)"} · ${tm(gift.at)} (information only)</td></tr>` : "";
   if (j.decision){
-    const dec = j.decision, tr = j.trail;
-    return `<div class="plan"><div class="k">Today's plan</div><table>
-      <tr><td>Decision ${tms(dec.at)}</td><td>${esc(SCEN[dec.scenario] || dec.scenario)} (opened ${pc(dec.pnl_pct)} at ${n2(dec.ltp)})</td></tr>
-      ${dec.added_qty ? `<tr><td>Averaged</td><td>+${n0(dec.added_qty)} @ ${n2(dec.added_price)} (${rsp(dec.added_amount)}) → ${n0(p.qty)} @ ${n2(avg)}</td></tr>` : ""}
+    const dec = j.decision, tr = j.trail, ups = j.topups || [];
+    return `<div class="plan"><div class="k">Today's plan — live from ${esc(R.market_open)}</div><table>
+      <tr><td>Open ${tms(dec.at)}</td><td>${n2(dec.ltp)} = ${pc(dec.pnl_pct)} vs the buy ${n2(base)}</td></tr>
+      ${ups.map(u => `<tr><td>Top-up ${tms(u.at)}</td><td>${n0(u.pct)}% at ${pc(-u.loss_pct)}: +${n0(u.qty)} @ ${n2(u.price)} (${rsp(u.amount)})</td></tr>`).join("")}
+      ${(j.topped_pct || 0) < 100 ? `<tr><td>${(j.topped_pct || 0) ? "At" : "At"} ${n2(base * (1 - ((j.topped_pct || 0) ? l2 : l1) / 100))}</td><td>${(j.topped_pct || 0) ? `(-${l2}%) add the other ${n0(100 - j.topped_pct)}% → target = new average + ${fl}%` : `(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}) → target cut ${cut}%, then -1 per point, floor average + ${fl}%; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}</td></tr>` : ""}
       ${tr ? `<tr><td>Trailing</td><td>${tr.active ? "on" : "stopped"}: from ${n2(tr.initial)}, 1 point per point below ${n2(tr.ref)} (lowest ${n2(tr.low)}), floor ${n2(tr.floor)} · ${(tr.steps || []).length} step(s)${tr.stop_reason ? " · " + esc(tr.stop_reason) : ""}</td></tr>` : ""}
-      <tr><td>Target</td><td>${n2(t)} — sells the whole position when reached</td></tr>
-      <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr></table></div>`;
+      <tr><td>Target</td><td>${n2(t)} — sells the whole position (${n0(p.qty)}) when reached</td></tr>
+      <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr>${giftRow}</table></div>`;
   }
-  const hold = avg * (1 - (R.avg_down_loss_pct || 20) / 100), deep = avg * (1 - (R.deep_loss_pct || 50) / 100);
-  return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)} ${esc(R.decide_at)}</div><table>
-    <tr><td>Price ≥ ${n2(hold)}</td><td>(up, or down ≤ ${R.avg_down_loss_pct}%) keep the target ${n2(t)}</td></tr>
-    <tr><td>${n2(deep)} – ${n2(hold)}</td><td>(down ${R.avg_down_loss_pct}–${R.deep_loss_pct}%) buy ≈${rsp(p.invested)} more, target = new average + ${R.avg_target_pct}%</td></tr>
-    <tr><td>Below ${n2(deep)}</td><td>(down > ${R.deep_loss_pct}%) buy ≈${rsp(p.invested)} more, target = new average + ${R.deep_target_pct}%, trailed ${R.trail_step_points} point per point, floor average + ${R.trail_floor_points}</td></tr>
-    <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr></table></div>`;
+  return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}</div><table>
+    <tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}</td></tr>
+    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}); target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%</td></tr>
+    <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}%; target = the new average + ${fl}%</td></tr>
+    <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (≈${rsp(first)}) at once; target = the new average + ${fl}%</td></tr>
+    <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}</table></div>`;
 }
 
 function parkedHtml(d){
@@ -235,7 +239,7 @@ function drawOpen(d){
   const away = num(r.now_price) && num(j.target_price) ? 100 * (j.target_price - r.now_price) / r.now_price : null;
   const phaseTxt = j.trade_date === today && !j.decision
     ? `Entry day — the target is at Angel until ${esc(R.market_close)}` + (j.mode === "live" ? `; it goes back in as an AMO at ${esc(R.amo_at)}` : "")
-    : (!j.decision ? `Waiting for the next session — decision ${day(d.next_session)} at ${esc(R.decide_at)}` : `${esc(SCEN[j.decision.scenario] || j.decision.scenario)} — out at ${esc(R.exit_at)} if the target is not hit`);
+    : (!j.decision ? `Waiting for the next session — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}` : `${esc(SCEN[j.decision.scenario] || j.decision.scenario)} — out at ${esc(R.exit_at)} if the target is not hit`);
   const box = (k, v, n) => `<div class="box"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n || ""}</div></div>`;
   const amoTxt = j.amo ? `${esc(j.amo.order_id)} · ${n2(j.amo.price)} x${n0(j.amo.qty)}` : "–";
   const amoNote = j.amo ? `placed ${tm(j.amo.placed_at)}${(j.amo_history || []).length ? " · last check " + esc(j.amo_history.slice(-1)[0].slot) + " " + esc(j.amo_history.slice(-1)[0].action) : ""}${j.target_order && j.target_order.kind !== "amo_target" ? " · replaced since" : ""}`
@@ -260,6 +264,7 @@ function drawOpen(d){
       ${box("Signal", `@ ${esc(s.price)}`, `posted ${tm((j.message || {}).date)} · read by ${esc(s.parsed_by)}`)}
       ${box("High / low since entry", `${n2(j.ltp_high)} / ${n2(j.ltp_low)}`, `${pc(p.avg_price ? 100 * (j.ltp_high - p.avg_price) / p.avg_price : null)} / ${pc(p.avg_price ? 100 * (j.ltp_low - p.avg_price) / p.avg_price : null)}`)}
       ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
+      ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
     ${plan(d, j, p)}
   </div>` + parkedHtml(d);
