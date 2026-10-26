@@ -47,6 +47,7 @@ from btst import chart as CH
 from btst import gift as G
 from btst import recorder as REC
 from btst import signal as S
+from btst import stats as ST
 from btst.contracts import days_left, find_option, tick_round
 from btst.logbook import fmt
 
@@ -1060,6 +1061,31 @@ class BtstStrategy:
         cache[job["job_id"]] = (time.time(), ext)
         self._ext_cache = cache
         return ext
+
+    def day_view(self, day):
+        """History (the page's day picker): the trades entered on `day` and those
+        whose next session was `day`, with their rows, and the messages read."""
+        d = datetime.fromisoformat(day).date()
+        jobs = []
+        for j in self.store.recent_jobs(2000):
+            td = j.get("trade_date")
+            if not td:
+                continue
+            nxt = self._next_session(datetime.fromisoformat(td).date())
+            if td == day or (nxt == d and j.get("status") not in ("rejected",)):
+                jobs.append(dict(_no_channel(j), next_session=nxt.isoformat(),
+                                 role="entered" if td == day else "next session"))
+        rows = ST.by_day(jobs)
+        for r in rows:
+            j = next((x for x in jobs if x["job_id"] == r.get("job_id")), None)
+            if j and (j.get("recording") or {}).get("status") == "recording":
+                r["extremes"] = self.extremes(j) or r.get("extremes")
+        phase = market_phase(datetime.combine(d, dtime(12, 0), tzinfo=IST), start=self.c("market_open", "09:15"),
+                             end=self.c("market_close", "15:45"))
+        return {"date": day, "phase": phase, "trading_day": phase not in ("weekend", "holiday"),
+                "jobs": jobs, "rows": [r for r in rows if r.get("job_id")],
+                "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.messages_on(day)],
+                "no_signal": self.store.get_day(day)}
 
     def chart(self, job_id):
         """The page's chart for a trade: from MongoDB once saved, from the local file while recording."""

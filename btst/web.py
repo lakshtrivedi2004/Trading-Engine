@@ -7,6 +7,8 @@
                        it was or was not a signal, every order, every decision,
                        every error - filtered by kind, day and text
     GET  /api/logs?limit=&group=errors|trades|signals|ai&q=&day=YYYY-MM-DD
+    GET  /api/day?date=YYYY-MM-DD   History: that day's trades (entered, or in their next
+                       session), their rows, and the messages read
     GET  /api/chart?job=ID   a trade's recorded prices as 1-minute bars, its target,
                        average, position and P&L at each minute, and its events
     POST /api/mode?to=paper|live[&exit=1]   switch mode (btst/modes.py): exit=1 sells an
@@ -50,6 +52,8 @@ PAGE = r"""<!DOCTYPE html>
   .btn{border:1px solid var(--hair);background:var(--surface);color:var(--ink);padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;border-radius:2px;text-decoration:none;display:inline-block}
   .btn:hover{background:var(--panel)} .btn:disabled{opacity:.5;cursor:default}
   .btn.danger{border-color:var(--down);color:var(--down)}
+  .btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  #history .card{margin-bottom:6px}
   .card{border:1px solid var(--hair);background:var(--panel);padding:14px 16px}
   .cardhead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
   .sym{font-size:20px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -115,11 +119,23 @@ PAGE = r"""<!DOCTYPE html>
 <div class="wrap">
   <div class="head">
     <h1>BTST Desk</h1>
-    <div class="right"><span id="ctl"></span><a class="btn" id="logbtn" href="/logs" target="_blank" rel="noopener">View logs</a>
+    <div class="right"><span id="ctl"></span><button class="btn" id="histbtn" onclick="toggleHistory()" title="any day's trades and how they went">History</button><a class="btn" id="logbtn" href="/logs" target="_blank" rel="noopener">View logs</a>
       <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Dark / light">🌙</button></div>
   </div>
   <div class="chips" id="chips"><span class="chip">connecting…</span></div>
   <p class="sub" id="sub"></p>
+  <div id="history" hidden>
+    <h2>History</h2>
+    <div class="chips" style="margin-bottom:8px">
+      <button class="btn" onclick="shiftDay(-1)" title="the day before">‹</button>
+      <input type="date" id="hday" class="btn" onchange="pickDay(this.value)">
+      <button class="btn" onclick="shiftDay(1)" title="the day after">›</button>
+      <button class="btn" onclick="HIST.day = ((LAST && LAST.now) || new Date().toISOString()).slice(0, 10); loadDay()">Today</button>
+      <a class="btn" id="histlog" href="/logs" target="_blank" rel="noopener">That day's log</a>
+      <button class="btn" onclick="toggleHistory()">Close</button>
+    </div>
+    <div id="histbody"></div>
+  </div>
   <h2>Open trade</h2><div id="open"></div>
   <h2>Trades</h2><div class="tbl" id="days"></div>
   <h2>Top-ups</h2><div class="tbl" id="topups"></div>
@@ -194,7 +210,7 @@ function drawHead(d){
   document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">(${lp})</span>` : "");
 }
 
-function bar(avg, now, target, low, tr){
+function bar(avg, now, target, low, tr, nowLabel){
   if (!num(avg) || !num(target) || target <= avg) return "";
   const lo = Math.min(avg * 0.5, num(low) ? low : avg, num(now) ? now : avg), hi = Math.max(target, num(now) ? now : 0);
   const at = x => Math.max(0, Math.min(100, 100 * (x - lo) / (hi - lo)));
@@ -204,7 +220,7 @@ function bar(avg, now, target, low, tr){
   const mark = (x, label, cl) => `<span class="tick" style="left:${at(x)}%"></span><span class="mk ${cl || ""}" style="left:${at(x)}%;${edge(x)}">${label}</span>`;
   const floor = tr && num(tr.floor) ? `<span class="lab" style="left:${at(tr.floor)}%;transform:translateX(-50%)">floor ${n2(tr.floor)}</span>` : "";
   return `<div class="bar">${fill}${mark(avg, "avg " + n2(avg))}${mark(target, "target " + n2(target), "up")}`
-    + (num(now) ? `<span class="mk ${now >= avg ? "up" : "down"}" style="left:${n}%;top:14px;${edge(now)}">now ${n2(now)}</span>` : "") + floor + `</div>`;
+    + (num(now) ? `<span class="mk ${now >= avg ? "up" : "down"}" style="left:${n}%;top:14px;${edge(now)}">${nowLabel || "now"} ${n2(now)}</span>` : "") + floor + `</div>`;
 }
 
 function plan(d, j, p){
@@ -236,7 +252,7 @@ function loadChart(id, force){
   const live = !c || !c.recording || c.recording.status === "recording";
   if (!force && CHART_AT[id] && (!live || now - CHART_AT[id] < 15000)) return;
   CHART_AT[id] = now;
-  fetch("/api/chart?job=" + encodeURIComponent(id)).then(r => r.json()).then(d => { CHARTS[id] = d; if (LAST){ drawOpen(LAST); drawTrades(LAST); } }).catch(() => {});
+  fetch("/api/chart?job=" + encodeURIComponent(id)).then(r => r.json()).then(d => { CHARTS[id] = d; if (LAST){ drawOpen(LAST); drawTrades(LAST); } if (HIST.open) drawHistory(); }).catch(() => {});
 }
 function chartHover(evt, id){
   const d = CHARTS[id], svg = evt.currentTarget; if (!d || !d.bars.length) return;
@@ -257,7 +273,7 @@ function chartSvg(d, id){
   const head = `<div class="legend"><span><b style="color:var(--ink)">—</b> price</span><span><b style="color:var(--up)">- -</b> target (steps = trailing)</span><span><b>- -</b> average</span>
     <span style="color:#3366cc">▲ buy</span><span style="color:#d97706">▲ top-up</span><span style="color:var(--up)">● trail step</span><span>▼ exit</span><span>· · if held (after the exit)</span>
     <span style="margin-left:auto">${rec.status === "saved" ? "saved in MongoDB · " + n0(rec.count) + " prices" : (rec.status === "recording" ? "recording until " + tm(rec.until) : "")}</span></div>`;
-  if (B.length < 2) return `<div class="chartbox">${head}<p class="empty">No prices recorded yet — the recording runs from the buy to ${esc(tm(rec.until) || "the next session's close")}.</p></div>`;
+  if (B.length < 2) return `<div class="chartbox">${head}<p class="empty">${rec.status ? `No prices recorded yet — the recording runs from the buy to ${esc(tm(rec.until))}.` : "No price recording for this trade (recordings started on 26 Oct 2026)."}</p></div>`;
   const W = 1000, L = 56, R = 56, T = 12, PH = 200, GAP = 26, QH = 100, BOT = 22, H = T + PH + GAP + QH + BOT;
   const n = B.length, X = i => L + i / (n - 1) * (W - L - R);
   const lows = B.map(b => b.l), highs = B.map(b => b.h), avgs = B.map(b => b.avg).filter(num);
@@ -338,33 +354,54 @@ function parkedHtml(d){
       · saved ${tm(k.at)} at ${n2(k.last_ltp)}: <span class="${cls(k.pnl)}">${rs(k.pnl)} (${pc(k.pnl_pct)})</span>
       · resumes when you switch back to ${esc((j.mode || "").toUpperCase())}</div>`; }).join("");
 }
-function drawOpen(d){
-  const j = d.open_job, el = document.getElementById("open");
-  if (!j){ el.innerHTML = `<p class="empty">No trade open. Signals are read ${esc(d.window)} IST.</p>` + parkedHtml(d); return; }
-  const r = (d.days || []).find(x => x.job_id === j.job_id) || {}, p = j.position || {}, c = j.contract || {}, s = j.signal || {};
-  const R = d.rules || {}, closed = /closed/.test(j.last_ltp_source || ""), today = (d.now || "").slice(0, 10);
+function resultBox(j, r){
+  const x = j.result || {}, e = r.extremes || {};
+  if (!j.result) return "";
+  const row = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
+  return `<div class="plan"><div class="k">Result</div><table>
+    ${row("Exit", `${esc(EXIT[x.exit_reason] || x.exit_reason)} at ${tms(x.closed_at)} @ ${n2(x.exit_price)} · ${n0(x.qty)} qty`)}
+    ${row("Net P&L", `<b class="${cls(x.net_pnl)}">${rs(x.net_pnl)}</b> (${pc(x.pnl_pct)} of ${rsp(x.invested)}) · gross ${rs(x.gross_pnl)} · charges ${rsp(x.charges)}`)}
+    ${row("Next day", `${esc(SCEN[x.scenario] || x.scenario || "")}${num(x.open_pnl_pct_next_day) ? " · opened " + pc(x.open_pnl_pct_next_day) : ""}${x.topups ? " · " + x.topups + " top-up(s)" : ""}${x.trailed ? " · trailed " + x.trail_steps + " step(s)" : ""}`)}
+    ${row("Range while held", `high ${n2(x.max_ltp)} (${pc(x.mfe_pct)}) · low ${n2(x.min_ltp)} (${pc(x.mae_pct)}) · held ${n2(x.held_hours)} h`)}
+    ${e.max_profit != null ? row("Best / worst possible", `<span class="${cls(e.max_profit)}">${rs(e.max_profit)}</span> @ ${n2(e.max_profit_price)} ${e.max_profit_at ? esc(String(e.max_profit_at).slice(11, 16)) : ""}${e.max_profit_after_exit ? " (after exit)" : ""} · <span class="${cls(e.max_loss)}">${rs(e.max_loss)}</span> @ ${n2(e.max_loss_price)} ${e.max_loss_at ? esc(String(e.max_loss_at).slice(11, 16)) : ""}${e.max_loss_after_exit ? " (after exit)" : ""} <span class="n" style="display:inline">${esc(e.basis || "")}</span>`) : ""}
+    ${row("Signal vs fill", `signal ${n2(x.signal_price)} · bought ${n2(x.entry_price)} (${pc(x.entry_slippage_pct)})`)}</table></div>`;
+}
+function tradeCard(d, j, r){
+  r = r || {};
+  const p = j.position || {}, c = j.contract || {}, s = j.signal || {}, res = j.result || {};
+  if (!j.position){                                      // a signal that was not traded
+    return `<div class="card"><div class="sym">${esc(s.indices)} ${esc(s.strike_price)} <span class="chip ${s.side === "CE" ? "ce" : "pe"}">${esc(s.side)}</span> @ ${esc(s.price)}
+      <span class="tag rej">${esc(j.status)}</span></div><div class="n">${esc(j.job_id)} · posted ${tm((j.message || {}).date)} · read by ${esc(s.parsed_by)}</div>
+      <div class="phase" style="border-left-color:var(--warn)">${esc(j.reject_reason || "not traded")}</div></div>`;
+  }
+  const R = d.rules || {}, open = j.status === "open", closed = /closed/.test(j.last_ltp_source || ""), today = (d.now || "").slice(0, 10);
   const tKind = j.soft_target ? "watched (order refused)" : (j.target_order && j.target_order.kind === "amo_target" ? "AMO at Angel" : "limit order at Angel");
-  const away = num(r.now_price) && num(j.target_price) ? 100 * (j.target_price - r.now_price) / r.now_price : null;
-  const phaseTxt = j.trade_date === today && !j.decision
-    ? `Entry day — the target is at Angel until ${esc(R.market_close)}` + (j.mode === "live" ? `; it goes back in as an AMO at ${esc(R.amo_at)}` : "")
-    : (!j.decision ? `Waiting for the next session — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}` : `${esc(SCEN[j.decision.scenario] || j.decision.scenario)} — out at ${esc(R.exit_at)} if the target is not hit`);
+  const nowPx = open ? r.now_price : res.exit_price;
+  const away = open && num(nowPx) && num(j.target_price) ? 100 * (j.target_price - nowPx) / nowPx : null;
+  const phaseTxt = !open
+    ? (j.status === "closed" ? `Closed — ${esc(EXIT[res.exit_reason] || res.exit_reason)} at ${tms(res.closed_at)} @ ${n2(res.exit_price)}: net <b class="${cls(res.net_pnl)}">${rs(res.net_pnl)}</b> (${pc(res.pnl_pct)})`
+      : `${esc(j.status)}${j.parked ? " — saved " + tm(j.parked.at) : ""}${j.reject_reason ? " — " + esc(j.reject_reason) : ""}`)
+    : j.trade_date === today && !j.decision
+      ? `Entry day — the target is at Angel until ${esc(R.market_close)}` + (j.mode === "live" ? `; it goes back in as an AMO at ${esc(R.amo_at)}` : "")
+      : (!j.decision ? `Waiting for the next session — ${day(j.next_session || d.next_session)}, tracked live from ${esc(R.market_open)}` : `${esc(SCEN[j.decision.scenario] || j.decision.scenario)} — out at ${esc(R.exit_at)} if the target is not hit`);
   const box = (k, v, n) => `<div class="box"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n || ""}</div></div>`;
   const amoTxt = j.amo ? `${esc(j.amo.order_id)} · ${n2(j.amo.price)} x${n0(j.amo.qty)}` : "–";
   const amoNote = j.amo ? `placed ${tm(j.amo.placed_at)}${(j.amo_history || []).length ? " · last check " + esc(j.amo_history.slice(-1)[0].slot) + " " + esc(j.amo_history.slice(-1)[0].action) : ""}${j.target_order && j.target_order.kind !== "amo_target" ? " · replaced since" : ""}`
     : (j.mode === "live" ? `placed at ${esc(R.amo_at)} while the trade waits` : "live trades only");
-  el.innerHTML = `<div class="card">
+  const heroPnl = open ? r.live_pnl : res.net_pnl, heroPct = open ? r.live_pct : res.pnl_pct;
+  return `<div class="card">
     <div class="cardhead">
       <div>
         <div class="sym">${esc(s.indices)} ${esc(s.strike_price)} <span class="chip ${s.side === "CE" ? "ce" : "pe"}">${esc(s.side)}</span>
-          <span class="chip ${j.mode === "live" ? "live" : "paper"}">${esc((j.mode || "").toUpperCase())}</span></div>
+          <span class="chip ${j.mode === "live" ? "live" : "paper"}">${esc((j.mode || "").toUpperCase())}</span>${j.role ? ` <span class="tag">${esc(j.role)}</span>` : ""}</div>
         <div class="n">${esc(c.symbol)} · ${esc(c.exchange)} · expiry ${esc(c.expiry)} · lot ${esc(c.lot_size)} · ${esc(j.job_id)}</div>
       </div>
-      <div class="hero"><div class="pnl ${cls(r.live_pnl)}">${rs(r.live_pnl)}</div>
-        <div class="n ${cls(r.live_pct)}">${pc(r.live_pct)} on ${rsp(p.invested)}</div>
-        <div class="n">${closed ? "last traded" : "now"} ${n2(r.now_price)} · ${closed ? "market closed · " : ""}${tm(j.last_ltp_at)}</div></div>
+      <div class="hero"><div class="pnl ${cls(heroPnl)}">${rs(heroPnl)}</div>
+        <div class="n ${cls(heroPct)}">${pc(heroPct)} on ${rsp(p.invested)}${open ? "" : " · net"}</div>
+        <div class="n">${open ? `${closed ? "last traded" : "now"} ${n2(r.now_price)} · ${closed ? "market closed · " : ""}${tm(j.last_ltp_at)}` : `exit ${n2(res.exit_price)} · ${tm(res.closed_at)}`}</div></div>
     </div>
     <div class="phase">${phaseTxt}</div>
-    ${bar(p.avg_price, r.now_price, j.target_price, j.ltp_low, j.trail)}
+    ${bar(p.avg_price, nowPx, j.target_price, j.ltp_low, open && j.trail && j.trail.active ? j.trail : null, open ? "now" : "exit")}
     <div class="grid">
       ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `${tm(p.entry_at)} · ${n0(j.lots)} lot(s) = ${rsp(p.entry_qty * p.entry_price)}${R.trade_amount ? " (cap " + rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100)) + ")" : ""}`)}
       ${box("Average · invested", `${n2(p.avg_price)} · ${rsp(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
@@ -377,10 +414,56 @@ function drawOpen(d){
       ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
     ${(j.topups || []).length ? `<div class="plan"><div class="k">Top-ups</div>${topupTable(j.topups, false)}</div>` : ""}
-    ${plan(d, j, p)}
+    ${open ? plan(Object.assign({}, d, {next_session: j.next_session || d.next_session}), j, p) : resultBox(j, r)}
     ${chartSvg(CHARTS[j.job_id], j.job_id)}
-  </div>` + parkedHtml(d);
+  </div>`;
+}
+function drawOpen(d){
+  const j = d.open_job, el = document.getElementById("open");
+  if (!j){ el.innerHTML = `<p class="empty">No trade open. Signals are read ${esc(d.window)} IST.</p>` + parkedHtml(d); return; }
+  const r = (d.days || []).find(x => x.job_id === j.job_id) || {};
+  el.innerHTML = tradeCard(d, j, r) + parkedHtml(d);
   loadChart(j.job_id);
+}
+
+// ── History: any day's trades ──────────────────────────────────────────────
+const HIST = {open: false, day: null, data: null};
+function isoDay(dt){ return dt.toISOString().slice(0, 10); }
+function toggleHistory(){
+  HIST.open = !HIST.open;
+  document.getElementById("history").hidden = !HIST.open;
+  document.getElementById("histbtn").classList.toggle("on", HIST.open);
+  if (HIST.open){ if (!HIST.day) HIST.day = ((LAST && LAST.now) || new Date().toISOString()).slice(0, 10); loadDay(); }
+}
+function shiftDay(n){ const t = new Date(HIST.day + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); HIST.day = isoDay(t); loadDay(); }
+function pickDay(v){ if (v){ HIST.day = v; loadDay(); } }
+async function loadDay(){
+  document.getElementById("hday").value = HIST.day;
+  document.getElementById("histlog").href = "/logs?day=" + encodeURIComponent(HIST.day);
+  document.getElementById("histbody").innerHTML = `<p class="empty">Loading ${esc(day(HIST.day))}…</p>`;
+  try{ HIST.data = await (await fetch("/api/day?date=" + encodeURIComponent(HIST.day))).json(); }
+  catch(e){ HIST.data = {error: String(e)}; }
+  drawHistory();
+}
+function drawHistory(){
+  const h = HIST.data, el = document.getElementById("histbody");
+  if (!h || !HIST.open) return;
+  if (h.error){ el.innerHTML = `<p class="empty">${esc(h.error)}</p>`; return; }
+  const ctx = Object.assign({}, LAST || {}), rows = {};
+  (h.rows || []).forEach(r => rows[r.job_id] = r);
+  const sigs = (h.messages || []).filter(m => m.is_signal).length;
+  let html = `<p class="sub"><b>${esc(day(h.date))}</b> · ${h.trading_day ? "trading day" : esc(h.phase)} · ${(h.messages || []).length} message(s) read, ${sigs} signal(s) · ${(h.jobs || []).length} trade(s)</p>`;
+  if (h.no_signal) html += `<div class="phase" style="border-left-color:var(--dim)">No signal — ${n0(h.no_signal.messages_read)} message(s) read in the scan window, no trade</div>`;
+  if (!(h.jobs || []).length && !h.no_signal) html += `<p class="empty">No trade ${h.trading_day ? "on this day" : "(the market was closed)"}.</p>`;
+  (h.jobs || []).forEach(j => {
+    const r = rows[j.job_id] || {};
+    html += tradeCard(ctx, j, r) + (r.timeline ? `<details class="msgs" style="margin:6px 0 16px"><summary>Timeline, target history, AMO checks and orders</summary>${detail(r)}</details>` : "");
+    if (j.position) loadChart(j.job_id);
+  });
+  const ms = h.messages || [];
+  if (ms.length) html += `<details class="msgs"><summary>Channel messages read that day (${ms.length})</summary><div class="tbl"><table><tr><th>Posted</th><th>Signal?</th><th>Why</th><th>Message</th></tr>` +
+    ms.map(m => `<tr><td>${tms(m.date)}</td><td class="l ${m.is_signal ? "up" : "dim"}">${m.is_signal ? "yes (" + esc(m.parsed_by) + ")" : "no"}</td><td class="l">${esc(m.reason)}</td><td class="l"><pre>${esc((m.text || "").slice(0, 300))}</pre></td></tr>`).join("") + `</table></div></details>`;
+  el.innerHTML = html;
 }
 
 function detail(r){
@@ -621,6 +704,13 @@ def make_handler(strategy, store, switch_mode, book=None):
                     self._send(PAGE, "text/html; charset=utf-8")
                 elif path == "/api/state":
                     self._send(json.dumps(state(strategy, store, book), default=str))
+                elif path == "/api/day":
+                    day = (parse_qs(urlparse(self.path).query).get("date") or [""])[0]
+                    try:
+                        out = strategy.day_view(day)
+                    except ValueError:
+                        out = {"error": f"not a date: {day!r}"}
+                    self._send(json.dumps(out, default=str))
                 elif path == "/api/chart":
                     jid = (parse_qs(urlparse(self.path).query).get("job") or [""])[0]
                     self._send(json.dumps(strategy.chart(jid), default=str))

@@ -1866,5 +1866,21 @@ check("a dip to 74 (-26%) between two looks (a websocket tick), the pass seeing 
       str(jT.get("topups")))
 shutil.rmtree(sT.recorder.folder, ignore_errors=True)
 
+section("16. History: any day's trades")
+dv1 = s60.day_view("2026-10-22")
+dv2 = s60.day_view("2026-10-23")
+dvw = s60.day_view("2026-10-24")
+j60h = [j for j in dv1["jobs"] if j["job_id"] == j60["job_id"]]
+check("the entry day lists the trade as 'entered', with its row (P&L, top-ups, extremes) and the day's messages",
+      j60h and j60h[0]["role"] == "entered" and dv1["trading_day"] and dv1["rows"]
+      and dv1["rows"][0]["job_id"] == j60["job_id"] and len(dv1["rows"][0]["topups"]) == 2 and dv1["messages"]
+      and "channel" not in dv1["messages"][0], str([(j["job_id"], j["role"]) for j in dv1["jobs"]]))
+check("...its next session lists it too ('next session'), closed, with the result",
+      any(j["job_id"] == j60["job_id"] and j["role"] == "next session" and j["status"] == "closed"
+          and j["result"]["exit_reason"] == "target" for j in dv2["jobs"]))
+check("a Saturday: no trading day, no trade", not dvw["trading_day"] and dvw["phase"] == "weekend" and not dvw["jobs"])
+check("a day with no signal shows its record", storeq.get_day("2026-10-22")["status"] == "no_signal"
+      and stq.day_view("2026-10-22")["no_signal"]["messages_read"] == 2)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

@@ -146,6 +146,9 @@ class MongoStore:
         return [m for m in self.messages.find({}, {"_id": 0}) if str(m.get("date", "")).startswith(day)]
 
     # ── days with no signal ─────────────────────────────────────────────────
+    def get_day(self, day):
+        return self.days.find_one({"date": day}, {"_id": 0})
+
     def day_recorded(self, day):
         return self.days.find_one({"date": day}, {"_id": 1}) is not None
 
