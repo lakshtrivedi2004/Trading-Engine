@@ -21,6 +21,7 @@
   "topup_second_loss_pct": 50.0,
   "target_cut_pct": 25.0,
   "floor_target_pct": 10.0,
+  "missed_after_sec": 15,
   "trail_step_points": 1.0,
   "trail_modify_gap_sec": 3,
   "markers": ["BTST", "Disclaimer"],

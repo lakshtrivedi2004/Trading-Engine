@@ -1832,17 +1832,63 @@ sM2.step()                                          # the gap is filled from Ang
 at(2026, 10, 23, 10, 0, 2)
 sM2.step()                                          # the next pass sees the dip
 jM = stM1.open_job()
-u = (jM.get("topups") or [{}])[0]
-check("back at 10:00 after a crash: Angel's candles show the price touched 75 (-28.6%) at 09:40 - the missed "
-      "50% top-up is done now, at the market (90), and said",
-      jM.get("topped_pct") == 50 and u.get("missed") and u.get("low") == 75.0 and u.get("price") == 90.0
-      and (u.get("low_at") or "").startswith("2026-10-23T09:40") and any("missed top-up" in x for x in sentM1),
-      str({k: u.get(k) for k in ("missed", "low", "low_at", "price", "loss_pct")}))
-check("...target cut 25% (210 -> 157.50), trailing from that buy (90)", jM["target_price"] == 157.5
-      and jM["trail"]["ref"] == 90.0)
+mt = (jM.get("missed_topups") or [{}])[0]
+check("back at 10:00 after a crash: Angel's candles show the price touched 75 (-28.6%) at 09:40, but it is back at "
+      "90 (-14%), outside the range - NOTHING bought; the target 210 -> 115.50 (the average 105 + 10%, safe); said",
+      not jM.get("topups") and jM["target_price"] == 115.5 and mt.get("action") == "safe_target"
+      and mt.get("low") == 75.0 and (mt.get("low_at") or "").startswith("2026-10-23T09:40") and mt.get("ltp") == 90.0
+      and any("nothing bought" in x for x in sentM1) and jM["target_history"][-1]["kind"] == "safe_target",
+      str({k: jM.get(k) for k in ("target_price", "missed_topups", "topped_pct")})[:300])
 check("...and the session's low is kept on the trade (75, 09:40)", jM["session_low"] == 75.0
       and jM["session_low_day"] == "2026-10-23")
+at(2026, 10, 23, 10, 5)
+sM2.step()
+check("...said once (the level is handled)", len(stM1.open_job()["missed_topups"]) == 1)
+at(2026, 10, 23, 10, 30)
+PRICE["ltp"] = 78.0
+sM2.step()
+jM = stM1.open_job()
+check("a later LIVE fall to 78 (-25.7%): the normal 50% top-up; the target the larger of cut-25% and the floor "
+      "(average + 10%)", jM.get("topped_pct") == 50 and jM["topups"][0]["price"] == 78.0
+      and jM["target_price"] == tick_round(jM["position"]["avg_price"] * 1.1), str(jM.get("target_price")))
 shutil.rmtree(tmp3, ignore_errors=True)
+
+tmp4 = tempfile.mkdtemp(prefix="btst_miss2_")
+DIP2 = int(datetime(2026, 10, 23, 9, 40, tzinfo=IST).timestamp() * 1000)
+
+
+def deep_candles(c, a, b):
+    out, t = [], int(a.timestamp()) // 60 * 60_000
+    while t < int(b.timestamp() * 1000):
+        px = 50.0 if t == DIP2 else 72.0
+        out.append({"t": t, "o": px, "h": px + 1, "l": px, "c": px, "n": 0})
+        t += 60_000
+    return out
+
+
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 105.0
+sD1, stD1, brD1, lgD1, sentD1 = desk()
+sD1.recorder = REC.TickRecorder(folder=tmp4)
+sD1.on_message(msg(3, SAMPLE, 15, 16))
+sD1.step()
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 95.0
+sD1.step()
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 70.0                                 # back after a crash: it fell to 50 (-52%) at 09:40, now 70 (-33%)
+sD2 = BtstStrategy(sD1.cfg, stD1, brD1, lambda: MASTER, None, "test_channel", log=lgD1.append, now=lambda: CLOCK["t"],
+                   notifier=SimpleNamespace(send=sentD1.append), recorder=REC.TickRecorder(folder=tmp4), candles=deep_candles)
+sD2.broker = PaperBtstBroker(lambda c: PRICE["ltp"], log=lambda *_: None, today=lambda: CLOCK["t"].date())
+sD2.resume()
+sD2.step()
+at(2026, 10, 23, 10, 0, 2)
+sD2.step()
+jD = stD1.open_job()
+check("missed a fall to 50 (-52%); back at 70 (-33%), inside the FIRST range: the 50% top-up at 70 (not the 100%)",
+      jD.get("topped_pct") == 50 and jD["topups"][0]["price"] == 70.0 and jD["topups"][0]["step"] == "first",
+      str(jD.get("topups")))
+shutil.rmtree(tmp4, ignore_errors=True)
 
 at(2026, 10, 22, 15, 16)
 PRICE["ltp"] = 100.0

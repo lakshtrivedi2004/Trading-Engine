@@ -105,6 +105,7 @@ def by_day(jobs, quiet_days=()):
                                                                            if topped else ")")}
         row["extremes"] = ext
         row["topups"] = j.get("topups") or []
+        row["missed_topups"] = j.get("missed_topups") or []
         if k < 30:                                  # the newest trades carry their whole story
             row["timeline"] = {"events": j.get("events") or [], "targets": j.get("target_history") or [],
                                "amo": j.get("amo_history") or [],

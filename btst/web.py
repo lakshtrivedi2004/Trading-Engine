@@ -327,7 +327,7 @@ function chartSvg(d, id){
   const off = outside.length ? `<div class="n">Outside the recorded minutes: ${outside.map(e => esc(when(e.t) + " " + e.label)).join(" · ")}${rec.status === "recording" ? " (Angel's 1-minute candles fill the gaps when the recording is saved)" : ""}</div>` : "";
   return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div>${off}</div>`;
 }
-const STEP = {first: "first (50%)", second: "second (50%)", full: "full (100%)"};
+const STEP = {first: "first (50%)", second: "second (50%)", full: "full (100%)", missed: "missed (price back)"};
 function topupTable(list, withTrade){
   if (!list.length) return "";
   return `<table><tr><th>Time</th>${withTrade ? "<th>Trade</th>" : ""}<th>Step</th><th>Down</th><th>Bought</th><th>Amount</th>
@@ -335,13 +335,13 @@ function topupTable(list, withTrade){
     list.map(u => `<tr><td>${tms(u.at)}</td>${withTrade ? `<td class="l"><b>${esc(u._sym || "")}</b><span class="n">${esc(u._mode || u.mode || "")} · ${esc(u._job || "")}</span></td>` : ""}
       <td class="l">${esc(STEP[u.step] || u.step)}${u.missed ? ' <span class="tag rej" title="the price crossed the level while the desk was down or between two looks; topped up when seen">missed</span>' : ""}</td>
       <td class="down">${pc(-(u.loss_pct || 0))}${u.missed && num(u.low) ? `<span class="n">low ${n2(u.low)}${u.low_at ? " at " + esc(String(u.low_at).slice(11, 16)) : ""}</span>` : ""}</td>
-      <td>${n0(u.qty)} @ ${n2(u.price)}${num(u.ltp) && u.ltp !== u.price ? `<span class="n">LTP ${n2(u.ltp)}</span>` : ""}</td><td>${rsp(u.amount)}</td>
+      <td>${u.step === "missed" ? `<span class="warn">no buy</span><span class="n">back at ${n2(u.ltp)}</span>` : `${n0(u.qty)} @ ${n2(u.price)}${num(u.ltp) && u.ltp !== u.price ? `<span class="n">LTP ${n2(u.ltp)}</span>` : ""}`}</td><td>${u.step === "missed" ? (u.action === "safe_target" ? "safe target" : "–") : rsp(u.amount)}</td>
       <td>${n0(u.qty_before)} → <b>${n0(u.qty_after)}</b></td><td>${n2(u.avg_before)} → <b>${n2(u.avg_after)}</b></td>
       <td>${n2(u.target_before)} → <b>${n2(u.target_after)}</b></td><td>${n2(u.floor)}</td><td class="l">${esc(u.order_id || "")}</td></tr>`).join("") + `</table>`;
 }
 function drawTopups(d){
   const all = [];
-  (d.days || []).forEach(r => (r.topups || []).forEach(u => all.push(Object.assign({_sym: r.signal || r.symbol, _mode: r.mode, _job: r.job_id}, u))));
+  (d.days || []).forEach(r => (r.topups || []).concat(r.missed_topups || []).forEach(u => all.push(Object.assign({_sym: r.signal || r.symbol, _mode: r.mode, _job: r.job_id}, u))));
   all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
   document.getElementById("topups").innerHTML = all.length ? topupTable(all, true)
     : `<p class="empty">No top-up yet. A trade adds 50% when it first falls 25% below the buy price, and the rest at -50% (100% at once if it opens 50% down).</p>`;
@@ -413,7 +413,7 @@ function tradeCard(d, j, r){
       ${j.mode === "live" ? box("AMO", amoTxt, amoNote) : ""}
       ${(j.gift_check || j.gift_close) ? box("GIFT Nifty", n2((j.gift_check || j.gift_close).price), j.gift_check ? `${num(j.gift_check.move) ? (j.gift_check.move > 0 ? "+" : "") + n0(j.gift_check.move) + " pts " : ""}${esc(j.gift_check.verdict)} our ${esc((j.signal || {}).side)} · ${tm(j.gift_check.at)}` : `at the close ${tm(j.gift_close.at)} · checked again at ${esc(R.gift_check_at)}`) : ""}
     </div>
-    ${(j.topups || []).length ? `<div class="plan"><div class="k">Top-ups</div>${topupTable(j.topups, false)}</div>` : ""}
+    ${(j.topups || []).length || (j.missed_topups || []).length ? `<div class="plan"><div class="k">Top-ups</div>${topupTable((j.topups || []).concat(j.missed_topups || []).sort((a, b) => String(a.at).localeCompare(String(b.at))), false)}</div>` : ""}
     ${open ? plan(Object.assign({}, d, {next_session: j.next_session || d.next_session}), j, p) : resultBox(j, r)}
     ${chartSvg(CHARTS[j.job_id], j.job_id)}
   </div>`;

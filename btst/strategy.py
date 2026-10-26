@@ -552,18 +552,72 @@ class BtstStrategy:
             return False
         base = float(job["position"]["entry_price"])
         low, low_ms = self._session_low(job, ltp)
-        loss = 100.0 * (base - float(low)) / base        # the session's worst so far - a dip missed counts
         done = float(job.get("topped_pct") or 0.0)
-        self._missed = (low < float(ltp) - 1e-9, low, low_ms)
         first, second = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
         half = float(self.c("topup_first_pct", 50.0))
-        if done <= 0 and loss >= second:
-            return self._topup(job, ltp, 100.0, loss, "full")
-        if done <= 0 and loss >= first:
-            return self._topup(job, ltp, half, loss, "first")
-        if 0 < done < 100 and loss >= second:
-            return self._topup(job, ltp, 100.0 - done, loss, "second")
+
+        def step_for(loss):
+            if done <= 0 and loss >= second:
+                return 100.0, "full"
+            if done <= 0 and loss >= first:
+                return half, "first"
+            if 0 < done < 100 and loss >= second:
+                return 100.0 - done, "second"
+            return None
+
+        loss_now = 100.0 * (base - float(ltp)) / base
+        loss_low = 100.0 * (base - float(low)) / base
+        now_ms = int(self.now().timestamp() * 1000)
+        recent = not low_ms or now_ms - int(low_ms) <= float(self.c("missed_after_sec", 15)) * 1000
+        # 1. the price now is in a top-up range: the rule as it stands
+        st = step_for(loss_now)
+        if st:
+            self._missed = (False, None, None)
+            return self._topup(job, ltp, st[0], loss_now, st[1])
+        # 2. a dip the socket saw a moment ago (between two looks): live too
+        st = step_for(loss_low)
+        if st and recent:
+            self._missed = (True, low, low_ms)
+            return self._topup(job, ltp, st[0], loss_low, st[1])
+        # 3. a dip missed (the desk down, a gap) and the price is back above the
+        #    range: no buy - the target goes to the safe average + 10% (owner, 26 Oct 2026)
+        if st:
+            return self._missed_safe_target(job, ltp, low, low_ms, loss_low, st[1])
         return False
+
+    def _missed_safe_target(self, job, ltp, low, low_ms, loss_low, step):
+        """A top-up range crossed unseen, the price now outside it: nothing is
+        bought, the target becomes the average + floor_target_pct (10%) if
+        that is lower - once for each level missed."""
+        jid, c, pos = job["job_id"], job["contract"], job["position"]
+        level = "second" if step in ("second", "full") else "first"
+        handled = list(job.get("missed_levels") or [])
+        if level in handled:
+            return False
+        floor_pct = float(self.c("floor_target_pct", 10.0))
+        safe = tick_round(float(pos["avg_price"]) * (1 + floor_pct / 100.0), c["tick"], up=True)
+        cur = float(job["target_price"])
+        when = datetime.fromtimestamp(low_ms / 1000, tz=IST).strftime("%H:%M:%S") if low_ms else "?"
+        rec = {"at": self._ts(), "step": "missed", "level": level, "loss_pct": round(loss_low, 2), "low": low,
+               "low_at": (datetime.fromtimestamp(low_ms / 1000, tz=IST).isoformat(timespec="seconds")
+                          if low_ms else None), "ltp": round(float(ltp), 2), "qty": 0,
+               "action": "safe_target" if safe < cur else "kept", "target_before": cur,
+               "target_after": min(cur, safe), "avg_before": pos["avg_price"], "avg_after": pos["avg_price"],
+               "qty_before": pos["qty"], "qty_after": pos["qty"], "mode": job.get("mode")}
+        self.store.update_job(jid, set_={"missed_levels": handled + [level]}, push={"missed_topups": rec})
+        if safe < cur:
+            moved = self._move_target(job, safe, "safe_target",
+                                      f"a top-up at {-loss_low:.1f}% was missed (low {low} at {when}); the price is "
+                                      f"back at {ltp} - no buy, the target to the average + {floor_pct:g}%")
+            if moved and (job.get("trail") or {}).get("active"):
+                self.store.update_job(jid, set_={"trail": dict(job["trail"], active=False, stopped_at=self._ts(),
+                                                               stop_reason="safe target after a missed top-up")})
+        self._say(f"missed top-up: the price reached {low} ({-loss_low:.1f}%) at {when} while the desk was not "
+                  f"watching, and is back at {ltp:.2f} - outside the range, so nothing bought; "
+                  + (f"target {cur:.2f} -> {safe:.2f} (the average {pos['avg_price']} + {floor_pct:g}%, safe)"
+                     if safe < cur else f"the target {cur:.2f} is already below the safe {safe:.2f} - kept"),
+                  jid, True, "decision", "WARN")
+        return True
 
     def _session_low(self, job, ltp):
         """(the lowest price of the next session so far, its epoch ms): this
@@ -620,8 +674,8 @@ class BtstStrategy:
         missed, low, low_ms = getattr(self, "_missed", (False, None, None))
         if missed:
             when = datetime.fromtimestamp(low_ms / 1000, tz=IST).strftime("%H:%M:%S") if low_ms else "?"
-            self._say(f"missed top-up: the price reached {low:.2f} ({-loss:.1f}%) at {when} - the desk was down or "
-                      f"between looks; topping up now at the market (~{ltp:.2f})", jid, True, "decision", "WARN")
+            self._log("decision", f"the price touched {low:.2f} ({-loss:.1f}%) at {when}, between two looks - "
+                                  f"topping up now at the market (~{ltp:.2f})", "WARN")
         self._log("decision", f"{-loss:.1f}% below the buy {pos['entry_price']:.2f}: top up {pct:g}% of "
                               f"Rs {first_amount:,.0f} = Rs {amount:,.0f} -> {n} lot(s) = {add} qty @ ~{ltp:.2f} "
                               f"(Rs {add * ltp:,.0f})", "TRADE")
