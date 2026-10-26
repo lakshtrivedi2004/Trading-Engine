@@ -395,9 +395,9 @@ function drawTrades(d){
   const ext = x => { if (!x) return `<span class="n">–</span>`;
     const hm = s => s ? s.slice(11, 16) + " " + day(s).replace(/^\w+ /, "") : "";
     const tag = a => a ? ` <span class="tag" title="after the trade was closed">after exit</span>` : "";
-    return `<span class="up">${rs(x.max_profit)}</span> <span class="n" style="display:inline">${pc(x.max_profit_pct)}</span>${tag(x.max_profit_after_exit)}`
+    return `<span class="${cls(x.max_profit)}">${rs(x.max_profit)}</span> <span class="n" style="display:inline">${pc(x.max_profit_pct)}</span>${tag(x.max_profit_after_exit)}`
       + `<span class="n">@ ${n2(x.max_profit_price)}${x.max_profit_at ? " · " + hm(x.max_profit_at) : ""}</span>`
-      + `<span class="down">${rs(x.max_loss)}</span> <span class="n" style="display:inline">${pc(x.max_loss_pct)}</span>${tag(x.max_loss_after_exit)}`
+      + `<span class="${cls(x.max_loss)}">${rs(x.max_loss)}</span> <span class="n" style="display:inline">${pc(x.max_loss_pct)}</span>${tag(x.max_loss_after_exit)}`
       + `<span class="n">@ ${n2(x.max_loss_price)}${x.max_loss_at ? " · " + hm(x.max_loss_at) : ""}</span>`
       + `<span class="n" title="${esc(x.basis || "")}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}</span>`; };
   if (!rows.length){ document.getElementById("days").innerHTML = `<p class="empty">No BTST yet.</p>`; return; }

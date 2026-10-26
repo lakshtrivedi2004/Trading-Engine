@@ -10,6 +10,8 @@ have made - the line to read when deciding a higher or lower target.
 """
 from datetime import datetime
 
+from arb.instruments import IST
+
 
 def _ms(iso):
     try:
@@ -84,7 +86,7 @@ def extremes(job, bars):
             worst = (down, b["l"], b["t"], after, round(100.0 * (b["l"] - a) / a, 2))
     if best is None:
         return None
-    iso = lambda ms: datetime.fromtimestamp(ms / 1000).astimezone().isoformat(timespec="minutes")
+    iso = lambda ms: datetime.fromtimestamp(ms / 1000, tz=IST).isoformat(timespec="minutes")   # IST, whatever the server's zone
     return {"max_profit": round(best[0], 2), "max_profit_price": best[1], "max_profit_at": iso(best[2]),
             "max_profit_after_exit": best[3], "max_profit_pct": best[4],
             "max_loss": round(worst[0], 2), "max_loss_price": worst[1], "max_loss_at": iso(worst[2]),

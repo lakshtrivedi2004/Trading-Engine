@@ -1662,7 +1662,8 @@ ex = ch["extremes"]
 check("max profit / loss over the whole window: the best (+Rs 8,060 at 230, 13:00) came AFTER the exit at 211; "
       "the worst stayed +Rs 65 (107, right after the buy)",
       ex["max_profit"] == round((230 - 106) * 65, 2) and ex["max_profit_after_exit"] and ex["max_profit_price"] == 230.0
-      and ex["max_loss"] == 65.0 and not ex["max_loss_after_exit"], str(ex))
+      and ex["max_loss"] == 65.0 and not ex["max_loss_after_exit"] and ex["max_profit_at"] == "2026-10-23T13:00+05:30",
+      str(ex))
 rowR = [r for r in stats.by_day(stR.recent_jobs()) if r.get("job_id") == jR["job_id"]][0]
 check("...saved with the recording and shown in the trades table's row", rowR["extremes"]["max_profit"] == ex["max_profit"]
       and "recorded" in rowR["extremes"]["basis"])
