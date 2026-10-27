@@ -158,13 +158,17 @@ def main():
         return rest if mode == "live" else PaperBtstBroker(prices.price, log=BOOK.log, watch=prices)
 
     notifier = None
-    if cfg.get("notify_telegram", True) and not args.no_telegram_alerts \
-            and creds.telegram_bot_token and creds.telegram_chat_id:
-        from arb.telegram import TelegramNotifier
-        notifier = TelegramNotifier(creds.telegram_bot_token, creds.telegram_chat_id).start()
-        log("Telegram alerts on (bot)", area="telegram")
+    alert_channel = str(env.get("TELEGRAM_CHANNEL_NAME", "")).strip()
+    if cfg.get("notify_telegram", True) and not args.no_telegram_alerts and alert_channel \
+            and env.get("TELEGRAM_API_ID") and env.get("TELEGRAM_API_HASH"):
+        # owner, 27 Oct 2026: as the Telegram user to TELEGRAM_CHANNEL_NAME - not the bot / TELEGRAM_CHAT_ID
+        from btst.notify import ChannelNotifier
+        notifier = ChannelNotifier(channel=alert_channel, log=BOOK.log).start()
+        log("Telegram alerts on: posted to the alert channel (TELEGRAM_CHANNEL_NAME) as the Telegram user",
+            area="telegram")
     else:
-        log("Telegram alerts off", area="telegram")
+        log("Telegram alerts off (TELEGRAM_API_ID, TELEGRAM_API_HASH and TELEGRAM_CHANNEL_NAME needed)",
+            "WARN", "telegram")
 
     mode = read_mode()
     def candles(c, a, b):
@@ -202,8 +206,8 @@ def main():
     log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | "
         f"scan {cfg.get('scan_start')}-{cfg.get('scan_end')} | model {cfg.get('ai_model') if llm else 'none'}",
         area="start")
-    if notifier:
-        notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>\nPage :{port}")
+    if notifier and cfg.get("notify_startup", False):
+        notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>")
 
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())

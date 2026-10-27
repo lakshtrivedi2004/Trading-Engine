@@ -1953,5 +1953,33 @@ check("the page's state: capital per mode (live, paper), the rules carry the pri
       [c["mode"] for c in sc["capital"]] == ["live", "paper"] and sc["rules"]["trade_amount"] == 15000.0
       and sc["rules"]["principal"] == 150000)
 
+section("18. Alerts to the Telegram channel (as the user, not the bot)")
+from btst.notify import ChannelNotifier                          # noqa: E402
+
+got, nlog, fails = [], [], {"n": 1}
+
+
+def fake_send(text, channel=None, log=print):
+    if "flaky" in text and fails["n"]:
+        fails["n"] -= 1
+        return False
+    got.append((channel, text))
+    return True
+
+
+cn = ChannelNotifier(channel="Boom_bull", send_fn=fake_send, log=nlog.append, retry_sec=0).start()
+for t in ("🌙 <b>BTST</b> BOUGHT x65", "flaky one", "🌙 <b>BTST</b> CLOSED"):
+    cn.send(t)
+cn.stop(wait=5)
+check("alerts go to the channel named in .angel.env, in order; a failed send is tried once more",
+      [t for _, t in got] == ["🌙 <b>BTST</b> BOUGHT x65", "flaky one", "🌙 <b>BTST</b> CLOSED"]
+      and all(ch == "Boom_bull" for ch, _ in got) and cn.sent == 3 and cn.failed == 0, str(got))
+got.clear()
+cn2 = ChannelNotifier(channel="Boom_bull", send_fn=lambda *a, **k: False, log=nlog.append, retry_sec=0).start()
+cn2.send("never")
+cn2.stop(wait=5)
+check("...two failures: logged and dropped, the desk goes on", cn2.failed == 1
+      and any("not sent to the channel" in x for x in nlog))
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)
