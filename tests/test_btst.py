@@ -1589,6 +1589,10 @@ rw.set_extra([{"token": "77", "symbol": "X77", "exchange": "NFO"}])
 rw.see("77", 12.5, 13.0, "websocket")
 rw.see("88", 9.0, 9.0, "websocket")
 check("the socket's ticks for a recorded contract go to the recorder (others do not)", seen_ticks == [("77", 12.5)])
+rw.last_ws_at = 0.0
+rw.see("77", 12.6, 13.0, "websocket")
+check("...and keep the socket counted as alive with no open trade (no restart every 90 s after an exit)",
+      rw.last_ws_at > 0 and rw.ticks >= 1)
 
 
 def rec_desk():

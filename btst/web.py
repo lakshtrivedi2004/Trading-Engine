@@ -538,7 +538,7 @@ function drawTrades(d){
 function capChart(cp){
   const pts = [{capital: cp.principal, at: null}].concat(cp.curve || []);
   if (pts.length < 2) return `<p class="empty">No closed trade yet — the capital starts at ${rsp(cp.principal)}.</p>`;
-  const W = 1000, H = 190, L = 70, R = 70, T = 14, B = 24, n = pts.length;
+  const W = 560, H = 190, L = 66, R = 66, T = 14, B = 24, n = pts.length;    // drawn at about its real size: readable text
   const vals = pts.map(p => p.capital), lo0 = Math.min(...vals, cp.principal), hi0 = Math.max(...vals, cp.principal);
   const pad = (hi0 - lo0) * 0.12 || cp.principal * 0.01, lo = lo0 - pad, hi = hi0 + pad;
   const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);

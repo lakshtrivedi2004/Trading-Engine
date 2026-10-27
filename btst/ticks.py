@@ -73,7 +73,12 @@ class PriceWatch:
     def see(self, token, ltp, high, source):
         """A look at the price: a websocket tick or an LTP answer."""
         token = str(token)
-        if self.on_tick is not None and ltp and ltp > 0 and (token == self.token or token in self.extra):
+        watched = token == self.token or token in self.extra
+        if watched and source == "websocket":
+            self.last_ws_at = self.clock()          # the socket is alive for any contract it follows -
+            if token != self.token:                 # a recorded one too (it was counted for the open job's only,
+                self.ticks += 1                     # and the socket restarted every 90 s after an exit)
+        if self.on_tick is not None and ltp and ltp > 0 and watched:
             if token in self.extra:
                 self.extra_seen[token] = self.clock()
             try:
