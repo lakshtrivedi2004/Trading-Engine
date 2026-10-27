@@ -1928,5 +1928,26 @@ check("a Saturday: no trading day, no trade", not dvw["trading_day"] and dvw["ph
 check("a day with no signal shows its record", storeq.get_day("2026-10-22")["status"] == "no_signal"
       and stq.day_view("2026-10-22")["no_signal"]["messages_read"] == 2)
 
+section("17. Principal and capital over time")
+check("sizing from the principal: 10% of Rs 1,50,000 = Rs 15,000 a trade",
+      desk(cfg={"principal": 150000, "trade_pct": 10})[0].trade_amount() == 15000.0
+      and desk(cfg={"trade_amount": 12000})[0].trade_amount() == 12000.0)
+caps = [{"job_id": "A", "mode": "paper", "status": "closed", "trade_date": "2026-10-20", "signal": {"indices": "NIFTY", "strike_price": 22800, "side": "CE"},
+         "result": {"closed_at": "2026-10-21T15:14:00+05:30", "net_pnl": -6838.0, "pnl_pct": -30.3, "invested": 22560}},
+        {"job_id": "B", "mode": "paper", "status": "closed", "trade_date": "2026-10-22",
+         "result": {"closed_at": "2026-10-23T11:00:00+05:30", "net_pnl": 10000.0, "pnl_pct": 66.0, "invested": 15000}},
+        {"job_id": "C", "mode": "live", "status": "closed", "trade_date": "2026-10-22",
+         "result": {"closed_at": "2026-10-23T12:00:00+05:30", "net_pnl": 500.0}},
+        {"job_id": "D", "mode": "paper", "status": "open", "trade_date": "2026-10-26"}]
+cp = stats.capital(caps, 150000, "paper")
+check("paper capital: Rs 1,50,000 -> 1,43,162 -> 1,53,162 (+2.11%); drawdown Rs 6,838 (4.56%); live kept apart",
+      [c["capital"] for c in cp["curve"]] == [143162.0, 153162.0] and cp["capital"] == 153162.0 and cp["pct"] == 2.11
+      and cp["max_drawdown"] == 6838.0 and cp["max_drawdown_pct"] == 4.56 and cp["low"] == 143162.0
+      and stats.capital(caps, 150000, "live")["capital"] == 150500.0, str(cp)[:200])
+sc = web.state(desk(cfg={"principal": 150000, "trade_pct": 10})[0], store)
+check("the page's state: capital per mode (live, paper), the rules carry the principal and the trade amount",
+      [c["mode"] for c in sc["capital"]] == ["live", "paper"] and sc["rules"]["trade_amount"] == 15000.0
+      and sc["rules"]["principal"] == 150000)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

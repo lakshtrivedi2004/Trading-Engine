@@ -1,6 +1,7 @@
 {
   "port": 9000,
-  "trade_amount": 15000,
+  "principal": 150000,
+  "trade_pct": 10,
   "amount_tolerance_pct": 5,
   "scan_start": "15:15",
   "scan_end": "15:45",

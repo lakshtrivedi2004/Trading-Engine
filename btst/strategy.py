@@ -5,8 +5,9 @@ in the window is read once. Orders can be placed until market_close (15:45 -
 the market's hours changed in 2026; the channel posted every October signal at
 15:33 - 15:39); a signal read after it is saved with its reading, not traded. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
-the most lots costing at most trade_amount + amount_tolerance_pct (Rs 15,000
-+ 5%, fixed - no compounding; none if one lot costs more), CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
+the most lots whose total is below trade_pct (10%) of the principal (Rs
+1,50,000) + amount_tolerance_pct (5%) - Rs 15,750, the same every trade, no
+compounding; none if one lot costs that much - CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
 no trade (the day is still recorded, btst_days).
 
@@ -57,6 +58,7 @@ RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_
                  "topup_second_loss_pct": 50.0, "target_cut_pct": 25.0, "floor_target_pct": 10.0,
                  "trail_step_points": 1.0, "amo_at": "17:00", "market_open": "09:15", "market_close": "15:45",
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0,
+                 "principal": 0, "trade_pct": 10.0,
                  "gift_check_at": "01:00"}
 
 
@@ -359,7 +361,7 @@ class BtstStrategy:
         the same every trade - no compounding: the most lots whose total is
         below the amount + 5% (owner, 24 Oct 2026); none if one lot is not. With
         no trade_amount, a fixed `lots`."""
-        amount = float(self.c("trade_amount", 0) or 0)
+        amount = self.trade_amount()
         per_lot = ltp * int(c["lot_size"])
         if amount <= 0:
             n = max(1, int(self.c("lots", 1)))
@@ -374,6 +376,15 @@ class BtstStrategy:
         where = "within" if cost >= lo else "under"
         return n, (f"{n} lot(s) x Rs {per_lot:,.0f} = Rs {cost:,.0f} for Rs {amount:,.0f} +/- {tol:g}% "
                    f"({where} the band Rs {lo:,.0f} - {hi:,.0f}; always below Rs {hi:,.0f})")
+
+    def trade_amount(self):
+        """Rs per trade: trade_pct (10%) of the principal (Rs 1,50,000) - the
+        STARTING principal, so every trade is the same (no compounding); an
+        explicit trade_amount if there is no principal."""
+        principal = float(self.c("principal", 0) or 0)
+        if principal > 0:
+            return principal * float(self.c("trade_pct", 10.0)) / 100.0
+        return float(self.c("trade_amount", 0) or 0)
 
     def _place_target(self, job, price, kind):
         c, q = job["contract"], int(job["position"]["qty"])
@@ -1478,4 +1489,4 @@ class BtstStrategy:
                 "parked": [_no_channel(x) for x in self.store.parked_jobs()],
                 "next_session": self._next_session(datetime.fromisoformat(j["trade_date"]).date() if j
                                                    else self.now().date()).isoformat(),
-                "rules": {k: self.c(k, v) for k, v in RULE_DEFAULTS.items()}}
+                "rules": dict({k: self.c(k, v) for k, v in RULE_DEFAULTS.items()}, trade_amount=self.trade_amount())}

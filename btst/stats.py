@@ -39,6 +39,34 @@ def summary(jobs, mode=None):
     }
 
 
+def capital(jobs, principal, mode=None):
+    """The principal through the closed trades of one mode, oldest first: each
+    exit adds its net P&L (the trade size stays the same - no compounding)."""
+    closed = [j for j in jobs if j.get("status") == "closed" and j.get("result")
+              and (mode is None or j.get("mode") == mode)]
+    closed.sort(key=lambda j: (j["result"].get("closed_at") or "", j.get("created_at") or ""))
+    principal = float(principal or 0)
+    eq, peak, dd, dd_pct, curve = principal, principal, 0.0, 0.0, []
+    for j in closed:
+        r = j["result"]
+        net = float(r.get("net_pnl") or 0)
+        eq += net
+        peak = max(peak, eq)
+        if peak - eq > dd:
+            dd, dd_pct = peak - eq, (100.0 * (peak - eq) / peak if peak else 0.0)
+        s = j.get("signal") or {}
+        curve.append({"at": r.get("closed_at"), "date": j.get("trade_date"), "job_id": j.get("job_id"),
+                      "trade": f"{s.get('indices', '')} {_g(s.get('strike_price'))} {s.get('side', '')}".strip(),
+                      "symbol": (j.get("contract") or {}).get("symbol"), "invested": r.get("invested"),
+                      "net_pnl": round(net, 2), "pnl_pct": r.get("pnl_pct"), "exit_reason": r.get("exit_reason"),
+                      "capital": round(eq, 2), "change_pct": round(100.0 * (eq - principal) / principal, 2)
+                      if principal else None})
+    return {"mode": mode or "all", "principal": principal, "capital": round(eq, 2),
+            "net": round(eq - principal, 2), "pct": round(100.0 * (eq - principal) / principal, 2) if principal else None,
+            "peak": round(peak, 2), "low": round(min([principal] + [c["capital"] for c in curve]), 2),
+            "max_drawdown": round(dd, 2), "max_drawdown_pct": round(dd_pct, 2), "trades": len(curve), "curve": curve}
+
+
 def _g(x):
     try:
         return format(float(x), "g")

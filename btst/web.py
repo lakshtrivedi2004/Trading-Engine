@@ -137,6 +137,7 @@ PAGE = r"""<!DOCTYPE html>
     <div id="histbody"></div>
   </div>
   <h2>Open trade</h2><div id="open"></div>
+  <h2>Capital</h2><div id="capital"></div>
   <h2>Trades</h2><div class="tbl" id="days"></div>
   <h2>Top-ups</h2><div class="tbl" id="topups"></div>
   <h2>Statistics</h2><div id="stats"></div>
@@ -198,7 +199,8 @@ function drawHead(d){
     + chip("Telegram " + (h.reader || "–"), h.reader === "up" ? "ok" : (h.reader ? "bad" : ""), "the signal channel reader")
     + chip("Angel " + (a.last_error ? "error" : (a.logged_in_at ? "logged in " + tm(a.logged_in_at) : "–")), a.last_error ? "bad" : (a.logged_in_at ? "ok" : ""), a.last_error || "")
     + chip("Websocket " + (p.websocket ? "connected" : (p.symbol ? "off" : "idle")), p.websocket ? "ok" : (p.symbol && d.market === "open" ? "bad" : ""), p.symbol || "runs while a trade is open in market hours")
-    + (lp ? chip(lp + " warning/error" + (lp > 1 ? "s" : "") + " today", "mid") : "");
+    + (lp ? chip(lp + " warning/error" + (lp > 1 ? "s" : "") + " today", "mid") : "")
+    + ((d.capital || []).filter(c => c.mode === d.mode).map(c => `<span class="chip" title="${esc(c.mode)} capital: the principal ${rsp(c.principal)} plus every closed trade's net">Capital <b class="${cls(c.net)}">${rsp(c.capital)}</b> ${pc(c.pct)}</span>`)[0] || "");
   const now = d.now || "";
   document.getElementById("sub").innerHTML = `${day(now)}, ${esc(now.slice(11, 19))} IST · signals read ${esc(d.window)} IST · ${esc(d.note)}`;
   const liveTrade = d.open_job && d.open_job.mode === "live";
@@ -533,6 +535,44 @@ function drawTrades(d){
     }).join("") + `</table>`;
 }
 
+function capChart(cp){
+  const pts = [{capital: cp.principal, at: null}].concat(cp.curve || []);
+  if (pts.length < 2) return `<p class="empty">No closed trade yet — the capital starts at ${rsp(cp.principal)}.</p>`;
+  const W = 1000, H = 190, L = 70, R = 70, T = 14, B = 24, n = pts.length;
+  const vals = pts.map(p => p.capital), lo0 = Math.min(...vals, cp.principal), hi0 = Math.max(...vals, cp.principal);
+  const pad = (hi0 - lo0) * 0.12 || cp.principal * 0.01, lo = lo0 - pad, hi = hi0 + pad;
+  const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="capital after each trade">`;
+  svg += `<line x1="${L}" x2="${W - R}" y1="${Y(cp.principal)}" y2="${Y(cp.principal)}" stroke="var(--dim)" stroke-dasharray="4 3"/>`
+    + `<text x="${L - 4}" y="${Y(cp.principal) + 3}" text-anchor="end">${rsp(cp.principal)}</text>`
+    + `<text x="${L - 4}" y="${T + 8}" text-anchor="end">${rsp(hi)}</text><text x="${L - 4}" y="${H - B}" text-anchor="end">${rsp(lo)}</text>`;
+  let path = `M${X(0)},${Y(pts[0].capital)}`;
+  pts.forEach((p, i) => { if (i) path += ` H${X(i)} V${Y(p.capital)}`; });
+  svg += `<path d="${path}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`;
+  pts.forEach((p, i) => { if (!i) return; const up = p.net_pnl >= 0;
+    svg += `<circle cx="${X(i)}" cy="${Y(p.capital)}" r="4" fill="${up ? "var(--up)" : "var(--down)"}"><title>${esc(p.date)} ${esc(p.trade)}: ${rs(p.net_pnl)} (${pc(p.pnl_pct)}) → capital ${rsp(p.capital)}</title></circle>`;
+    if (n <= 24) svg += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${esc((p.date || "").slice(5))}</text>`; });
+  const last = pts[n - 1];
+  svg += `<text x="${W - R + 4}" y="${Y(last.capital) + 3}" style="fill:${last.capital >= cp.principal ? "var(--up)" : "var(--down)"}">${rsp(last.capital)}</text></svg>`;
+  return `<div class="chartbox">${svg}</div>`;
+}
+function drawCapital(d){
+  const el = document.getElementById("capital"), caps = (d.capital || []).slice();
+  if (!caps.length){ el.innerHTML = `<p class="empty">Set "principal" in config/btst.json to follow the capital.</p>`; return; }
+  caps.sort((a, b) => (b.mode === d.mode) - (a.mode === d.mode));
+  const R = d.rules || {};
+  el.innerHTML = `<div class="modes">` + caps.map(cp => {
+    const k = (label, v, c2) => `<div>${label}<b class="${c2 || ""}">${v}</b></div>`;
+    return `<div class="box mode"><h3>${esc(cp.mode.toUpperCase())}${cp.mode === d.mode ? ' <span class="tag open">current mode</span>' : ""}</h3>
+      <div class="kpis">${k("Capital now", rsp(cp.capital), cls(cp.net))}${k("Net since start", `${rs(cp.net)} (${pc(cp.pct)})`, cls(cp.net))}${k("Principal", rsp(cp.principal))}
+        ${k("Per trade", `${rsp(R.trade_amount)} ± ${n0(R.amount_tolerance_pct)}%`)}${k("Peak / low", `${rsp(cp.peak)} / ${rsp(cp.low)}`)}${k("Max drawdown", `${rsp(cp.max_drawdown)} (${n2(cp.max_drawdown_pct)}%)`)}</div>
+      ${capChart(cp)}
+      ${(cp.curve || []).length ? `<details class="msgs"><summary>Every closed trade (${cp.trades})</summary><div class="tbl"><table><tr><th>#</th><th>Closed</th><th>Trade</th><th>Invested</th><th>Net</th><th>Exit</th><th>Capital after</th><th>vs principal</th></tr>`
+        + cp.curve.map((c, i) => `<tr><td>${i + 1}</td><td>${tm(c.at)}</td><td class="l">${esc(c.trade)}<span class="n">${esc(c.symbol || "")}</span></td><td>${rsp(c.invested)}</td>
+          <td class="${cls(c.net_pnl)}">${rs(c.net_pnl)}<span class="n">${pc(c.pnl_pct)}</span></td><td class="l">${esc(EXIT[c.exit_reason] || c.exit_reason || "")}</td>
+          <td><b>${rsp(c.capital)}</b></td><td class="${cls(c.change_pct)}">${pc(c.change_pct)}</td></tr>`).reverse().join("") + `</table></div></details>` : ""}
+    </div>`; }).join("") + `</div><p class="sub">Each trade invests ${n0(R.trade_pct)}% of the starting principal (${rsp(R.trade_amount)} ± ${n0(R.amount_tolerance_pct)}%, always below ${rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100))}); a top-up adds up to as much again. No compounding: the size stays the same as the capital moves. Set in config/btst.json ("principal", "trade_pct").</p>`;
+}
 function drawStats(d){
   const mode = s => {
     if (!s.trades) return `<div class="box mode"><h3>${esc(s.mode.toUpperCase())}</h3><p class="empty">No closed trades yet${s.open_or_failed ? ` · ${s.open_or_failed} open / not traded` : ""}.</p></div>`;
@@ -556,7 +596,7 @@ function drawSys(d){
     ${box("Live price", p.websocket ? "websocket" : (p.symbol ? "LTP call" : "idle"), p.symbol ? `${esc(p.symbol)} · ${n0(p.ticks)} ticks · ${n0(p.ltp_calls)} LTP calls${p.ws_restarts ? " · " + p.ws_restarts + " restart(s)" : ""}` : "the websocket runs while a trade is open in market hours")}
     ${box("Telegram reader", h.reader || "–", "reads the signal channel (set in .angel.env)")}
     ${box("Holidays", `${ho.known_this_year ?? "–"} this year`, `${esc(ho.source || "")}${(ho.next || []).length ? " · next " + ho.next.map(day).join(", ") : ""}${ho.error ? " · fetch error: " + esc(ho.error) : ""}`)}
-    ${box("Sizing", R.trade_amount ? rsp(R.trade_amount) + " ± " + n0(R.amount_tolerance_pct) + "%" : "fixed lots", R.trade_amount ? "the most lots below " + rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100)) + " · no compounding" : "")}
+    ${box("Sizing", R.trade_amount ? rsp(R.trade_amount) + " ± " + n0(R.amount_tolerance_pct) + "%" : "fixed lots", R.trade_amount ? (R.principal ? n0(R.trade_pct) + "% of the principal " + rsp(R.principal) + " · " : "") + "the most lots below " + rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100)) + " · no compounding" : "")}
   </div>`;
 }
 
@@ -574,7 +614,7 @@ async function tick(){
   try{
     const d = await (await fetch("/api/state")).json();
     LAST = d;
-    drawHead(d); drawOpen(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
+    drawHead(d); drawOpen(d); drawCapital(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
   }catch(e){ document.getElementById("chips").innerHTML = `<span class="chip bad"><i></i>disconnected</span>`; }
 }
 tick(); setInterval(tick, 3000);
@@ -680,6 +720,8 @@ def state(strategy, store, book=None):
             except Exception:
                 pass
     s["no_signal_days"] = sum(1 for r in s["days"] if not r.get("job_id"))
+    principal = float((s.get("rules") or {}).get("principal") or 0)
+    s["capital"] = [stats.capital(jobs, principal, "live"), stats.capital(jobs, principal, "paper")] if principal else []
     if book is not None:
         try:
             s["log_problems_today"] = len(book.lines(limit=500, group="errors", scan=4000,
