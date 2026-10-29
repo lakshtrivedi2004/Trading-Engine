@@ -8,7 +8,8 @@ market - the option it names, nearest expiry after today (btst/contracts.py),
 the most lots whose total is below trade_pct (10%) of the principal (Rs
 1,50,000) + amount_tolerance_pct (5%) - Rs 15,750, the same every trade, no
 compounding; none if one lot costs that much - CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
-the signal's price (3 x on SENSEX, 2 x otherwise). One BTST a day; no signal,
+the signal's price (2 x for every index, SENSEX too - owner, 29 Oct 2026; per index in
+config/btst.json "target_mult"). One BTST a day; no signal,
 no trade (the day is still recorded, btst_days).
 
 Day D+1 (the next trading day), tracked live from the open (owner, 26 Oct

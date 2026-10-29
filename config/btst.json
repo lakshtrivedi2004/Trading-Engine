@@ -16,7 +16,7 @@
   "gift_enabled": true,
   "gift_check_at": "01:00",
   "gift_retry_sec": 300,
-  "target_mult": {"default": 2.0, "SENSEX": 3.0},
+  "target_mult": {"default": 2.0, "SENSEX": 2.0},
   "topup_first_loss_pct": 25.0,
   "topup_first_pct": 50.0,
   "topup_second_loss_pct": 50.0,
