@@ -1126,6 +1126,35 @@ with tempfile.TemporaryDirectory() as d:
     check("a restart after hitting the daily loss limit is still halted",
           eng4.halted and eng4.realised_pnl <= -3_000.0, eng4.halt_reason)
 
+    # Paper capital set on the dashboard (owner, 28 Oct 2026).
+    p5 = os.path.join(d, "c5.json")
+    cb5 = CapitalBook(10_000.0, path=p5, ceiling=13_466.9)
+    cb5.open_day(today)
+    cb5.record(-250.0)
+    check("set_capital trades exactly the figure, even above the old ceiling",
+          cb5.set_capital(50_000.0) == 50_000.0 and cb5.capital == 50_000.0
+          and cb5.opening_capital == 50_000.0, f"{cb5.capital:.2f}")
+    check("...keeps today's ledger, so the loss halt still counts it",
+          abs(cb5.day_pnl + 250.0) < 1e-9 and cb5.day_trades == 1)
+    check("...and is remembered for the next session",
+          CapitalBook(10_000.0, path=p5).chosen == 50_000.0)
+    check("a ledger never set on the dashboard has no chosen figure",
+          CapitalBook(10_000.0, path=os.path.join(d, "never.json")).chosen == 0.0)
+    p6 = os.path.join(d, "c6.json")
+    cb6 = CapitalBook(10_000.0, path=p6)
+    cb6.open_day("2026-09-24")
+    cb6.record(+300.0)
+    cb6.set_capital(20_000.0)
+    check("a previous day left in the ledger is folded first, not into the new figure",
+          cb6.summary()["history"][-1]["closing"] == 10_300.0
+          and CapitalBook(1.0, path=p6).open_day(today)[1] == 20_000.0)
+    try:
+        cb6.set_capital(0)
+        refused = False
+    except ValueError:
+        refused = True
+    check("...and a zero capital is refused", refused and cb6.capital == 20_000.0)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 section("7. The day's record survives a restart")

@@ -31,6 +31,11 @@ re-reads the account's funds through the day (set_account_funds) and sizes on
 min(ceiling, funds right now). The daily loss halt and the daily target stay
 on the day's opening figure (opening_capital), so a re-read or a restart does
 not move them. Paper never sets account funds and trades the ledger as before.
+
+Paper capital set on the dashboard (owner, 28 Oct 2026): the scalper page can
+name the paper purse (set_capital). The figure becomes the ledger's equity and
+the ceiling, and is remembered in the file ("chosen") so every later paper
+session trades it instead of the configured ceiling or live's funds.
 """
 import json
 import threading
@@ -103,6 +108,33 @@ class CapitalBook:
         if funds > 0:
             with self._lock:
                 self._account_funds = funds
+        return self.capital
+
+    @property
+    def chosen(self):
+        """Paper: the capital the owner set on the dashboard, 0.0 if never."""
+        with self._lock:
+            return float((self._data.get("chosen") or {}).get("capital") or 0.0)
+
+    def set_capital(self, amount, note="dashboard"):
+        """Paper: trade exactly `amount` from now on - it becomes the equity
+        and the ceiling. A previous day still in the ledger is folded first,
+        so its history row stays right; today's ledger is kept, so the trades
+        already closed still count toward today's loss halt and fold in at the
+        next open. Returns the traded capital."""
+        amount = float(amount)
+        if not amount > 0:
+            raise ValueError(f"capital must be positive, got {amount!r}")
+        today = now_ist().strftime("%Y-%m-%d")
+        with self._lock:
+            day = self._data.get("day", "")
+            if day and day != today:
+                self._fold_locked(day, note)
+            self._data["capital"] = amount
+            self._data["chosen"] = {"capital": round(amount, 2), "note": note,
+                                    "at": now_ist().strftime("%Y-%m-%d %H:%M:%S")}
+            self.ceiling = amount
+            self._save()
         return self.capital
 
     def daily_target(self, pct):

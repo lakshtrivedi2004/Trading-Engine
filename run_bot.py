@@ -345,8 +345,10 @@ def run_intraday_forever(cfg, cm, creds, args, mode):
             # first session writes capital.json; live has no figure until it
             # reads funds from the broker, so it stays 0 until then.
             start = 0.0 if mode == "live" else (args.capital or L.starting_capital)
-            dstate.boot_capital = CapitalBook(start, path=cap_path,
-                                              ceiling=L.capital_ceiling).capital
+            book = CapitalBook(start, path=cap_path, ceiling=L.capital_ceiling)
+            if mode != "live" and book.chosen and not args.capital:
+                book.ceiling = book.chosen
+            dstate.boot_capital = book.capital
         except Exception:
             dstate.boot_capital = 0.0
         if mode == "live" and not os.path.exists(cap_path) \
@@ -553,10 +555,15 @@ def _run_intraday_day(cfg, cm, creds, args, mode, notifier, dash_holder,
                 live_funds_seen = float((json.load(fh).get("synced") or {}).get("funds") or 0.0)
         except (OSError, ValueError):
             live_funds_seen = 0.0
-        if live_funds_seen > 0 and not args.capital:
-            ceiling = min(ceiling or live_funds_seen, live_funds_seen)
-            log(f"paper capital capped at live's last broker funds Rs {live_funds_seen:,.2f}")
         capital = CapitalBook(args.capital or L.starting_capital, log=log, ceiling=ceiling)
+        if capital.chosen and not args.capital:
+            # Set on the scalper page (owner, 28 Oct 2026): paper trades that
+            # figure, like --capital, not the ceiling or live's funds.
+            capital.ceiling = capital.chosen
+            log(f"paper capital Rs {capital.chosen:,.2f} as set on the dashboard")
+        elif live_funds_seen > 0 and not args.capital:
+            capital.ceiling = min(ceiling or live_funds_seen, live_funds_seen)
+            log(f"paper capital capped at live's last broker funds Rs {live_funds_seen:,.2f}")
     interval = args.candle_interval or L.candle_interval
 
     journal = Journal(directory="journal/live") if mode == "live" else Journal()

@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from arb import history as hist
+from arb.capital_book import CapitalBook
 from arb.instruments import IST, market_phase, now_ist, years_to_expiry
 from arb.mathview import chain_math, term_structure
 from arb.settlement import LegMarker, SettlementBook
@@ -25,6 +26,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "dashboard.html")
 REPO_ROOT = os.path.dirname(HERE)
 LOG_PATH = os.path.join(REPO_ROOT, "engine.log")
+# What "Set paper capital" accepts: under Rs 1,000 not even one lot's premium
+# fits; over a crore is a typo.
+PAPER_CAPITAL_RANGE = (1_000.0, 1_00_00_000.0)
 
 
 def _log_source():
@@ -82,6 +86,9 @@ class DashboardState:
         # Why today's live start was refused ("" when it was not): shown as the
         # halt reason, with a Retry LIVE button, while the process holds.
         self.start_refused = ""
+        # The paper ledger "Set paper capital" writes while no session runs
+        # (a running engine's own CapitalBook takes it instead).
+        self.paper_ledger = os.path.join(REPO_ROOT, "journal", "capital.json")
         self._hist = None
         self._hist_at = 0.0
         self.started = time.time()
@@ -413,6 +420,9 @@ class DashboardState:
                     "ticks": 0, "tick_rate": 0.0, "passes": 0,
                     "minutes_to_close": 0.0,
                     **self._idle_day_stats(),
+                    # What the next session trades (the tile keeps the last
+                    # day's opening figure until then).
+                    "paper_capital": round(getattr(self, "boot_capital", 0.0), 2),
                     "open_positions": [],
                     "halted": False, "halt_reason": "",
                     "rejects": {}, "structures": {}, "confluence": {},
@@ -448,6 +458,7 @@ class DashboardState:
             "passes": e.passes,
             "minutes_to_close": round(e.book.time_to_close(self.cfg.session_end), 1),
             "capital": s["capital"],
+            "paper_capital": s["capital"],
             "day_pnl": s["day_pnl"],
             "day_pct": s["day_pct"],
             "target_inr": s["target_inr"],
@@ -673,6 +684,45 @@ def make_handler(state):
                     "error": f"systemd-run failed ({r.returncode}): {(r.stderr or '').strip()[:300]}"})
             self._control({"ok": True, "switching_to": target})
 
+        def _paper_capital(self):
+            """Paper only, scalper page only: trade the capital the owner names.
+
+            A running session's ledger takes it at once - the next sizing, the
+            risk cap, the daily target and the loss halt use it. Idle, the
+            paper ledger on disk does, and the next session opens on it.
+            Refused while a position is open: its stop and size were set on
+            the old figure."""
+            if not getattr(state, "intraday_mode", False):
+                return self._control({"ok": False,
+                    "error": "paper capital is set for the intraday scalper only"})
+            if state.mode != "paper":
+                return self._control({"ok": False,
+                    "error": "live trades the account's funds - switch to PAPER to set its capital"})
+            raw = (parse_qs(urlparse(self.path).query).get("capital") or [""])[0]
+            try:
+                amount = float(raw.replace(",", ""))
+            except ValueError:
+                amount = float("nan")
+            lo, hi = PAPER_CAPITAL_RANGE
+            if not lo <= amount <= hi:
+                return self._control({"ok": False,
+                    "error": f"capital must be Rs {lo:,.0f} to Rs {hi:,.0f}, got {raw!r}"})
+            e = getattr(state, "intraday", None)
+            if e is not None and e.book.count():
+                return self._control({"ok": False,
+                    "error": "a position is open - set the capital once it has closed"})
+            if e is not None:
+                traded = e.capital.set_capital(amount)
+                e.log(f"[capital] paper capital set to Rs {traded:,.2f} on the dashboard")
+            else:
+                traded = CapitalBook(amount, path=state.paper_ledger).set_capital(amount)
+                # CapitalBook logs a failed save and carries on; the page must not.
+                if CapitalBook(0.0, path=state.paper_ledger).chosen != round(amount, 2):
+                    return self._control({"ok": False,
+                        "error": f"could not save {state.paper_ledger}"})
+            state.boot_capital = traded
+            self._control({"ok": True, "capital": round(traded, 2)})
+
         def do_POST(self):
             # A web page on another site can make the browser POST here (the
             # controls include switching to LIVE); the dashboard's own buttons
@@ -690,6 +740,8 @@ def make_handler(state):
                         lambda e: e.manual_stop("manual stop (dashboard)"), "stop_trading")
                 elif urlparse(self.path).path == "/api/control/switch_mode":
                     self._switch_mode()
+                elif urlparse(self.path).path == "/api/control/paper_capital":
+                    self._paper_capital()
                 else:
                     self.send_response(404)
                     self.end_headers()

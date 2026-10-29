@@ -64,6 +64,9 @@
   .btn.danger{border-color:var(--danger-border);color:var(--danger-ink);background:var(--danger-bg)}
   .btn.danger:hover{background:var(--danger-bg-hover)}
   .btn:disabled{opacity:.5;cursor:default}
+  .ctlrow.cap{align-items:center}
+  .inp{border:1px solid var(--hair);background:var(--surface);color:var(--ink);
+       padding:6px 8px;font-size:13px;width:140px;border-radius:2px;font-family:inherit}
   .theme-toggle{position:fixed;top:14px;right:16px;border:1px solid var(--hair);
        background:var(--surface);color:var(--ink);padding:5px 10px;font-size:13px;
        cursor:pointer;border-radius:2px;font-family:inherit;z-index:10}
@@ -110,6 +113,14 @@
   <p class="sub" id="closedWarn" style="display:none"></p>
 
   <div class="ctlrow" id="ctl"></div>
+  <!-- Paper only. Its own row, not inside #ctl: that row is rebuilt every
+       second, which would wipe a figure half typed. -->
+  <div class="ctlrow cap" id="paperCap" style="display:none">
+    <label class="muted" for="capIn">Paper capital ₹</label>
+    <input class="inp" id="capIn" type="number" min="1000" step="500" inputmode="numeric">
+    <button class="btn" id="btnCap">Set paper capital</button>
+    <span class="muted" id="capNote"></span>
+  </div>
 
   <div class="grid" id="tiles"></div>
 
@@ -191,6 +202,32 @@ function controls(d){
     alert(res.ok ? "Flattening all open positions." : `Failed: ${res.error}`);
   };
 }
+
+function paperCap(d){
+  const paper = d.mode === "paper";
+  document.getElementById("paperCap").style.display = paper ? "" : "none";
+  if(!paper) return;
+  document.getElementById("capIn").placeholder = String(Math.round(d.paper_capital || 0));
+  document.getElementById("capNote").textContent =
+    `${d.waiting ? "next session trades" : "trading"} ₹${f0(d.paper_capital)} · live is not affected`;
+  document.getElementById("btnCap").disabled = CTL_BUSY;
+}
+document.getElementById("btnCap").onclick = async () => {
+  const inp = document.getElementById("capIn");
+  const v = Math.round(Number(inp.value));
+  if(!(v >= 1000)){ alert("Enter the paper capital in rupees (at least ₹1,000)."); return; }
+  if(!confirm(`Set PAPER capital to ₹${f0(v)}?\n\nPaper sizes on exactly this figure from the next trade, `
+      + `not capped at live's funds; the daily target and loss halt follow it. `
+      + `Trades already closed today still count toward today's halt.\n\nLive is not affected.`)) return;
+  CTL_BUSY = true;
+  const res = await post(`/api/control/paper_capital?capital=${v}`);
+  CTL_BUSY = false;
+  if(res.ok) inp.value = "";
+  alert(res.ok ? `Paper capital set: ₹${f0(res.capital)}.` : `Failed: ${res.error}`);
+};
+document.getElementById("capIn").onkeydown = ev => {
+  if(ev.key === "Enter") document.getElementById("btnCap").click();
+};
 
 function tiles(d){
   const t = [
@@ -352,6 +389,7 @@ async function tick(){
       warn.style.display = "none";
     }
     controls(d);
+    paperCap(d);
     tiles(d);
     const pct = Math.max(0, Math.min(100, d.progress_pct||0));
     const bar = document.getElementById("prog");

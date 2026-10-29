@@ -685,5 +685,73 @@ try:
 except Exception as ex:
     check("refused start shown (raised)", False, repr(ex)[:200])
 
+section("Set paper capital: scalper page, paper only, never with a position open (28 Oct)")
+try:
+    import json
+    import threading as _th
+    import urllib.request as _ur
+    from http.server import ThreadingHTTPServer as _Srv
+    from arb.capital_book import CapitalBook as _CB
+    from arb.dashboard import DashboardState as _DS, make_handler as _mh
+
+    class _C2:
+        session_start, session_end = "09:15", "15:30"
+
+    class _Book:
+        n = 0
+
+        def count(self):
+            return self.n
+
+    class _Eng:
+        def __init__(self, cap):
+            self.capital, self.book, self.logs = cap, _Book(), []
+            self.log = self.logs.append
+
+    with tempfile.TemporaryDirectory() as _d:
+        ds2 = _DS(None, None, None, None, _C2(), "paper", None)
+        ds2.intraday_mode = True
+        ds2.paper_ledger = os.path.join(_d, "capital.json")
+        srv = _Srv(("127.0.0.1", 0), _mh(ds2))
+        _th.Thread(target=srv.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+        def _set(q):
+            req = _ur.Request(f"{base}/api/control/paper_capital?{q}", method="POST")
+            with _ur.urlopen(req, timeout=5) as r:
+                return json.loads(r.read())
+
+        res = _set("capital=50000")
+        check("idle: the paper ledger on disk takes the figure",
+              res.get("ok") and res.get("capital") == 50_000.0
+              and _CB(0.0, path=ds2.paper_ledger).chosen == 50_000.0, str(res))
+        check("...and the idle page shows what the next session trades",
+              ds2.snapshot()["paper_capital"] == 50_000.0)
+        for q in ("capital=abc", "capital=0", "capital=-5", "capital=nan", "capital=1e12", ""):
+            check(f"a bad figure is refused ({q or 'none'})", _set(q).get("ok") is False)
+
+        eng = _Eng(_CB(10_000.0, path=os.path.join(_d, "running.json"), ceiling=13_466.9))
+        ds2.intraday = eng
+        eng.book.n = 1
+        res = _set("capital=25000")
+        check("a position open: refused, capital untouched",
+              res.get("ok") is False and eng.capital.capital == 10_000.0, str(res))
+        eng.book.n = 0
+        res = _set("capital=25,000")
+        check("flat: a running session trades the new figure at once",
+              res.get("ok") and eng.capital.capital == 25_000.0
+              and any("paper capital set" in x for x in eng.logs), str(res))
+
+        ds2.mode = "live"
+        res = _set("capital=30000")
+        check("live: refused, the account's funds decide",
+              res.get("ok") is False and eng.capital.capital == 25_000.0, str(res))
+        ds2.mode, ds2.intraday_mode = "paper", False
+        check("the arbitrage desk: refused, scalper only", _set("capital=30000").get("ok") is False)
+        srv.shutdown()
+        srv.server_close()
+except Exception as ex:
+    check("set paper capital (raised)", False, repr(ex)[:200])
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
