@@ -2033,6 +2033,8 @@ check("09:13, GIFT +190 since the close: min(3, 2 + 90/100 - 0.2) = 2.7 x the si
       g19.get("action") == "raise" and g19.get("favour") == 190.0 and g19.get("mult") == 2.7
       and j19["target_price"] == 283.5 and j19["target_mult"] == 2.7 and g19.get("applied")
       and j19["target_history"][-1]["kind"] == "gift_target", str(g19)[:300])
+check("...on the SIGNAL's price (105), not the buy (106): 2.7 x 105 = 283.50, not 2.7 x 106 = 286.20",
+      j19["signal"]["price"] == 105 and j19["position"]["entry_price"] == 106.0 and j19["target_price"] == 283.5)
 check("...said on Telegram, measured since the entry day's close",
       g19.get("measured") == "since the entry day's close" and any("2.7 x" in x and "283.50" in x for x in sent19))
 reads19 = {r["kind"]: r for r in j19.get("gift_reads") or []}

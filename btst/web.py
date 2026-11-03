@@ -530,7 +530,7 @@ function drawTrades(d){
     const mx = num(hi) && sp ? hi / sp : null, tm_ = r.target_mult, avgd = !!r.added_qty, buy = avgd ? r.avg_price : r.entry_price;
     const raised = g.action === "raise" && g.applied;
     return `${num(mv) ? pts(mv) : "–"}<span class="n">GIFT ${morning ? tm(g.morning_at) : (num(g.night) ? tm(g.night_at) + " (night)" : "")}</span>`
-      + (num(hi) ? `<span class="n">max ${n2(hi)}${mx ? ` = <b>${mx.toFixed(2)}×</b>` : ""}${num(buy) ? ` · <span class="${hi >= buy ? "up" : "down"}">${pc(100 * (hi - buy) / buy)}</span> profit vs the ${avgd ? "average" : "buy"} ${n2(buy)}` : ""}${at ? " · " + tm(at) : ""}</span>` : `<span class="n">max –</span>`)
+      + (num(hi) ? `<span class="n">max ${n2(hi)}${mx ? ` = <b>${mx.toFixed(2)}×</b>` : ""}${num(buy) ? ` · <span class="${hi >= buy ? "up" : "down"}">${pc(100 * (hi - buy) / buy)}</span> profit vs the ${avgd ? "average" : "buy"} ${n2(buy)}` : ""}${num(sp) && sp > 0 ? ` · <span class="${hi >= sp ? "up" : "down"}">${pc(100 * (hi - sp) / sp)}</span> vs the signal ${n2(sp)}` : ""}${at ? " · " + tm(at) : ""}</span>` : `<span class="n">max –</span>`)
       + (num(tm_) ? `<span class="n">that day's target <b>${tm_}×</b> · ${raised ? "raised from " + (g.mult_before || 2) + "×" : "not updated"}${mx ? ` · <b class="${mx >= tm_ ? "up" : "down"}">${mx >= tm_ ? "reached" : "not reached"}</b>` : ""}</span>` : ""); };
   const ext = x => { if (!x) return `<span class="n">–</span>`;
     const hm = s => s ? s.slice(11, 16) + " " + day(s).replace(/^\w+ /, "") : "";
