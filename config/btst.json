@@ -2,7 +2,7 @@
   "port": 9000,
   "principal": 200000,
   "trade_pct": 10,
-  "amount_tolerance_pct": 5,
+  "amount_tolerance_pct": 10,
   "scan_start": "15:15",
   "scan_end": "15:45",
   "market_open": "09:15",

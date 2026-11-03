@@ -6,7 +6,7 @@ the market's hours changed in 2026; the channel posted every October signal at
 15:33 - 15:39); a signal read after it is saved with its reading, not traded. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
 the most lots whose total is below trade_pct (10%) of the principal (Rs
-2,00,000 - owner, 3 Nov 2026; was 1,50,000) + amount_tolerance_pct (5%) - Rs 21,000, the same every trade, no
+2,00,000 - owner, 3 Nov 2026; was 1,50,000) + amount_tolerance_pct (10%; was 5%) - Rs 22,000, the same every trade, no
 compounding; none if one lot costs that much - CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (2 x for every index, SENSEX too - owner, 29 Oct 2026; per index in
 config/btst.json "target_mult"). One BTST a day; no signal,
@@ -365,7 +365,7 @@ class BtstStrategy:
         self._place_target(self.store.get_job(jid), target, "target")
 
     def _size(self, c, ltp):
-        """(lots, why). trade_amount (Rs 15,000) + amount_tolerance_pct (5%),
+        """(lots, why). trade_amount (Rs 20,000) + amount_tolerance_pct (10%),
         the same every trade - no compounding: the most lots whose total is
         below the amount + 5% (owner, 24 Oct 2026); none if one lot is not. With
         no trade_amount, a fixed `lots`."""
