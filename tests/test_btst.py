@@ -176,7 +176,8 @@ def desk(model=None, cfg=None):
     broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None, today=lambda: CLOCK["t"].date())
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
-            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "trail_modify_gap_sec": 0}
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "trail_modify_gap_sec": 0,
+            "gift_target_enabled": False}
     conf.update(cfg or {})
     logs, sent = [], []
     st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "test_channel",
@@ -789,7 +790,8 @@ def desk8():
     br = PaperBtstBroker(pw.price, log=lambda *_: None, watch=pw, today=lambda: CLOCK["t"].date())
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
-            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "manage_poll_sec": 1, "poll_sec": 3}
+            "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "manage_poll_sec": 1, "poll_sec": 3,
+            "gift_target_enabled": False}
     lg = []
     s_ = BtstStrategy(conf, store, br, lambda: MASTER, Model(GOOD), "test_channel", log=lg.append,
                       now=lambda: CLOCK["t"], notifier=SimpleNamespace(send=lambda *_: None),
@@ -992,7 +994,8 @@ def live_desk(day=22, cfg=None):
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
-            "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55", "amo_tries": 3, "amo_retry_sec": 300}
+            "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55", "amo_tries": 3, "amo_retry_sec": 300,
+            "gift_target_enabled": False}
     conf.update(cfg or {})
     lg, sent = [], []
     s_ = BtstStrategy(conf, store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None), lambda: MASTER,
@@ -1980,6 +1983,182 @@ cn2.send("never")
 cn2.stop(wait=5)
 check("...two failures: logged and dropped, the desk goes on", cn2.failed == 1
       and any("not sent to the channel" in x for x in nlog))
+
+section("19. GIFT Nifty from 09:11 to 09:15 sets the target (owner, 3 Nov 2026)")
+GT = {"price": 22600.0, "fail": 0}
+
+
+def gift_at(today):
+    if GT["fail"]:
+        GT["fail"] -= 1
+        raise OSError("nseix down")
+    return {"price": GT["price"], "prev_close": 22550.0, "day_change": GT["price"] - 22550.0, "underlying": 22600.0,
+            "expiry": "27-Oct-2026", "high": GT["price"], "low": 22500.0}
+
+
+def gift_desk(model=None, text=SAMPLE, cfg=None):
+    """Bought at 106 on Thu 22 Oct, signal 105, target 210; GIFT Nifty 22,600 at the close."""
+    at(2026, 10, 22, 15, 16)
+    PRICE["ltp"] = 106.0
+    s_, st_, br_, lg_, sent_ = desk(model=model, cfg={**TIERS, "gift_target_enabled": True, "gift_target_deduct": 0.2,
+                                                      "gift_target_modify_gap_sec": 0, **(cfg or {})})
+    s_.gift_fetch = gift_at
+    GT.update(price=22600.0, fail=0)
+    s_.on_message(msg(3, text, 15, 16))
+    s_.step()
+    at(2026, 10, 22, 15, 50)
+    s_.step()
+    return s_, st_, br_, lg_, sent_
+
+
+def gift_0913(points, model=None, text=SAMPLE, cfg=None):
+    s_, st_, br_, lg_, sent_ = gift_desk(model, text, cfg)
+    GT["price"] = 22600.0 + points
+    at(2026, 10, 23, 9, 13, 2)
+    s_.step()
+    return s_, st_, br_, lg_, sent_
+
+
+s19, st19, br19, lg19, sent19 = gift_desk()
+GT["price"] = 22790.0
+at(2026, 10, 23, 9, 10, 30)
+s19.step()
+check("09:10: not yet - the target is 210, nothing decided", not st19.open_job().get("gift_target")
+      and st19.open_job()["target_price"] == 210.0)
+at(2026, 10, 23, 9, 13, 2)
+s19.step()
+j19 = st19.open_job()
+g19 = j19.get("gift_target") or {}
+check("09:13, GIFT +190 since the close: min(3, 2 + 90/100 - 0.2) = 2.7 x the signal's 105 = 283.50, in at once",
+      g19.get("action") == "raise" and g19.get("favour") == 190.0 and g19.get("mult") == 2.7
+      and j19["target_price"] == 283.5 and j19["target_mult"] == 2.7 and g19.get("applied")
+      and j19["target_history"][-1]["kind"] == "gift_target", str(g19)[:300])
+check("...said on Telegram, measured since the entry day's close",
+      g19.get("measured") == "since the entry day's close" and any("2.7 x" in x and "283.50" in x for x in sent19))
+at(2026, 10, 23, 9, 14)
+s19.step()
+check("...once a trade", len([h for h in st19.open_job()["target_history"] if h["kind"] == "gift_target"]) == 1)
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 120.0
+s19.step()
+j19 = st19.open_job()
+check("the open: the day's target goes in at 283.50, not 210",
+      j19["orders"][-1]["kind"] == "target_day2" and j19["orders"][-1]["price"] == 283.5, str(j19["orders"][-1]))
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 295.0
+s19.step()
+r19 = st19.get_job(j19["job_id"]).get("result") or {}
+check("...and it fills there: CLOSED at 283.50, a target hit", r19.get("exit_price") == 283.5 and r19.get("target_hit"))
+
+for pts, mult, tp in ((160, 2.4, 252.0), (250, 3.0, 315.0)):
+    s_, st_, *_ = gift_0913(pts)
+    j_ = st_.open_job()
+    check(f"GIFT +{pts}: {mult:g} x = {tp:.2f}" + (" (3 x at most)" if mult == 3.0 else " (160 is enough)"),
+          j_["gift_target"]["mult"] == mult and j_["target_price"] == tp, str(j_.get("gift_target"))[:200])
+for pts, what in ((159, "+159: under 160"), (-190, "-190: against our CE")):
+    s_, st_, br_, lg_, sent_ = gift_0913(pts)
+    j_ = st_.open_job()
+    check(f"GIFT {what} - the target stays 210, said so", j_["gift_target"]["action"] == "kept"
+          and j_["target_price"] == 210.0 and any("the target stays 210.00" in x for x in sent_),
+          str(j_.get("gift_target"))[:200])
+
+s_, st_, *_ = gift_0913(190, cfg={"gift_target_deduct": 0.1})
+check("gift_target_deduct is the setting: 0.1 -> 2.8 x = 294.00", st_.open_job()["gift_target"]["mult"] == 2.8
+      and st_.open_job()["target_price"] == 294.0)
+
+pe = SAMPLE.replace("Call Buy 105", "PUT buy 105")
+s_, st_, *_ = gift_0913(-190, model=Model(dict(GOOD, side="PE")), text=pe)
+j_ = st_.open_job()
+check("a PE: GIFT -190 is in its favour - 2.7 x = 283.50", j_["signal"]["side"] == "PE"
+      and j_["gift_target"]["favour"] == 190.0 and j_["target_price"] == 283.5, str(j_.get("gift_target"))[:200])
+
+s_, st_, br_, lg_, sent_ = gift_0913(190)
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 95.0
+s_.step()
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 78.0
+s_.step()
+j_ = st_.open_job()
+check("a top-up works from the new target: -26.4% -> +1 lot @ 78, target 283.50 cut 25% = 212.65, trailing from it",
+      j_["topped_pct"] == 50 and j_["topups"][0]["target_before"] == 283.5 and j_["target_price"] == 212.65
+      and j_["trail"]["initial"] == 212.65 and j_["trail"]["floor"] == 101.2,
+      str({k: j_.get(k) for k in ("target_price", "trail")})[:200])
+at(2026, 10, 23, 10, 30)
+PRICE["ltp"] = 75.5
+s_.step()
+check("...and trails 1 point per point below the buy: 210.65", st_.open_job()["target_price"] == 210.65)
+
+s_, st_, br_, lg_, sent_ = gift_desk()
+GT.update(price=22790.0, fail=1)
+at(2026, 10, 23, 9, 13, 2)
+s_.step()
+check("09:13, NSE IX down: logged, nothing decided yet", not st_.open_job().get("gift_target")
+      and any("GIFT Nifty" in x and "not read" in x for x in lg_))
+at(2026, 10, 23, 9, 13, 12)
+s_.gift_failed_at -= 10
+s_.step()
+check("...not tried again 10 s later (every 20 s)", not st_.open_job().get("gift_target"))
+at(2026, 10, 23, 9, 13, 24)
+s_.gift_failed_at -= 12
+s_.step()
+j_ = st_.open_job()
+check("...read again 22 s after the failure, before the open: 2.7 x = 283.50", j_["gift_target"]["action"] == "raise"
+      and j_["target_price"] == 283.5, str(j_.get("gift_target"))[:200])
+
+s_, st_, br_, lg_, sent_ = gift_desk()
+GT.update(price=22790.0, fail=100)
+at(2026, 10, 23, 9, 13, 2)
+s_.step()
+at(2026, 10, 23, 9, 14, 30)
+s_.gift_failed_at -= 100
+s_.step()
+check("09:14:30, still down: nothing decided", not st_.open_job().get("gift_target"))
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 120.0
+GT["fail"] = 0
+s_.gift_failed_at -= 100
+s_.step()
+j_ = st_.open_job()
+check("not read by 09:15 (the open): the target is not updated - 210 goes in for the day, said so",
+      j_["gift_target"]["action"] == "unread" and j_["target_price"] == 210.0
+      and j_["target_order"]["kind"] == "target_day2" and j_["target_order"]["price"] == 210.0
+      and any("not read by 09:15" in x for x in sent_), str(j_.get("gift_target")))
+at(2026, 10, 23, 9, 16)
+s_.step()
+check("...not read after the open, even with NSE IX back", st_.open_job()["gift_target"]["action"] == "unread"
+      and st_.open_job()["target_price"] == 210.0)
+
+sL, stL, exL, lgL, sentL = live_desk(cfg={"gift_target_enabled": True, "gift_target_deduct": 0.2,
+                                            "gift_target_modify_gap_sec": 0})
+sL.gift_fetch = gift_at
+GT.update(price=22600.0, fail=0)
+at(2026, 10, 22, 15, 45)
+sL.step()
+exL.close_day()
+at(2026, 10, 22, 16, 1)
+sL.step()
+amoL = stL.open_job()["amo"]["order_id"]
+GT["price"] = 22790.0
+at(2026, 10, 23, 9, 13, 2)
+sL.step()
+jL = stL.open_job()
+check("live: the AMO waiting for the open is modified to 283.50 before the open (as an AMO), not a second sell",
+      ("modify", amoL, "AMO", "283.50") in exL.events and jL["target_price"] == 283.5
+      and len(exL.resting_sells()) == 1 and exL.resting_sells()[0]["price"] == 283.5,
+      str([e for e in exL.events if e[0] == "modify"]))
+exL.open_market(120.0)
+at(2026, 10, 23, 9, 15, 5)
+sL.step()
+exL.tick(295.0)
+at(2026, 10, 23, 9, 20)
+sL.step()
+rL = stL.get_job(jL["job_id"]).get("result") or {}
+check("...kept at the open, and it fills at 283.50", rL.get("exit_price") == 283.5 and rL.get("target_hit"), str(rL)[:160])
+
+check("the page has the rule's settings", all(k in web.state(s19, st19)["rules"]
+                                            for k in ("gift_target_at", "gift_target_min_points",
+                                                      "gift_target_max_mult", "gift_target_deduct")))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

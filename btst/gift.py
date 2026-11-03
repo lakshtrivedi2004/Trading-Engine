@@ -7,8 +7,10 @@ last price, its previous close and the day's change. With a trade open it is
 read once at the entry day's close (the baseline) and once at gift_check_at
 (01:00) before the next session; the move between the two, for or against the
 trade's side (a fall is against a CE, a rise against a PE), is logged, sent to
-Telegram and shown on the page. It decides nothing: the open's live price
-already carries it, and the next-day rules act on that (btst/strategy.py).
+Telegram and shown on the page. That read decides nothing. A third, at
+gift_target_at (09:11) on the next session's date, sets the target: 160
+points or more in the trade's favour raise it (owner, 3 Nov 2026 -
+BtstStrategy._gift_target in btst/strategy.py).
 """
 import http.cookiejar
 import json

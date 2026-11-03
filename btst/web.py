@@ -230,6 +230,13 @@ function plan(d, j, p){
   const l1 = R.topup_first_loss_pct, l2 = R.topup_second_loss_pct, half = R.topup_first_pct, cut = R.target_cut_pct, fl = R.floor_target_pct;
   const gift = j.gift_check || j.gift_close;
   const giftRow = gift ? `<tr><td>GIFT Nifty</td><td>${n2(gift.price)}${num(gift.move) ? ` · ${gift.move > 0 ? "+" : ""}${n0(gift.move)} points ${esc(gift.measured || "")} · <b class="${gift.verdict === "against" ? "down" : (gift.verdict === "with" ? "up" : "")}">${esc(gift.verdict)}</b> our ${esc((j.signal || {}).side)}` : " · the close (baseline)"} · ${tm(gift.at)} (information only)</td></tr>` : "";
+  const gt = j.gift_target, side = esc((j.signal || {}).side), gmin = R.gift_target_min_points;
+  const gtRow = !gt ? `<tr><td>GIFT ${esc(R.gift_target_at)}</td><td>${gmin}+ points for our ${side}: target = min(${R.gift_target_max_mult}, ${j.target_mult || 2} + (points − 100)/100 − ${R.gift_target_deduct}) × the signal's price; under ${gmin}, or not read by ${esc(R.gift_target_until)}, it stays</td></tr>`
+    : `<tr><td>GIFT ${tms(gt.at)}</td><td>${num(gt.favour) ? `${gt.favour > 0 ? "+" : ""}${n0(gt.favour)} points ${esc(gt.measured || "")} for our ${side} · ` : ""}${
+      gt.action === "raise" ? `<b class="up">target ${n2(gt.target_before)} → ${n2(gt.target)}</b> (${gt.mult}× the signal's price)${gt.applied ? "" : " · being put in"}`
+      : gt.action === "unread" ? "not read in time - the target stayed"
+      : gt.action === "dropped" ? `the raise to ${n2(gt.target)} came after a top-up - not used`
+      : `under ${gmin} - the target stays ${n2(gt.target_before)}`}</td></tr>`;
   if (j.decision){
     const dec = j.decision, tr = j.trail, ups = j.topups || [];
     return `<div class="plan"><div class="k">Today's plan — live from ${esc(R.market_open)}</div><table>
@@ -238,14 +245,14 @@ function plan(d, j, p){
       ${(j.topped_pct || 0) < 100 ? `<tr><td>${(j.topped_pct || 0) ? "At" : "At"} ${n2(base * (1 - ((j.topped_pct || 0) ? l2 : l1) / 100))}</td><td>${(j.topped_pct || 0) ? `(-${l2}%) add the other ${n0(100 - j.topped_pct)}% → target = new average + ${fl}%` : `(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}) → target cut ${cut}%, then -1 per point, floor average + ${fl}%; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}</td></tr>` : ""}
       ${tr ? `<tr><td>Trailing</td><td>${tr.active ? "on" : "stopped"}: from ${n2(tr.initial)}, 1 point per point below ${n2(tr.ref)} (lowest ${n2(tr.low)}), floor ${n2(tr.floor)} · ${(tr.steps || []).length} step(s)${tr.stop_reason ? " · " + esc(tr.stop_reason) : ""}</td></tr>` : ""}
       <tr><td>Target</td><td>${n2(t)} — sells the whole position (${n0(p.qty)}) when reached</td></tr>
-      <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr>${giftRow}</table></div>`;
+      <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
   }
   return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}</div><table>
     <tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}</td></tr>
     <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}); target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%</td></tr>
     <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}%; target = the new average + ${fl}%</td></tr>
     <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (≈${rsp(first)}) at once; target = the new average + ${fl}%</td></tr>
-    <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}</table></div>`;
+    <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
 }
 
 const CHARTS = {}, CHART_AT = {};

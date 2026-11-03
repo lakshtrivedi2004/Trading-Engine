@@ -6,7 +6,7 @@ the market's hours changed in 2026; the channel posted every October signal at
 15:33 - 15:39); a signal read after it is saved with its reading, not traded. A BTST signal (btst/signal.py) is entered at
 market - the option it names, nearest expiry after today (btst/contracts.py),
 the most lots whose total is below trade_pct (10%) of the principal (Rs
-1,50,000) + amount_tolerance_pct (5%) - Rs 15,750, the same every trade, no
+2,00,000 - owner, 3 Nov 2026; was 1,50,000) + amount_tolerance_pct (5%) - Rs 21,000, the same every trade, no
 compounding; none if one lot costs that much - CARRYFORWARD - and a target LIMIT sell is placed at target_mult x
 the signal's price (2 x for every index, SENSEX too - owner, 29 Oct 2026; per index in
 config/btst.json "target_mult"). One BTST a day; no signal,
@@ -21,7 +21,12 @@ Day D+1 (the next trading day), tracked live from the open (owner, 26 Oct
     already down 50% when first seen (a gap down): add 100%; target =
         the new average + 10%
 GIFT Nifty is read at the entry day's close and at gift_check_at (01:00) and
-reported - information only (btst/gift.py).
+reported - information only (btst/gift.py). Read again at gift_target_at
+(09:11) on D+1, it sets the target (owner, 3 Nov 2026): g points in the
+trade's favour (up for a CE, down for a PE) under gift_target_min_points
+(160) - the target stays; from 160 - min(3, 2 + (g - 100) / 100 - d) x the
+signal's price, d gift_target_deduct (0.2: 190 points, 2.7 x). The top-ups
+and the trailing above then work from that target as from the 2 x.
 Every target change (placed, AMO, trailed, replaced) is kept on the job
 (target_history), and the trailing state (trail) with each step.
 The exchange cancels every order at the close. Live, the target goes back in
@@ -60,7 +65,8 @@ RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_
                  "trail_step_points": 1.0, "amo_at": "17:00", "market_open": "09:15", "market_close": "15:45",
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0,
                  "principal": 0, "trade_pct": 10.0,
-                 "gift_check_at": "01:00"}
+                 "gift_check_at": "01:00", "gift_target_at": "09:11", "gift_target_min_points": 160.0,
+                 "gift_target_max_mult": 3.0, "gift_target_deduct": 0.2, "gift_target_until": "09:15"}
 
 
 def _no_channel(job):
@@ -106,6 +112,7 @@ class BtstStrategy:
         self.last_offhours_price = 0.0     # 0: the first pass after a start fetches at once
         self.gift_fetch = G.fetch           # GIFT Nifty (btst/gift.py); tests replace it
         self.gift_failed_at = 0.0
+        self.gift_target_try_at = 0.0       # the last try at putting a raised target in (_gift_target)
         self.recorder = recorder            # btst/recorder.py: every price of a trade's option
         self.candles_fn = candles           # (contract, from, to) -> 1-minute bars, to fill gaps
         self.rec_jobs, self.rec_map, self.rec_checked, self.rec_failed = [], {}, 0.0, {}
@@ -379,7 +386,7 @@ class BtstStrategy:
                    f"({where} the band Rs {lo:,.0f} - {hi:,.0f}; always below Rs {hi:,.0f})")
 
     def trade_amount(self):
-        """Rs per trade: trade_pct (10%) of the principal (Rs 1,50,000) - the
+        """Rs per trade: trade_pct (10%) of the principal (Rs 2,00,000) - the
         STARTING principal, so every trade is the same (no compounding); an
         explicit trade_amount if there is no principal."""
         principal = float(self.c("principal", 0) or 0)
@@ -461,6 +468,10 @@ class BtstStrategy:
                               f"closing at market now", "WARN")
             self._exit_market(job, "overdue_exit")
             return
+        if self._gift_target(job):              # not read by 09:15 (the desk down, NSE IX down): it stays
+            job = self.store.get_job(jid) or job
+            if job.get("status") != "open":
+                return
         if not job.get("decision"):
             self._session_start(job, ltp)       # the open: the target back in, the rules armed
             return
@@ -943,6 +954,7 @@ class BtstStrategy:
     def _after_close(self, job):
         self._amo_check(job)
         self._gift(job)
+        self._gift_target(job)
 
     # ── recording a trade's prices (btst/recorder.py) ──────────────────────
     def _start_recording(self, jid, c, start_iso, trade_day):
@@ -1176,15 +1188,16 @@ class BtstStrategy:
         return out
 
     # ── GIFT Nifty, information only (btst/gift.py) ────────────────────────
-    def _gift_read(self, what):
-        if time.time() - self.gift_failed_at < float(self.c("gift_retry_sec", 300)):
+    def _gift_read(self, what, retry_sec=None, note="nothing depends on it"):
+        gap = float(self.c("gift_retry_sec", 300) if retry_sec is None else retry_sec)
+        if time.time() - self.gift_failed_at < gap:
             return None
         try:
             return self.gift_fetch(self.now().date())
         except Exception as e:
             self.gift_failed_at = time.time()
-            self._log("gift", f"GIFT Nifty {what} not read ({e!r}) - trying again in "
-                              f"{float(self.c('gift_retry_sec', 300)) / 60:g} min; nothing depends on it", "WARN")
+            self._log("gift", f"GIFT Nifty {what} not read ({e!r}) - trying again in {gap / 60:g} min; {note}",
+                      "WARN")
             return None
 
     def _gift(self, job):
@@ -1223,6 +1236,105 @@ class BtstStrategy:
                       "with": f"with our {side}", "flat": "flat"}[verdict])
                   + "; the live rules act on the open's price (information only)",
                   jid, True, "gift", "WARN" if verdict == "against" else "INFO")
+
+    def _gift_target(self, job):
+        """Owner, 3 Nov 2026: GIFT Nifty at gift_target_at (09:11) on the next
+        session's date sets the target. Its move since the entry day's close
+        (else on the day), g points in the trade's favour (up for a CE, down
+        for a PE): under gift_target_min_points (160) the target stays; from
+        160 it becomes min(gift_target_max_mult (3), m + (g - 100) / 100 - d)
+        x the signal's price, m the trade's multiple (2), d gift_target_deduct
+        (0.2; 0.1 at first - owner, 3 Nov 2026) - 190 points: 2.7 x.
+        Only ever up, once a trade, never after a top-up. A failed read is
+        tried again (gift_target_retry_sec, 20 s) until gift_target_until
+        (09:15, the open - owner, 3 Nov 2026); not read by then, the target
+        stays. True if it changed the job."""
+        if not self.c("gift_enabled", True) or not self.c("gift_target_enabled", True):
+            return False
+        gt = job.get("gift_target") or {}
+        if gt and (gt.get("action") != "raise" or gt.get("applied")):
+            return False
+        now, jid = self.now(), job["job_id"]
+        t = _secs(now)
+        if (now.date() != self._next_session(datetime.fromisoformat(job["trade_date"]).date())
+                or t < _hm(self.c("gift_target_at", "09:11")) or job.get("status") != "open"):
+            return False
+        if job.get("topups"):
+            if not gt:
+                return False
+            self.store.update_job(jid, set_={"gift_target": dict(gt, action="dropped", dropped_at=self._ts())})
+            self._say(f"the GIFT Nifty target {gt['target']:.2f} was not placed before the top-up - the top-up's "
+                      f"target stands", jid, True, "gift", "WARN")
+            return True
+        if not gt:
+            until = self.c("gift_target_until", "09:15")
+            if t >= _hm(until):
+                self.store.update_job(jid, set_={"gift_target": {"at": self._ts(), "action": "unread"}})
+                self._say(f"GIFT Nifty not read by {until} - the target stays {float(job['target_price']):.2f}",
+                          jid, True, "gift", "WARN")
+                return True
+            q = self._gift_read("for the target", self.c("gift_target_retry_sec", 20),
+                                f"the target stays {float(job['target_price']):.2f} until it is read")
+            if not q:
+                return False
+            gt = self._gift_rule(job, q)
+            self.store.update_job(jid, set_={"gift_target": gt})
+            job["gift_target"] = gt
+            side = (job.get("signal") or {}).get("side", "")
+            pts = (f"{gt['favour']:+.0f} points {gt['measured']} for our {side}" if gt["favour"] is not None
+                   else "no move readable")
+            if gt["action"] != "raise":
+                self._say(f"GIFT Nifty {q['price']:,.1f}: {pts} - "
+                          + (f"under {gt['min_points']:g}" if gt.get("mult") is None
+                             else f"{gt['mult']:g} x = {gt['target']:.2f} is not above it")
+                          + f", the target stays {gt['target_before']:.2f}", jid, True, "gift")
+                return True
+            self._say(f"GIFT Nifty {q['price']:,.1f}: {pts} (>= {gt['min_points']:g}) - target {gt['mult_before']:g} "
+                      f"x -> {gt['mult']:g} x the signal's {float(job['signal']['price']):g} = {gt['target']:.2f} "
+                      f"(was {gt['target_before']:.2f}); the top-ups and trailing work from it", jid, True, "gift",
+                      "TRADE")
+        if time.time() - self.gift_target_try_at < float(self.c("gift_target_modify_gap_sec", 10)):
+            return False
+        self.gift_target_try_at = time.time()
+        return self._apply_gift_target(job, gt)
+
+    def _gift_rule(self, job, q):
+        """The decision for a GIFT Nifty quote `q` (see _gift_target)."""
+        base = (job.get("gift_close") or {}).get("price")
+        move = q["price"] - base if base else q.get("day_change")
+        side = (job.get("signal") or {}).get("side", "")
+        favour = None if move is None else round(move if side == "CE" else -move, 2)
+        lo = float(self.c("gift_target_min_points", 160.0))
+        m0 = float(job.get("target_mult") or self.target_mult((job.get("signal") or {}).get("indices")))
+        cur = float(job["target_price"])
+        rec = dict(q, at=self._ts(), base=base, move=round(move, 2) if move is not None else None, favour=favour,
+                   measured="since the entry day's close" if base else "on the day (NSE IX)", min_points=lo,
+                   mult_before=m0, target_before=cur, mult=None, target=cur, action="kept", applied=False)
+        if favour is None or favour < lo:
+            return rec
+        mult = round(min(float(self.c("gift_target_max_mult", 3.0)),
+                         m0 + (favour - 100.0) / 100.0 - float(self.c("gift_target_deduct", 0.2))), 4)
+        target = tick_round(float(job["signal"]["price"]) * mult, job["contract"]["tick"], up=True)
+        return dict(rec, mult=mult, target=target, action="raise" if target > cur + 1e-9 else "kept")
+
+    def _apply_gift_target(self, job, gt):
+        """The raised target in: the resting sell modified (the AMO before the
+        open, live), or - none resting (paper before the open: yesterday's DAY
+        target died) - the price the open places. True once it is in."""
+        jid, price, cur = job["job_id"], float(gt["target"]), float(job["target_price"])
+        why = f"GIFT Nifty {gt['favour']:+.0f} points {gt['measured']}: {gt['mult']:g} x the signal's price"
+        st = self._target_state(job)
+        if st and st["status"] == "complete":
+            return False                        # filled at the old price: _manage closes it as a target hit
+        if st is None or st["final"]:
+            self.store.update_job(jid, set_={"target_price": price})
+            self._history(jid, "gift_target", price=price, previous=cur, why=why)
+            self._log("gift", f"target {cur:.2f} -> {price:.2f} ({why}) - placed at that price at the open", "TRADE")
+        elif not self._move_target(job, price, "gift_target", why):
+            return False                        # refused: tried again shortly
+        self.store.update_job(jid, set_={"target_mult": gt["mult"],
+                                         "gift_target": dict(gt, applied=True, applied_at=self._ts())})
+        return True
 
     def _offhours_price(self, job):
         """The market shut, a trade open: its last traded price from Angel at
