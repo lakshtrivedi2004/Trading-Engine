@@ -134,9 +134,17 @@ def by_day(jobs, quiet_days=()):
         row["extremes"] = ext
         row["topups"] = j.get("topups") or []
         row["missed_topups"] = j.get("missed_topups") or []
+        gc, gn, gm = j.get("gift_close") or {}, j.get("gift_check") or {}, j.get("gift_target") or {}
+        row["gift"] = ({"close": gc.get("price"), "close_at": gc.get("at"),            # the entry day's close
+                        "night": gn.get("price"), "night_at": gn.get("at"), "night_move": gn.get("move"),
+                        "morning": gm.get("price"), "morning_at": gm.get("at"), "move": gm.get("move"),
+                        "points": gm.get("favour"), "measured": gm.get("measured"), "action": gm.get("action"),
+                        "mult": gm.get("mult"), "target_before": gm.get("target_before"), "target": gm.get("target"),
+                        "applied": gm.get("applied"), "tries": gm.get("tries")}
+                       if gc or gn or gm else None)
         if k < 30:                                  # the newest trades carry their whole story
             row["timeline"] = {"events": j.get("events") or [], "targets": j.get("target_history") or [],
-                               "amo": j.get("amo_history") or [],
+                               "amo": j.get("amo_history") or [], "gift": j.get("gift_reads") or [],
                                "orders": [{x: o.get(x) for x in ("kind", "side", "qty", "price_sent", "avg_price",
                                                                   "filled", "status", "order_id", "variety", "at",
                                                                   "error", "duration")}

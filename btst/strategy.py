@@ -1188,28 +1188,47 @@ class BtstStrategy:
         return out
 
     # ── GIFT Nifty, information only (btst/gift.py) ────────────────────────
-    def _gift_read(self, what, retry_sec=None, note="nothing depends on it"):
+    def _gift_read(self, what, retry_sec=None, note="nothing depends on it", jid=None, kind=None):
         gap = float(self.c("gift_retry_sec", 300) if retry_sec is None else retry_sec)
         if time.time() - self.gift_failed_at < gap:
             return None
         try:
-            return self.gift_fetch(self.now().date())
+            q = self.gift_fetch(self.now().date())
         except Exception as e:
             self.gift_failed_at = time.time()
             self._log("gift", f"GIFT Nifty {what} not read ({e!r}) - trying again in {gap / 60:g} min; {note}",
                       "WARN")
+            self._gift_saved(jid, kind, error=repr(e))
             return None
+        self._gift_saved(jid, kind, q=q)
+        return q
+
+    def _gift_saved(self, jid, kind, q=None, error=None):
+        """Every GIFT Nifty read for a trade kept on its job (gift_reads, owner 3
+        Nov 2026): close / night / morning, the quote - or why there is none."""
+        if not jid:
+            return
+        rec = {"at": self._ts(), "kind": kind, "ok": q is not None}
+        if q is not None:
+            rec.update({k: q.get(k) for k in ("price", "day_change", "prev_close", "expiry", "high", "low")})
+        else:
+            rec["error"] = error
+        try:
+            self.store.update_job(jid, push={"gift_reads": rec})
+        except Exception as e:
+            self._log("mongo", f"GIFT Nifty read for {jid} not saved: {e!r}", "ERROR")
 
     def _gift(self, job):
         """The entry day's close: GIFT Nifty's baseline. gift_check_at (01:00)
-        on the next session's date: its move since, for or against the trade."""
+        on the next session's date: its move since, for or against the trade -
+        tried until the morning read (_gift_target) starts at 09:11."""
         if not self.c("gift_enabled", True):
             return
         now = self.now()
         jid, trade_day = job["job_id"], datetime.fromisoformat(job["trade_date"]).date()
         t = _secs(now)
         if now.date() == trade_day and t >= _hm(self.c("market_close", "15:45")) and not job.get("gift_close"):
-            q = self._gift_read("at the close")
+            q = self._gift_read("at the close", jid=jid, kind="close")
             if q:
                 self.store.update_job(jid, set_={"gift_close": dict(q, at=self._ts())})
                 self._log("gift", f"GIFT Nifty at the close: {q['price']:,.1f} ({q['expiry']} future; day change "
@@ -1217,10 +1236,12 @@ class BtstStrategy:
                                   f"check")
             return
         planned = self._next_session(trade_day)
+        stop = (self.c("gift_target_at", "09:11") if self.c("gift_target_enabled", True)   # the morning read takes over
+                else self.c("market_open", "09:15"))
         if (now.date() != planned or job.get("gift_check") or t < _hm(self.c("gift_check_at", "01:00"))
-                or t >= _hm(self.c("market_open", "09:15"))):
+                or t >= _hm(stop)):
             return
-        q = self._gift_read("check")
+        q = self._gift_read("check", jid=jid, kind="night")
         if not q:
             return
         base = (job.get("gift_close") or {}).get("price")
@@ -1269,12 +1290,16 @@ class BtstStrategy:
         if not gt:
             until = self.c("gift_target_until", "09:15")
             if t >= _hm(until):
-                self.store.update_job(jid, set_={"gift_target": {"at": self._ts(), "action": "unread"}})
+                tries = [r for r in job.get("gift_reads") or [] if r.get("kind") == "morning"]
+                self.store.update_job(jid, set_={"gift_target": {"at": self._ts(), "action": "unread",
+                                                                 "tries": len(tries),
+                                                                 "error": tries[-1].get("error") if tries else None}})
                 self._say(f"GIFT Nifty not read by {until} - the target stays {float(job['target_price']):.2f}",
                           jid, True, "gift", "WARN")
                 return True
             q = self._gift_read("for the target", self.c("gift_target_retry_sec", 20),
-                                f"the target stays {float(job['target_price']):.2f} until it is read")
+                                f"the target stays {float(job['target_price']):.2f} until it is read",
+                                jid=jid, kind="morning")
             if not q:
                 return False
             gt = self._gift_rule(job, q)

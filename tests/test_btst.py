@@ -2035,6 +2035,16 @@ check("09:13, GIFT +190 since the close: min(3, 2 + 90/100 - 0.2) = 2.7 x the si
       and j19["target_history"][-1]["kind"] == "gift_target", str(g19)[:300])
 check("...said on Telegram, measured since the entry day's close",
       g19.get("measured") == "since the entry day's close" and any("2.7 x" in x and "283.50" in x for x in sent19))
+reads19 = {r["kind"]: r for r in j19.get("gift_reads") or []}
+check("every GIFT Nifty read kept on the job: the close 22,600 and the morning 22,790 (price, day change, expiry)",
+      reads19.get("close", {}).get("price") == 22600.0 and reads19.get("morning", {}).get("price") == 22790.0
+      and reads19["morning"]["ok"] and reads19["morning"]["day_change"] == 240.0
+      and reads19["morning"]["expiry"] == "27-Oct-2026", str(j19.get("gift_reads"))[:300])
+row19 = next(r for r in stats.by_day([j19]) if r.get("job_id") == j19["job_id"])
+check("...and in the trades table's row: morning 22,790, +190, target 210 -> 283.50 at 2.7 x, the close 22,600",
+      row19["gift"]["morning"] == 22790.0 and row19["gift"]["move"] == 190.0 and row19["gift"]["action"] == "raise"
+      and row19["gift"]["target_before"] == 210.0 and row19["gift"]["target"] == 283.5 and row19["gift"]["mult"] == 2.7
+      and row19["gift"]["close"] == 22600.0 and row19["timeline"]["gift"] == j19["gift_reads"], str(row19["gift"]))
 at(2026, 10, 23, 9, 14)
 s19.step()
 check("...once a trade", len([h for h in st19.open_job()["target_history"] if h["kind"] == "gift_target"]) == 1)
@@ -2095,6 +2105,9 @@ at(2026, 10, 23, 9, 13, 2)
 s_.step()
 check("09:13, NSE IX down: logged, nothing decided yet", not st_.open_job().get("gift_target")
       and any("GIFT Nifty" in x and "not read" in x for x in lg_))
+check("...the failed read kept on the job too, with its error",
+      any(not r["ok"] and "nseix down" in r["error"] for r in st_.open_job().get("gift_reads") or []),
+      str(st_.open_job().get("gift_reads")))
 at(2026, 10, 23, 9, 13, 12)
 s_.gift_failed_at -= 10
 s_.step()
@@ -2124,6 +2137,8 @@ check("not read by 09:15 (the open): the target is not updated - 210 goes in for
       j_["gift_target"]["action"] == "unread" and j_["target_price"] == 210.0
       and j_["target_order"]["kind"] == "target_day2" and j_["target_order"]["price"] == 210.0
       and any("not read by 09:15" in x for x in sent_), str(j_.get("gift_target")))
+check("...with how many morning reads were tried, and the last error", j_["gift_target"]["tries"] >= 2
+      and "nseix down" in j_["gift_target"]["error"], str(j_["gift_target"]))
 at(2026, 10, 23, 9, 16)
 s_.step()
 check("...not read after the open, even with NSE IX back", st_.open_job()["gift_target"]["action"] == "unread"
