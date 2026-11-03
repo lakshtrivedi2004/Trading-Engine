@@ -113,6 +113,7 @@ class BtstStrategy:
         self.gift_fetch = G.fetch           # GIFT Nifty (btst/gift.py); tests replace it
         self.gift_failed_at = 0.0
         self.gift_target_try_at = 0.0       # the last try at putting a raised target in (_gift_target)
+        self.gift_fails = {}                # job_id -> (morning GIFT reads failed, the last error)
         self.recorder = recorder            # btst/recorder.py: every price of a trade's option
         self.candles_fn = candles           # (contract, from, to) -> 1-minute bars, to fill gaps
         self.rec_jobs, self.rec_map, self.rec_checked, self.rec_failed = [], {}, 0.0, {}
@@ -1198,21 +1199,21 @@ class BtstStrategy:
             self.gift_failed_at = time.time()
             self._log("gift", f"GIFT Nifty {what} not read ({e!r}) - trying again in {gap / 60:g} min; {note}",
                       "WARN")
-            self._gift_saved(jid, kind, error=repr(e))
+            if jid and kind == "morning":       # counted, not saved: the record says how many tries failed
+                n, _ = self.gift_fails.get(jid, (0, None))
+                self.gift_fails[jid] = (n + 1, repr(e))
             return None
-        self._gift_saved(jid, kind, q=q)
+        self._gift_saved(jid, kind, q)
         return q
 
-    def _gift_saved(self, jid, kind, q=None, error=None):
-        """Every GIFT Nifty read for a trade kept on its job (gift_reads, owner 3
-        Nov 2026): close / night / morning, the quote - or why there is none."""
+    def _gift_saved(self, jid, kind, q):
+        """A GIFT Nifty price fetched for a trade, kept on its job once
+        (gift_reads, owner 3 Nov 2026): close / night / morning. A failed try
+        is not saved."""
         if not jid:
             return
-        rec = {"at": self._ts(), "kind": kind, "ok": q is not None}
-        if q is not None:
-            rec.update({k: q.get(k) for k in ("price", "day_change", "prev_close", "expiry", "high", "low")})
-        else:
-            rec["error"] = error
+        rec = dict({k: q.get(k) for k in ("price", "day_change", "prev_close", "expiry", "high", "low")},
+                   at=self._ts(), kind=kind)
         try:
             self.store.update_job(jid, push={"gift_reads": rec})
         except Exception as e:
@@ -1290,10 +1291,9 @@ class BtstStrategy:
         if not gt:
             until = self.c("gift_target_until", "09:15")
             if t >= _hm(until):
-                tries = [r for r in job.get("gift_reads") or [] if r.get("kind") == "morning"]
+                tries, err = self.gift_fails.get(jid, (0, None))
                 self.store.update_job(jid, set_={"gift_target": {"at": self._ts(), "action": "unread",
-                                                                 "tries": len(tries),
-                                                                 "error": tries[-1].get("error") if tries else None}})
+                                                                 "tries": tries, "error": err}})
                 self._say(f"GIFT Nifty not read by {until} - the target stays {float(job['target_price']):.2f}",
                           jid, True, "gift", "WARN")
                 return True

@@ -115,6 +115,7 @@ def by_day(jobs, quiet_days=()):
             "exit_at": r.get("closed_at"), "net_pnl": r.get("net_pnl"), "pnl_pct": r.get("pnl_pct"),
             "charges": r.get("charges"), "held_hours": r.get("held_hours"), "mfe_pct": r.get("mfe_pct"),
             "mae_pct": r.get("mae_pct"), "reason": j.get("reject_reason", ""),
+            "signal_price": s.get("price"), "target_mult": j.get("target_mult"),
         }
         ext = (j.get("recording") or {}).get("extremes")
         if not ext and avg and p.get("qty"):        # no recording: the high / low seen while the trade was open
@@ -139,7 +140,7 @@ def by_day(jobs, quiet_days=()):
                         "night": gn.get("price"), "night_at": gn.get("at"), "night_move": gn.get("move"),
                         "morning": gm.get("price"), "morning_at": gm.get("at"), "move": gm.get("move"),
                         "points": gm.get("favour"), "measured": gm.get("measured"), "action": gm.get("action"),
-                        "mult": gm.get("mult"), "target_before": gm.get("target_before"), "target": gm.get("target"),
+                        "mult": gm.get("mult"), "mult_before": gm.get("mult_before"), "target_before": gm.get("target_before"), "target": gm.get("target"),
                         "applied": gm.get("applied"), "tries": gm.get("tries")}
                        if gc or gn or gm else None)
         if k < 30:                                  # the newest trades carry their whole story

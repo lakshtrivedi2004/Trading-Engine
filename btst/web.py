@@ -502,13 +502,13 @@ function detail(r){
   return ((r.topups || []).length ? `<h4>Top-ups</h4>` + topupTable(r.topups, false) : "")
     + `<h4>Timeline</h4>` + tbl(["Time", "What happened"], t.events.map(e => `<tr><td>${tms(e.at)}</td><td class="l">${esc(e.text)}</td></tr>`))
     + `<h4>Target history</h4>` + tbl(["Time", "Kind", "Price", "From", "Order", "Status", "Why"], t.targets.map(h => `<tr><td>${tms(h.at)}</td><td class="l">${esc(h.kind)}</td><td>${n2(h.price)}</td><td>${n2(h.previous)}</td><td class="l">${esc(h.order_id || (h.watched ? "watched" : ""))}</td><td class="l">${esc(h.status || (h.ok === false ? "refused" : ""))}</td><td class="l">${esc(h.why || h.error || "")}</td></tr>`))
-    + `<h4>GIFT Nifty reads</h4>` + tbl(["Time", "Read", "Price", "Day change", "Previous close", "Expiry", "Error"], (t.gift || []).map(g => `<tr><td>${tms(g.at)}</td><td class="l">${esc({close: "entry day's close", night: "night (information)", morning: "morning (target)"}[g.kind] || g.kind || "")}</td><td>${g.ok ? n2(g.price) : "–"}</td><td>${num(g.day_change) ? (g.day_change > 0 ? "+" : "") + n2(g.day_change) : ""}</td><td>${n2(g.prev_close)}</td><td class="l">${esc(g.expiry || "")}</td><td class="l">${esc(g.error || "")}</td></tr>`))
+    + `<h4>GIFT Nifty reads</h4>` + tbl(["Time", "Read", "Price", "Day change", "Previous close", "Expiry"], (t.gift || []).map(g => `<tr><td>${tms(g.at)}</td><td class="l">${esc({close: "entry day's close", night: "night (information)", morning: "morning (target)"}[g.kind] || g.kind || "")}</td><td>${n2(g.price)}</td><td>${num(g.day_change) ? (g.day_change > 0 ? "+" : "") + n2(g.day_change) : ""}</td><td>${n2(g.prev_close)}</td><td class="l">${esc(g.expiry || "")}</td></tr>`))
     + `<h4>AMO checks</h4>` + tbl(["Time", "For", "Action", "Order", "Status", "Why / error"], t.amo.map(a => `<tr><td>${tms(a.at)}</td><td class="l">${esc(a.slot)}</td><td class="l">${esc(a.action)}</td><td class="l">${esc(a.order_id || "")}</td><td class="l">${esc(a.status || "")}</td><td class="l">${esc(a.why || a.error || "")}</td></tr>`))
     + `<h4>Orders</h4>` + tbl(["Time", "Kind", "Side", "Qty", "Price", "Filled", "Status", "Order", "Error"], t.orders.map(o => `<tr><td>${tms(o.at)}</td><td class="l">${esc(o.kind)}${o.variety === "AMO" ? ' <span class="tag">AMO</span>' : ""}</td><td class="l">${esc(o.side || "")}</td><td>${n0(o.qty)}</td><td>${n2(o.price_sent)}</td><td>${o.filled ? n0(o.filled) + " @ " + n2(o.avg_price) : ""}</td><td class="l">${esc(o.status || "")}</td><td class="l">${esc(o.order_id || "")}</td><td class="l">${esc(o.error || "")}</td></tr>`));
 }
 
 function drawTrades(d){
-  const rows = d.days || [], COLS = 12, GR = d.rules || {};
+  const rows = d.days || [], COLS = 13, GR = d.rules || {};
   const pts = x => num(x) ? `${x > 0 ? "+" : ""}${n0(x)} pts` : "";
   const giftCell = g => { if (!g) return `<span class="n">–</span>`;
     let h = "";
@@ -520,6 +520,18 @@ function drawTrades(d){
     else if (num(g.night)) h = `${n2(g.night)}<span class="n">${tm(g.night_at)}${num(g.night_move) ? " · " + pts(g.night_move) : ""} · information only</span>`;
     if (num(g.close)) h += `<span class="n">close ${n2(g.close)}</span>`;
     return h || `<span class="n">–</span>`; };
+  // GIFT Nifty's morning move against how far the option went the next day - a multiple of the signal's price,
+  // after the exit too (a recording saved before day2_high existed: its overall high, when that was the next day)
+  const vsCell = r => { const g = r.gift || {}, x = r.extremes || {}, sp = r.signal_price;
+    const morning = num(g.morning), mv = morning ? g.move : g.night_move;
+    let hi = x.day2_high, at = x.day2_high_at;
+    if (!num(hi) && num(x.high) && String(x.high_at || "").slice(0, 10) > (r.date || "")) { hi = x.high; at = x.high_at; }
+    if (!num(mv) && !num(hi)) return `<span class="n">–</span>`;
+    const mx = num(hi) && sp ? hi / sp : null, tm_ = r.target_mult, avgd = !!r.added_qty, buy = avgd ? r.avg_price : r.entry_price;
+    const raised = g.action === "raise" && g.applied;
+    return `${num(mv) ? pts(mv) : "–"}<span class="n">GIFT ${morning ? tm(g.morning_at) : (num(g.night) ? tm(g.night_at) + " (night)" : "")}</span>`
+      + (num(hi) ? `<span class="n">max ${n2(hi)}${mx ? ` = <b>${mx.toFixed(2)}×</b>` : ""}${num(buy) ? ` · <span class="${hi >= buy ? "up" : "down"}">${pc(100 * (hi - buy) / buy)}</span> profit vs the ${avgd ? "average" : "buy"} ${n2(buy)}` : ""}${at ? " · " + tm(at) : ""}</span>` : `<span class="n">max –</span>`)
+      + (num(tm_) ? `<span class="n">that day's target <b>${tm_}×</b> · ${raised ? "raised from " + (g.mult_before || 2) + "×" : "not updated"}${mx ? ` · <b class="${mx >= tm_ ? "up" : "down"}">${mx >= tm_ ? "reached" : "not reached"}</b>` : ""}</span>` : ""); };
   const ext = x => { if (!x) return `<span class="n">–</span>`;
     const hm = s => s ? s.slice(11, 16) + " " + day(s).replace(/^\w+ /, "") : "";
     const tag = a => a ? ` <span class="tag" title="after the trade was closed">after exit</span>` : "";
@@ -530,7 +542,7 @@ function drawTrades(d){
       + `<span class="n" title="${esc((x.basis || "") + (x.candle_minutes ? " - " + x.candle_minutes + " minute(s) from Angel's 1-minute candles (the desk down or the socket silent)" : ""))}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}${x.candle_minutes ? " · " + n0(x.candle_minutes) + " min candles" : ""}</span>`; };
   if (!rows.length){ document.getElementById("days").innerHTML = `<p class="empty">No BTST yet.</p>`; return; }
   document.getElementById("days").innerHTML = `<table><tr><th>Date</th><th>Trade</th><th>Bought</th><th>Avg · invested</th>
-      <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th title="GIFT Nifty in the morning (gift_target_at - gift_target_until): it can raise the target; the entry day's close below">GIFT Nifty</th><th>Next day</th><th>Result</th><th></th></tr>` +
+      <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th title="GIFT Nifty in the morning (gift_target_at - gift_target_until): it can raise the target; the entry day's close below">GIFT Nifty</th><th title="GIFT Nifty's morning move (the 01:00 one for older trades) against the next day's high - a multiple of the signal's price, after the exit too">GIFT vs max target</th><th>Next day</th><th>Result</th><th></th></tr>` +
     rows.map(r => {
       if (!r.job_id) return `<tr class="quiet"><td>${day(r.date)}</td><td class="l" colspan="${COLS - 1}">No signal — ${n0(r.messages_read)} message(s) read in the scan window · no trade</td></tr>`;
       const open = r.status === "open", parkedRow = r.status === "parked", rej = !open && !parkedRow && r.status !== "closed";
@@ -547,6 +559,7 @@ function drawTrades(d){
         <td class="l">${ext(r.extremes)}</td>
         <td>${n2(r.target)}<span class="n">${r.target_kind === "amo_target" ? "AMO" : (r.watched ? "watched" : (r.target ? "limit" : ""))}${r.trail ? " · trail " + r.trail.steps : ""}</span></td>
         <td class="l">${giftCell(r.gift)}</td>
+        <td class="l">${vsCell(r)}</td>
         <td class="l">${esc(SCEN[r.scenario] || r.scenario || (open ? "pending" : ""))}${num(r.opened_pct) ? `<span class="n">opened ${pc(r.opened_pct)}</span>` : ""}</td>
         <td class="l">${result}</td>
         <td><button class="linkbtn" onclick="toggle('${esc(r.job_id)}')">${OPEN_ROWS.has(r.job_id) ? "hide" : "details"}</button><span class="n"><a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></span></td></tr>`;

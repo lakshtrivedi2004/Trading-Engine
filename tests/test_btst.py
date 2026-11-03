@@ -2038,7 +2038,8 @@ check("...said on Telegram, measured since the entry day's close",
 reads19 = {r["kind"]: r for r in j19.get("gift_reads") or []}
 check("every GIFT Nifty read kept on the job: the close 22,600 and the morning 22,790 (price, day change, expiry)",
       reads19.get("close", {}).get("price") == 22600.0 and reads19.get("morning", {}).get("price") == 22790.0
-      and reads19["morning"]["ok"] and reads19["morning"]["day_change"] == 240.0
+      and reads19["morning"]["day_change"] == 240.0
+      and [r["kind"] for r in j19["gift_reads"]] == ["close", "night", "morning"]
       and reads19["morning"]["expiry"] == "27-Oct-2026", str(j19.get("gift_reads"))[:300])
 row19 = next(r for r in stats.by_day([j19]) if r.get("job_id") == j19["job_id"])
 check("...and in the trades table's row: morning 22,790, +190, target 210 -> 283.50 at 2.7 x, the close 22,600",
@@ -2105,9 +2106,8 @@ at(2026, 10, 23, 9, 13, 2)
 s_.step()
 check("09:13, NSE IX down: logged, nothing decided yet", not st_.open_job().get("gift_target")
       and any("GIFT Nifty" in x and "not read" in x for x in lg_))
-check("...the failed read kept on the job too, with its error",
-      any(not r["ok"] and "nseix down" in r["error"] for r in st_.open_job().get("gift_reads") or []),
-      str(st_.open_job().get("gift_reads")))
+check("...the failed try is not saved - only prices fetched are",
+      [r["kind"] for r in st_.open_job().get("gift_reads") or []] == ["close"], str(st_.open_job().get("gift_reads")))
 at(2026, 10, 23, 9, 13, 12)
 s_.gift_failed_at -= 10
 s_.step()
@@ -2116,8 +2116,9 @@ at(2026, 10, 23, 9, 13, 24)
 s_.gift_failed_at -= 12
 s_.step()
 j_ = st_.open_job()
-check("...read again 22 s after the failure, before the open: 2.7 x = 283.50", j_["gift_target"]["action"] == "raise"
-      and j_["target_price"] == 283.5, str(j_.get("gift_target"))[:200])
+check("...read again 22 s after the failure, before the open: 2.7 x = 283.50 - saved once",
+      j_["gift_target"]["action"] == "raise" and j_["target_price"] == 283.5
+      and [r["kind"] for r in j_["gift_reads"]] == ["close", "morning"], str(j_.get("gift_target"))[:200])
 
 s_, st_, br_, lg_, sent_ = gift_desk()
 GT.update(price=22790.0, fail=100)
@@ -2170,6 +2171,22 @@ at(2026, 10, 23, 9, 20)
 sL.step()
 rL = stL.get_job(jL["job_id"]).get("result") or {}
 check("...kept at the open, and it fills at 283.50", rL.get("exit_price") == 283.5 and rL.get("target_hit"), str(rL)[:160])
+
+from btst import chart as CH19                                   # noqa: E402
+
+ms19 = lambda *a: int(datetime(*a, tzinfo=IST).timestamp() * 1000)
+jx = {"trade_date": "2026-10-22", "position": {"qty": 65, "entry_qty": 65, "avg_price": 106.0, "entry_price": 106.0,
+                                               "entry_at": "2026-10-22T15:16:00+05:30"},
+      "result": {"closed_at": "2026-10-23T11:00:00+05:30"}}
+bx = [{"t": ms19(2026, 10, 22, 15, 20), "o": 106, "h": 300.0, "l": 104.0, "c": 110},
+      {"t": ms19(2026, 10, 23, 10, 0), "o": 150, "h": 200.0, "l": 140.0, "c": 190},
+      {"t": ms19(2026, 10, 23, 12, 0), "o": 240, "h": 250.0, "l": 230.0, "c": 245}]
+ex19 = CH19.extremes(jx, bx)
+check("the next day's high, apart from the entry day's, after the exit too: 250 at 12:00 (the overall high 300 "
+      "was the entry day)", ex19["high"] == 300.0 and ex19["day2_high"] == 250.0
+      and ex19["day2_high_at"] == "2026-10-23T12:00+05:30", str(ex19)[:200])
+check("...and the table row carries the signal's price and the target multiple for GIFT vs max target",
+      row19["signal_price"] == 105 and row19["target_mult"] == 2.7)
 
 check("the page has the rule's settings", all(k in web.state(s19, st19)["rules"]
                                             for k in ("gift_target_at", "gift_target_min_points",

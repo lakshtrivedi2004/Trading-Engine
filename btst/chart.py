@@ -67,12 +67,16 @@ def extremes(job, bars):
     steps = _positions(job)
     r = job.get("result") or {}
     exit_t = _ms(r.get("closed_at")) if r else None
-    best = worst = hi = lo = None
+    best = worst = hi = lo = day2 = None
+    entry_day = str(job.get("trade_date") or "")
     i = 0
     for b in bars:
         t = b["t"] + 59_999
         if t < steps[0][0]:
             continue
+        if (datetime.fromtimestamp(b["t"] / 1000, tz=IST).date().isoformat() > entry_day
+                and (day2 is None or b["h"] > day2[0])):
+            day2 = (b["h"], b["t"])             # the next session's high - after the exit too
         while i + 1 < len(steps) and steps[i + 1][0] <= t:
             i += 1
         _, q, a = steps[i]
@@ -96,6 +100,7 @@ def extremes(job, bars):
             "max_loss": round(worst[0], 2), "max_loss_price": worst[1], "max_loss_at": iso(worst[2]),
             "max_loss_after_exit": worst[3], "max_loss_pct": worst[4], "minutes": len(bars),
             "high": hi[0], "high_at": iso(hi[1]), "low": lo[0], "low_at": iso(lo[1]),
+            "day2_high": day2[0] if day2 else None, "day2_high_at": iso(day2[1]) if day2 else None,
             "candle_minutes": sum(1 for b in bars if b.get("src") == "candle"),
             "basis": "recorded prices, buy to the next session's close"}
 
