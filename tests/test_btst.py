@@ -17,9 +17,10 @@ scripted price, a fixed clock. No network, no orders.
      the exchange's day high for a touch between two looks, 1 s passes, live
      order checks at once on a touch, DAY targets dying at the close, and a
      restart in paper picking the trade up again
-  9. Live, after the close: the target as an AMO at 16:01 for the next open,
-     kept through the decision, cancelled (as AMO) before averaging down and
-     at 15:14; rejected at the open -> a normal target; refused -> retried
+  9. Live, after the close: the target as an AMO at 16:01 for the next open
+     (sent as NORMAL - Angel has no AMO variety), kept through the decision,
+     cancelled (as NORMAL) before averaging down and at 15:14; rejected at the
+     open -> a normal target; refused -> retried
 """
 import copy
 import os
@@ -888,11 +889,15 @@ section("9. Live: the target as an AMO for the next open")
 import run_bot                                                   # noqa: E402,F401  (live_funds)
 
 RESTING = ("open", "after market order req received")
+VARIETIES = ("NORMAL", "STOPLOSS", "ROBO")      # SmartAPI's order varieties - no AMO
+BAD_VARIETY = {"status": False, "message": "Invalid Order Variety. Value should be NORMAL, STOPLOSS, ROBO",
+               "errorcode": "AB1007", "data": None}
 
 
 class Exchange:
     """A fake Angel: IOC fills at the price, DAY orders rest and die at the
-    close, AMOs wait for the open; a cancel must name the order's variety."""
+    close; a NORMAL order sent outside market hours is an AMO and waits for the
+    open; variety AMO is refused by every order API, as Angel does (3 Nov 2026)."""
 
     def __init__(self):
         self.px, self.high, self.rows, self.n, self.net = 106.0, 110.0, {}, 0, 0
@@ -908,14 +913,23 @@ class Exchange:
     def position(self):
         return {"status": True, "data": [{"tradingsymbol": k, "netqty": str(v)} for k, v in self.held.items()]}
 
+    @staticmethod
+    def after_hours():
+        t = CLOCK["t"]
+        return t.weekday() >= 5 or not (9 * 60 + 15 <= t.hour * 60 + t.minute < 15 * 60 + 45)
+
     def placeOrderFullResponse(self, p):
-        self.events.append(("place", p["variety"], p["transactiontype"], p["duration"], p["quantity"], p["price"]))
-        if p["variety"] == "AMO" and self.refuse_amo:
+        if p["variety"] not in VARIETIES:
+            self.events.append(("refused", p["variety"], p["transactiontype"], p["duration"], p["quantity"], p["price"]))
+            return BAD_VARIETY
+        variety = "AMO" if p["duration"] != "IOC" and self.after_hours() else p["variety"]
+        self.events.append(("place", variety, p["transactiontype"], p["duration"], p["quantity"], p["price"]))
+        if variety == "AMO" and self.refuse_amo:
             self.refuse_amo -= 1
             return {"status": False, "message": "AMO window closed", "errorcode": "AB4036", "data": None}
         self.n += 1
         uid, q = f"u{self.n}", int(p["quantity"])
-        row = {"orderid": str(self.n), "uniqueorderid": uid, "variety": p["variety"], "side": p["transactiontype"],
+        row = {"orderid": str(self.n), "uniqueorderid": uid, "variety": variety, "side": p["transactiontype"],
                "sym": p["tradingsymbol"],
                "duration": p["duration"], "qty": q, "price": float(p["price"]), "orderstatus": "open",
                "filledshares": "0", "averageprice": "0", "text": ""}
@@ -924,7 +938,7 @@ class Exchange:
             d = q if p["transactiontype"] == "BUY" else -q
             self.net += d
             self.held[p["tradingsymbol"]] = self.held.get(p["tradingsymbol"], 0) + d
-        elif p["variety"] == "AMO":
+        elif variety == "AMO":
             row["orderstatus"] = "after market order req received"
         self.rows[uid] = row
         return {"status": True, "data": {"orderid": str(self.n), "uniqueorderid": uid}}
@@ -937,9 +951,9 @@ class Exchange:
 
     def cancelOrder(self, oid, variety):
         self.events.append(("cancel", oid, variety))
+        if variety not in VARIETIES:
+            return BAD_VARIETY
         row = next(r for r in self.rows.values() if r["orderid"] == oid)
-        if row["variety"] != variety:
-            return {"status": False, "message": "Invalid variety", "data": None}
         if row["orderstatus"] in RESTING:
             row["orderstatus"] = "cancelled"
         return {"status": True, "data": {"orderid": oid}}
@@ -970,9 +984,8 @@ class Exchange:
 
     def modifyOrder(self, p):
         self.events.append(("modify", p["orderid"], p["variety"], p["price"]))
-        if p["variety"] not in ("NORMAL", "STOPLOSS", "ROBO"):      # Angel, 3 Nov 2026: an AMO too is modified as NORMAL
-            return {"status": False, "message": "Invalid Order Variety. Value should be NORMAL; STOPLOSS; ROBO",
-                    "errorcode": "AB1000", "data": None}
+        if p["variety"] not in VARIETIES:
+            return BAD_VARIETY
         row = next(r for r in self.rows.values() if r["orderid"] == p["orderid"])
         if row["orderstatus"] not in RESTING:
             return {"status": False, "message": "order not open", "data": None}
@@ -1021,8 +1034,10 @@ at(2026, 10, 22, 16, 1)
 sA.step()
 jA = stA.get_job(jA["job_id"])
 amo_ev = [e for e in exA.events if e[0] == "place" and e[1] == "AMO"]
-check("16:01: the target goes in as an AMO - SELL 65 LIMIT 210.00 DAY, for the next open",
-      amo_ev == [("place", "AMO", "SELL", "DAY", "65", "210.00")], str(amo_ev))
+check("16:01: the target goes in as an AMO - SELL 65 LIMIT 210.00 DAY, for the next open (sent as NORMAL "
+      "after the close; variety AMO never sent - Angel refuses it)",
+      amo_ev == [("place", "AMO", "SELL", "DAY", "65", "210.00")]
+      and not [e for e in exA.events if e[0] == "refused"], str(amo_ev))
 check("...saved under the job id: job.amo, the target order (amo_target), the orders list; Telegram told",
       jA.get("amo", {}).get("order_id") and jA["target_order"]["kind"] == "amo_target"
       and jA["target_order"]["variety"] == "AMO" and "amo_target" in [o["kind"] for o in jA["orders"]]
@@ -1044,8 +1059,10 @@ at(2026, 10, 23, 15, 14, 5)
 exA.px = 118.0
 sA.step()
 jA = stA.get_job(jA["job_id"])
-check("15:14, not hit: the AMO cancelled AS AMO, then sold at market; CLOSED time_exit, nothing left",
-      ("cancel", jA["amo"]["order_id"], "AMO") in exA.events and jA["status"] == "closed"
+check("15:14, not hit: the AMO cancelled (as NORMAL - Angel has no AMO variety), then sold at market; CLOSED "
+      "time_exit, nothing left",
+      [e for e in exA.events if e[0] == "cancel"] == [("cancel", jA["amo"]["order_id"], "NORMAL")]
+      and jA["status"] == "closed"
       and jA["result"]["exit_reason"] == "time_exit" and exA.net == 0 and not exA.resting_sells(),
       str([e for e in exA.events if e[0] == "cancel"]))
 
@@ -1073,8 +1090,8 @@ iC = next(i for i, e in enumerate(exC.events) if e[0] == "cancel")
 iB = next(i for i, e in enumerate(exC.events) if e[0] == "place" and e[2] == "BUY" and i > iC - 1 and e[1] == "NORMAL"
           and i > 2)
 rs = exC.resting_sells()
-check("opened -34%: the AMO cancelled (as AMO) BEFORE the top-up buy; then one target for the whole position",
-      exC.events[iC][2] == "AMO" and iC < iB and jC["decision"]["scenario"] == "topup_50"
+check("opened -34%: the AMO cancelled (as NORMAL) BEFORE the top-up buy; then one target for the whole position",
+      exC.events[iC][2] == "NORMAL" and iC < iB and jC["decision"]["scenario"] == "topup_50"
       and len(rs) == 1 and rs[0]["qty"] == jC["position"]["qty"] and rs[0]["variety"] == "NORMAL"
       and rs[0]["price"] == jC["target_price"], str(exC.events[-4:]))
 
