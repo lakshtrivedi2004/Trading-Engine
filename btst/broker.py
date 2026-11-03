@@ -199,10 +199,14 @@ class AngelBtstBroker:
         return dict(order, ok=True, status=(st or {}).get("status", "amo"), error=None)
 
     def modify_sell(self, order, c, qty, price):
-        """Move a resting LIMIT sell to `price` (the trailing target): Angel's
-        modifyOrder - one order all along, never a second sell."""
+        """Move a resting LIMIT sell to `price` (the trailing target, the GIFT
+        Nifty target on the AMO): Angel's modifyOrder - one order all along,
+        never a second sell."""
         oid = order.get("order_id")
-        params = {"variety": order.get("variety") or "NORMAL", "orderid": oid, "ordertype": "LIMIT",
+        # an AMO is modified as NORMAL: Angel's modifyOrder refuses variety AMO ("Invalid Order Variety.
+        # Value should be NORMAL; STOPLOSS; ROBO") and NORMAL moves the AMO, still an AMO (3 Nov 2026)
+        params = {"variety": "NORMAL" if order.get("variety") in (None, "", "AMO") else order["variety"],
+                  "orderid": oid, "ordertype": "LIMIT",
                   "producttype": self.product, "duration": order.get("duration") or "DAY", "price": f"{price:.2f}",
                   "quantity": str(int(qty)), "tradingsymbol": c["symbol"], "symboltoken": c["token"],
                   "exchange": c["exchange"]}

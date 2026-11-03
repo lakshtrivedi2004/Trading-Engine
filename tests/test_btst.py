@@ -970,6 +970,9 @@ class Exchange:
 
     def modifyOrder(self, p):
         self.events.append(("modify", p["orderid"], p["variety"], p["price"]))
+        if p["variety"] not in ("NORMAL", "STOPLOSS", "ROBO"):      # Angel, 3 Nov 2026: an AMO too is modified as NORMAL
+            return {"status": False, "message": "Invalid Order Variety. Value should be NORMAL; STOPLOSS; ROBO",
+                    "errorcode": "AB1000", "data": None}
         row = next(r for r in self.rows.values() if r["orderid"] == p["orderid"])
         if row["orderstatus"] not in RESTING:
             return {"status": False, "message": "order not open", "data": None}
@@ -2161,9 +2164,11 @@ GT["price"] = 22790.0
 at(2026, 10, 23, 9, 13, 2)
 sL.step()
 jL = stL.open_job()
-check("live: the AMO waiting for the open is modified to 283.50 before the open (as an AMO), not a second sell",
-      ("modify", amoL, "AMO", "283.50") in exL.events and jL["target_price"] == 283.5
-      and len(exL.resting_sells()) == 1 and exL.resting_sells()[0]["price"] == 283.5,
+check("live: the AMO waiting for the open is modified to 283.50 before the open (variety NORMAL - Angel refuses "
+      "AMO on a modify), not a second sell",
+      ("modify", amoL, "NORMAL", "283.50") in exL.events and jL["target_price"] == 283.5
+      and len(exL.resting_sells()) == 1 and exL.resting_sells()[0]["price"] == 283.5
+      and exL.resting_sells()[0]["variety"] == "AMO",
       str([e for e in exL.events if e[0] == "modify"]))
 exL.open_market(120.0)
 at(2026, 10, 23, 9, 15, 5)
