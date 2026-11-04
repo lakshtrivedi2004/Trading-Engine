@@ -11,7 +11,9 @@ an opening spike fills it. Angel's order APIs take variety NORMAL, STOPLOSS or
 ROBO only - no AMO (SmartAPI docs, Orders: "All the orders placed after market
 hours will be treated as AMO orders", sent to the exchange at 09:00): an AMO is
 a NORMAL order sent after the close, and is modified and cancelled as NORMAL
-(tried on Angel, 3 Nov 2026). The desk still records it as variety AMO.
+(tried on Angel, 3 Nov 2026). The desk still records it as variety AMO. Sent
+to the exchange, an AMO gets a new order id (its uid stays): cancels and
+modifies first read the id now by the uid (4 Nov 2026).
 Every fill is read back from Angel (individual_order_details), never assumed.
 """
 import math
@@ -208,11 +210,30 @@ class AngelBtstBroker:
         self.log(fmt("TRADE", "broker", f"AMO {oid} accepted for the next open: {(st or {}).get('status', '?')}"))
         return dict(order, ok=True, status=(st or {}).get("status", "amo"), error=None)
 
+    def _live_id(self, order):
+        """The order's id at Angel now, read by its uid: an AMO gets a new one
+        when Angel sends it to the exchange at 09:00, and the AMO's id is then
+        "OrderId not found" (4 Nov 2026). The stored id if unreadable."""
+        oid, uid = order.get("order_id"), order.get("uid")
+        if not uid:
+            return oid
+        try:
+            r = self.api.individual_order_details(uid) or {}
+            row = r.get("data") if isinstance(r, dict) else None
+        except Exception as e:
+            self.log(fmt("WARN", "broker", f"order {oid}: its id now unreadable ({e!r}) - using {oid}"))
+            return oid
+        now = str(row.get("orderid") or "") if isinstance(row, dict) else ""
+        if now and now != str(oid):
+            self.log(fmt("INFO", "broker", f"order {oid} is {now} at the exchange now"))
+            return now
+        return oid
+
     def modify_sell(self, order, c, qty, price):
         """Move a resting LIMIT sell to `price` (the trailing target, the GIFT
         Nifty target on the AMO): Angel's modifyOrder - one order all along,
         never a second sell."""
-        oid = order.get("order_id")
+        oid = self._live_id(order)
         params = {"variety": _api_variety(order.get("variety")), "orderid": oid, "ordertype": "LIMIT",
                   "producttype": self.product, "duration": order.get("duration") or "DAY", "price": f"{price:.2f}",
                   "quantity": str(int(qty)), "tradingsymbol": c["symbol"], "symboltoken": c["token"],
@@ -232,28 +253,25 @@ class AngelBtstBroker:
 
     def cancel(self, order):
         """Cancel a resting order; its final state (it may have filled first).
-        An AMO is cancelled as NORMAL."""
-        variety = _api_variety(order.get("variety"))
+        An AMO is cancelled as NORMAL, by its id at the exchange."""
+        oid, variety = self._live_id(order), _api_variety(order.get("variety"))
         try:
-            r = self.api.cancelOrder(order["order_id"], variety)
+            r = self.api.cancelOrder(oid, variety)
             if isinstance(r, dict) and r.get("status") is False:
-                self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} ({variety}) refused: "
-                                               f"{r.get('message')}"))
+                self.log(fmt("WARN", "broker", f"cancel {oid} ({variety}) refused: {r.get('message')}"))
             else:
-                self.log(fmt("INFO", "broker", f"cancel {order.get('order_id')} ({variety}) sent"))
+                self.log(fmt("INFO", "broker", f"cancel {oid} ({variety}) sent"))
         except Exception as e:
-            self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')} ({variety}) failed: {e!r}"))
+            self.log(fmt("WARN", "broker", f"cancel {oid} ({variety}) failed: {e!r}"))
         end = self.clock() + self.confirm_sec
         st = None
         while self.clock() < end:
             st = self.order_state(order)
             if st and st["final"]:
-                self.log(fmt("INFO", "broker", f"cancel {order.get('order_id')}: {st['status']}, "
-                                               f"filled {st['filled']}"))
+                self.log(fmt("INFO", "broker", f"cancel {oid}: {st['status']}, filled {st['filled']}"))
                 return st
             self.sleep(0.5)
-        self.log(fmt("WARN", "broker", f"cancel {order.get('order_id')}: not final after "
-                                       f"{self.confirm_sec:g}s ({st})"))
+        self.log(fmt("WARN", "broker", f"cancel {oid}: not final after {self.confirm_sec:g}s ({st})"))
         return st
 
 
