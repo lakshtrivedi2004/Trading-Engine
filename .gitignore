@@ -41,6 +41,7 @@ config/calibration.json
 .engine.pid
 .trading_mode
 .btst_mode
+.btst_principal
 
 # Engine pid files (runtime state)
 .engine.pid

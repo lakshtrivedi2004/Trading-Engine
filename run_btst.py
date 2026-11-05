@@ -7,7 +7,8 @@
 Mode is .btst_mode (repo root): "live" sends real orders, anything else is
 paper. The page switches it (POST /api/mode, btst/modes.py): to PAPER with a
 live trade open only after selling it at market; to LIVE at once, parking an
-open paper trade.
+open paper trade. The principal set on the page (POST /api/principal) is
+.btst_principal, over config/btst.json "principal".
 
 Reads from .angel.env: the Angel login (ANGEL_*), TELEGRAM_BTST_CHANNEL (the
 signal channel's link or @name - only there, never in the code), TELEGRAM_API_ID / _HASH (the
@@ -44,6 +45,7 @@ from btst.strategy import BtstStrategy                             # noqa: E402
 from services.mongo import MongoStore                              # noqa: E402
 
 MODE_FILE = os.path.join(ROOT, ".btst_mode")
+PRINCIPAL_FILE = os.path.join(ROOT, ".btst_principal")
 CONFIG = os.path.join(ROOT, "config", "btst.json")
 READER_RETRY_SEC = 300.0
 BOOK = Logbook(path=os.path.join(ROOT, "btst.log"))
@@ -59,6 +61,15 @@ def read_mode():
     except OSError:
         m = ""
     return "live" if m == "live" else "paper"
+
+
+def read_principal():
+    """The principal set on the page, or None (config/btst.json's stands)."""
+    try:
+        v = float(open(PRINCIPAL_FILE).read().strip())
+    except (OSError, ValueError):
+        return None
+    return v if modes.PRINCIPAL_MIN <= v <= modes.PRINCIPAL_MAX else None
 
 
 class DailyMaster:
@@ -113,6 +124,11 @@ def main():
     cfg = json.load(open(CONFIG))
     log(f"starting (pid {os.getpid()}); config {CONFIG}: "
         + ", ".join(f"{k}={v}" for k, v in cfg.items()), area="start")
+    principal = read_principal()
+    if principal is not None:
+        log(f"principal Rs {principal:,.0f} (set on the page, {PRINCIPAL_FILE}; config/btst.json has "
+            f"Rs {float(cfg.get('principal') or 0):,.0f})", area="start")
+        cfg["principal"] = principal
     env = _load_env_file(os.path.join(ROOT, ".angel.env"))
     env.update({k: v for k, v in os.environ.items() if k.startswith(("TELEGRAM_", "GEMINI_"))})
     channel = str(env.get("TELEGRAM_BTST_CHANNEL", "")).strip()
@@ -201,8 +217,17 @@ def main():
         return modes.switch(strategy, to, exit_trade=exit_trade, make_broker=make_broker, save_mode=save_mode,
                             notify=notifier.send if notifier else None, log=BOOK.log)
 
+    def save_principal(v):
+        with open(PRINCIPAL_FILE, "w") as fh:
+            fh.write(f"{v:.0f}")
+
+    def set_principal(amount):
+        log(f"principal {amount!r} asked from the page", area="capital")
+        return modes.set_principal(strategy, amount, save=save_principal,
+                                   notify=notifier.send if notifier else None, log=BOOK.log)
+
     port = args.port or int(cfg.get("port", 9000))
-    web.serve(strategy, store, switch_mode, port=port, book=BOOK)
+    web.serve(strategy, store, switch_mode, port=port, book=BOOK, set_principal=set_principal)
     log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | "
         f"scan {cfg.get('scan_start')}-{cfg.get('scan_end')} | model {cfg.get('ai_model') if llm else 'none'}",
         area="start")

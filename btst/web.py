@@ -13,6 +13,8 @@
                        average, position and P&L at each minute, and its events
     POST /api/mode?to=paper|live[&exit=1]   switch mode (btst/modes.py): exit=1 sells an
                        open live trade at market first; an open paper trade is parked
+    POST /api/principal?amount=RS   set the principal (btst/modes.py): each new trade
+                       invests trade_pct (10%) of it; an open trade keeps its size
 """
 import json
 import sys
@@ -53,6 +55,8 @@ PAGE = r"""<!DOCTYPE html>
   .btn:hover{background:var(--panel)} .btn:disabled{opacity:.5;cursor:default}
   .btn.danger{border-color:var(--down);color:var(--down)}
   .btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .setcap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+  .setcap .inp{width:150px;cursor:text}
   #history .card{margin-bottom:6px}
   .card{border:1px solid var(--hair);background:var(--panel);padding:14px 16px}
   .cardhead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
@@ -137,7 +141,14 @@ PAGE = r"""<!DOCTYPE html>
     <div id="histbody"></div>
   </div>
   <h2>Open trade</h2><div id="open"></div>
-  <h2>Capital</h2><div id="capital"></div>
+  <h2>Capital</h2>
+  <!-- its own row, not inside #capital: that is redrawn every 3 s, which would wipe a figure half typed -->
+  <div class="setcap"><label class="sub" for="capin">Principal ₹</label>
+    <input class="btn inp" id="capin" type="number" min="1000" step="1000" inputmode="numeric" oninput="capNote()"
+      onkeydown="if (event.key === 'Enter') setPrincipal()">
+    <button class="btn" id="capbtn" onclick="setPrincipal()">Set principal</button>
+    <span class="sub" id="capnote"></span></div>
+  <div id="capital"></div>
   <h2>Trades</h2><div class="tbl" id="days"></div>
   <h2>Top-ups</h2><div class="tbl" id="topups"></div>
   <h2>Statistics</h2><div id="stats"></div>
@@ -433,7 +444,7 @@ function tradeCard(d, j, r){
     <div class="phase">${phaseTxt}</div>
     ${bar(p.avg_price, nowPx, j.target_price, j.ltp_low, open && j.trail && j.trail.active ? j.trail : null, open ? "now" : "exit")}
     <div class="grid">
-      ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `${tm(p.entry_at)} · ${n0(j.lots)} lot(s) = ${rsp(p.entry_qty * p.entry_price)}${R.trade_amount ? " (cap " + rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100)) + ")" : ""}`)}
+      ${box("Bought", `${n0(p.entry_qty)} @ ${n2(p.entry_price)}`, `${tm(p.entry_at)} · ${n0(j.lots)} lot(s) = ${rsp(p.entry_qty * p.entry_price)}${capOf(j) ? " (cap " + rsp(capOf(j)) + ")" : ""}`)}
       ${box("Average · invested", `${n2(p.avg_price)} · ${rsp(p.invested)}`, p.added_qty ? `+${n0(p.added_qty)} @ ${n2(p.added_price)} ${tm(p.added_at)} → ${n0(p.qty)} qty` : `${n0(p.qty)} qty`)}
       ${box("Target", n2(j.target_price), `${tKind} · ${esc(j.target_last_status || "–")}${num(away) ? " · " + pc(away) + " away" : ""}`)}
       ${box("Signal", `@ ${esc(s.price)}`, `posted ${tm((j.message || {}).date)} · read by ${esc(s.parsed_by)}`)}
@@ -589,9 +600,36 @@ function capChart(cp){
   svg += `<text x="${W - R + 4}" y="${Y(last.capital) + 3}" style="fill:${last.capital >= cp.principal ? "var(--up)" : "var(--down)"}">${rsp(last.capital)}</text></svg>`;
   return `<div class="chartbox">${svg}</div>`;
 }
+// the cap a trade was sized with - the principal may have changed since
+const capOf = j => { const m = /always below Rs ([\d,]+)/.exec(j.sizing || ""); return m ? Number(m[1].replace(/,/g, "")) : null; };
+function capNote(){
+  const R = (LAST || {}).rules || {}, inp = document.getElementById("capin"), typed = Number(inp.value);
+  if (document.activeElement !== inp && !inp.value) inp.placeholder = R.principal ? String(Math.round(R.principal)) : "";
+  const pr = inp.value ? typed : R.principal, per = pr * (R.trade_pct || 0) / 100, cap = per * (1 + (R.amount_tolerance_pct || 0) / 100);
+  document.getElementById("capnote").textContent = !(pr > 0) ? "" :
+    `${inp.value ? "would be" : "now"}: ${n0(R.trade_pct)}% = ${rsp(per)} a trade ± ${n0(R.amount_tolerance_pct)}%, the most lots below ${rsp(cap)}`;
+  document.getElementById("capbtn").disabled = BUSY;
+}
+async function setPrincipal(){
+  const d = LAST || {}, R = d.rules || {}, inp = document.getElementById("capin"), v = Math.round(Number(inp.value));
+  if (!(v >= 1000)){ alert("Enter the principal in rupees (at least ₹1,000)."); return; }
+  const per = v * (R.trade_pct || 0) / 100, cap = per * (1 + (R.amount_tolerance_pct || 0) / 100), j = d.open_job;
+  if (!confirm(`Set the BTST principal to ${rsp(v)} (now ${rsp(R.principal)})?\n\n`
+      + `Each new trade invests ${n0(R.trade_pct)}% = ${rsp(per)} ± ${n0(R.amount_tolerance_pct)}% (the most lots below ${rsp(cap)}), from the next signal.`
+      + (d.mode === "live" ? "\n\nLIVE: real orders with real money." : "")
+      + (j ? `\n\nThe open trade (${(j.contract || {}).symbol}) keeps its size: its top-ups add up to its own first amount.` : "")
+      + `\n\nThe capital (live and paper) then starts from ${rsp(v)}, every closed trade's net added.`)) return;
+  BUSY = true; capNote();
+  const r = await (await fetch(`/api/principal?amount=${v}`, {method: "POST"})).json().catch(e => ({ok: false, error: String(e)}));
+  BUSY = false;
+  if (r.ok) inp.value = "";
+  alert(r.ok ? `Principal set: ${rsp(r.principal)} - each new trade ${rsp(r.trade_amount)}.` + (r.note ? `\n\n${r.note}` : "") : "Not set: " + r.error);
+  tick();
+}
 function drawCapital(d){
+  capNote();
   const el = document.getElementById("capital"), caps = (d.capital || []).slice();
-  if (!caps.length){ el.innerHTML = `<p class="empty">Set "principal" in config/btst.json to follow the capital.</p>`; return; }
+  if (!caps.length){ el.innerHTML = `<p class="empty">Set the principal above to follow the capital.</p>`; return; }
   caps.sort((a, b) => (b.mode === d.mode) - (a.mode === d.mode));
   const R = d.rules || {};
   el.innerHTML = `<div class="modes">` + caps.map(cp => {
@@ -604,7 +642,7 @@ function drawCapital(d){
         + cp.curve.map((c, i) => `<tr><td>${i + 1}</td><td>${tm(c.at)}</td><td class="l">${esc(c.trade)}<span class="n">${esc(c.symbol || "")}</span></td><td>${rsp(c.invested)}</td>
           <td class="${cls(c.net_pnl)}">${rs(c.net_pnl)}<span class="n">${pc(c.pnl_pct)}</span></td><td class="l">${esc(EXIT[c.exit_reason] || c.exit_reason || "")}</td>
           <td><b>${rsp(c.capital)}</b></td><td class="${cls(c.change_pct)}">${pc(c.change_pct)}</td></tr>`).reverse().join("") + `</table></div></details>` : ""}
-    </div>`; }).join("") + `</div><p class="sub">Each trade invests ${n0(R.trade_pct)}% of the starting principal (${rsp(R.trade_amount)} ± ${n0(R.amount_tolerance_pct)}%, always below ${rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100))}); a top-up adds up to as much again. No compounding: the size stays the same as the capital moves. Set in config/btst.json ("principal", "trade_pct").</p>`;
+    </div>`; }).join("") + `</div><p class="sub">Each trade invests ${n0(R.trade_pct)}% of the starting principal (${rsp(R.trade_amount)} ± ${n0(R.amount_tolerance_pct)}%, always below ${rsp(R.trade_amount * (1 + (R.amount_tolerance_pct || 0) / 100))}); a top-up adds up to as much again. No compounding: the size stays the same as the capital moves. The principal is set above (kept over config/btst.json); trade_pct in config/btst.json.</p>`;
 }
 function drawStats(d){
   const mode = s => {
@@ -780,7 +818,7 @@ def logs(book, query):
     return {"now": now_ist().isoformat(timespec="seconds"), "source": source, "counts": counts, "lines": rows}
 
 
-def make_handler(strategy, store, switch_mode, book=None):
+def make_handler(strategy, store, switch_mode, book=None, set_principal=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -832,6 +870,9 @@ def make_handler(strategy, store, switch_mode, book=None):
                     to = (q.get("to") or [""])[0]
                     exit_trade = (q.get("exit") or ["0"])[0] in ("1", "true", "yes")
                     self._send(json.dumps(switch_mode(to, exit_trade=exit_trade), default=str))
+                elif u.path == "/api/principal" and set_principal is not None:
+                    amount = (parse_qs(u.query).get("amount") or [""])[0]
+                    self._send(json.dumps(set_principal(amount), default=str))
                 else:
                     self._send("{}", code=404)
             except (BrokenPipeError, ConnectionResetError):
@@ -858,8 +899,8 @@ class _Server(ThreadingHTTPServer):
             super().handle_error(request, client_address)
 
 
-def serve(strategy, store, switch_mode, port=9000, host="0.0.0.0", book=None):
-    httpd = _Server((host, int(port)), make_handler(strategy, store, switch_mode, book))
+def serve(strategy, store, switch_mode, port=9000, host="0.0.0.0", book=None, set_principal=None):
+    httpd = _Server((host, int(port)), make_handler(strategy, store, switch_mode, book, set_principal))
     httpd.book = book
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, name="btst-web", daemon=True).start()

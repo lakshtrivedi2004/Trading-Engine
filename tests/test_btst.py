@@ -1989,6 +1989,54 @@ check("the page's state: capital per mode (live, paper), the rules carry the pri
       [c["mode"] for c in sc["capital"]] == ["live", "paper"] and sc["rules"]["trade_amount"] == 15000.0
       and sc["rules"]["principal"] == 150000)
 
+# the principal set from the page (btst/modes.py set_principal, POST /api/principal)
+clock0, px0 = CLOCK["t"], PRICE["ltp"]
+at(2026, 10, 22, 15, 16)
+PRICE["ltp"] = 106.0
+sP, stP, _, lgP, sentP = desk(cfg={"principal": 150000, "trade_pct": 10, "amount_tolerance_pct": 10})
+savedP, plog = [], []
+bad = [modes.set_principal(sP, x, save=savedP.append, log=plog.append) for x in ("", "abc", "nan", "0", "999", "1e12", None)]
+check("a principal that is not Rs 1,000 - 10 crore is refused: nothing saved, the size unchanged",
+      not any(r["ok"] for r in bad) and not savedP and sP.trade_amount() == 15000.0, str(bad[1]))
+rP = modes.set_principal(sP, "300000.4", save=savedP.append, notify=sentP.append, log=plog.append)
+check("set to Rs 3,00,000: saved, each new trade 10% = Rs 30,000 (cap Rs 33,000), logged and on Telegram",
+      rP["ok"] and rP["principal"] == 300000.0 and rP["was"] == 150000.0 and rP["trade_amount"] == 30000.0
+      and rP["cap"] == 33000.0 and savedP == [300000.0] and sP.trade_amount() == 30000.0 and not rP["note"]
+      and any("Rs 150,000 -> Rs 300,000" in x for x in plog) and any("300,000" in x for x in sentP), str(rP))
+check("...the page's state carries the new principal and trade amount",
+      web.state(sP, stP)["rules"]["principal"] == 300000.0 and web.state(sP, stP)["rules"]["trade_amount"] == 30000.0)
+sP.on_message(msg(3, SAMPLE, 15, 16))
+sP.step()
+jP0 = stP.open_job()
+check("...the next signal is sized on it: the most lots below Rs 33,000",
+      jP0 and "for Rs 30,000 +/- 10%" in (jP0.get("sizing") or "") and "always below Rs 33,000" in jP0["sizing"]
+      and jP0["position"]["entry_qty"] * jP0["position"]["entry_price"] < 33000, (jP0 or {}).get("sizing"))
+rP2 = modes.set_principal(sP, 100000, save=savedP.append, log=plog.append)
+check("set again with a trade open: allowed; the open trade keeps its size (said); the next trade Rs 10,000",
+      rP2["ok"] and sP.trade_amount() == 10000.0 and "keeps its size" in rP2["note"]
+      and stP.open_job()["position"]["qty"] == jP0["position"]["qty"], str(rP2))
+httpP = web.serve(sP, stP, lambda to, exit_trade=False: {}, port=0, host="127.0.0.1",
+                  set_principal=lambda a: modes.set_principal(sP, a, log=plog.append))
+baseP = f"http://127.0.0.1:{httpP.server_address[1]}"
+postP = lambda u: _json.loads(urllib.request.urlopen(urllib.request.Request(baseP + u, method="POST"), timeout=10).read())
+rW, rW2, homeP = postP("/api/principal?amount=250000"), postP("/api/principal?amount=x"), \
+    urllib.request.urlopen(baseP + "/", timeout=10).read().decode()
+httpP.shutdown()
+check("POST /api/principal sets it; a bad figure is refused; the page has the Set principal row",
+      rW["ok"] and rW["trade_amount"] == 25000.0 and not rW2["ok"] and sP.trade_amount() == 25000.0
+      and 'id="capin"' in homeP and "Set principal" in homeP and "/api/principal?amount=" in homeP, str(rW2))
+pfile, pfile0 = os.path.join(tempfile.mkdtemp(), ".btst_principal"), run_btst.PRINCIPAL_FILE
+run_btst.PRINCIPAL_FILE = pfile
+none_yet = run_btst.read_principal()
+open(pfile, "w").write("250000")
+got_p = run_btst.read_principal()
+open(pfile, "w").write("junk")
+junk_p = run_btst.read_principal()
+run_btst.PRINCIPAL_FILE = pfile0
+check("a restart keeps it: .btst_principal over config/btst.json; none or junk - the config's stands",
+      none_yet is None and got_p == 250000.0 and junk_p is None)
+CLOCK["t"], PRICE["ltp"] = clock0, px0
+
 section("18. Alerts to the Telegram channel (as the user, not the bot)")
 from btst.notify import ChannelNotifier                          # noqa: E402
 

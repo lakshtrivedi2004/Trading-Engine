@@ -1,4 +1,5 @@
-"""Switching the BTST desk between paper and live (owner, 24 Oct 2026).
+"""Switching the BTST desk between paper and live (owner, 24 Oct 2026), and
+setting its principal (owner, 4 Nov 2026).
 
     LIVE -> PAPER, no trade open    switch.
     LIVE -> PAPER, a live trade     only with exit_trade (the page asks first):
@@ -12,7 +13,15 @@
                                     to PAPER.
 The mode is saved (.btst_mode) so a restart keeps it. Every switch is logged
 and sent to Telegram.
+
+The principal (config/btst.json "principal") is set from the page too: each
+new trade invests trade_pct (10%) of it, from the next signal. An open trade
+keeps its size - its top-ups add up to its own first amount. Saved
+(.btst_principal, over config/btst.json) so a restart keeps it; logged and
+sent to Telegram.
 """
+import math
+
 from btst.logbook import fmt
 
 
@@ -63,3 +72,38 @@ def switch(strategy, to, exit_trade=False, make_broker=None, save_mode=None, not
             except Exception:
                 pass
         return {"ok": True, "mode": to, "note": "; ".join(notes)}
+
+
+PRINCIPAL_MIN, PRINCIPAL_MAX = 1000.0, 10_00_00_000.0      # Rs 1,000 - Rs 10 crore: a typo guard
+
+
+def set_principal(strategy, amount, save=None, notify=None, log=print):
+    try:
+        v = float(amount)
+    except (TypeError, ValueError):
+        v = float("nan")
+    if not math.isfinite(v) or not PRINCIPAL_MIN <= v <= PRINCIPAL_MAX:
+        return {"ok": False, "error": f"the principal must be a number of rupees, Rs {PRINCIPAL_MIN:,.0f} - "
+                                      f"Rs {PRINCIPAL_MAX:,.0f} (got {amount!r})"}
+    v = float(round(v))
+    with strategy.lock:                         # never in the middle of an entry
+        was = float(strategy.c("principal", 0) or 0)
+        if save:
+            save(v)
+        strategy.cfg["principal"] = v
+        per = strategy.trade_amount()
+        cap = per * (1 + float(strategy.c("amount_tolerance_pct", 5.0)) / 100.0)
+        job = strategy.store.open_job()
+        note = (f"the open trade {job['contract']['symbol']} keeps its size; its top-ups add up to its own "
+                f"first amount" if job and job.get("position") else "")
+        msg = (f"principal Rs {was:,.0f} -> Rs {v:,.0f}: each new trade Rs {per:,.0f} "
+               f"({float(strategy.c('trade_pct', 10.0)):g}%), the most lots below Rs {cap:,.0f}"
+               + (f" ({note})" if note else ""))
+        log(fmt("WARN" if strategy.broker.mode == "live" else "INFO", "capital", msg))
+        if notify:
+            try:
+                notify(f"🌙 <b>BTST</b> principal is now <b>Rs {v:,.0f}</b> ({strategy.broker.mode.upper()}): "
+                       f"each new trade Rs {per:,.0f}" + (f"\n{note}" if note else ""))
+            except Exception:
+                pass
+        return {"ok": True, "principal": v, "was": was, "trade_amount": per, "cap": round(cap, 2), "note": note}
