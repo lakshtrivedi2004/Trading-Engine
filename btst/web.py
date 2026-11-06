@@ -61,6 +61,8 @@ PAGE = r"""<!DOCTYPE html>
   .setcap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
   .setcap .inp{width:150px;cursor:text}
   #history .card{margin-bottom:6px}
+  .fab{position:fixed;right:16px;bottom:16px;z-index:20;padding:10px 16px;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .fab[hidden]{display:none}
   .card{border:1px solid var(--hair);background:var(--panel);padding:14px 16px}
   .cardhead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
   .sym{font-size:20px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -126,9 +128,10 @@ PAGE = r"""<!DOCTYPE html>
 <div class="wrap">
   <div class="head">
     <h1>BTST Desk</h1>
-    <div class="right"><span id="ctl"></span><button class="btn" id="histbtn" onclick="toggleHistory()" title="any day's trades and how they went">History</button><a class="btn" id="logbtn" href="/logs" target="_blank" rel="noopener">View logs</a>
+    <div class="right"><button class="btn" onclick="goHome()" title="close History, back to the top">🏠 Home</button><span id="ctl"></span><button class="btn" id="histbtn" onclick="toggleHistory()" title="any day's trades and how they went">History</button><a class="btn" id="logbtn" href="/logs" target="_blank" rel="noopener">View logs</a>
       <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Dark / light">🌙</button></div>
   </div>
+  <button class="btn fab" id="fab" onclick="goHome()" title="close History, back to the top" hidden>🏠 Home</button>
   <div class="chips" id="chips"><span class="chip">connecting…</span></div>
   <p class="sub" id="sub"></p>
   <div id="history" hidden>
@@ -503,7 +506,12 @@ function toggleHistory(){
   document.getElementById("history").hidden = !HIST.open;
   document.getElementById("histbtn").classList.toggle("on", HIST.open);
   if (HIST.open){ if (!HIST.day) HIST.day = ((LAST && LAST.now) || new Date().toISOString()).slice(0, 10); loadDay(); }
+  paintFab();
 }
+// Home: History closed, back to the top; the floating one shows while History is open or the page is scrolled
+function goHome(){ if (HIST.open) toggleHistory(); window.scrollTo({top: 0, behavior: "smooth"}); }
+function paintFab(){ document.getElementById("fab").hidden = !(HIST.open || window.scrollY > 400); }
+window.addEventListener("scroll", paintFab, {passive: true});
 function shiftDay(n){ const t = new Date(HIST.day + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); HIST.day = isoDay(t); loadDay(); }
 function pickDay(v){ if (v){ HIST.day = v; loadDay(); } }
 async function loadDay(){
@@ -744,10 +752,13 @@ LOGS_PAGE = r"""<!DOCTYPE html>
   .ERROR .lv,.ERROR .x{color:var(--down)} .WARN .lv{color:var(--warn)} .TRADE .lv{color:var(--trade)} .INFO .lv{color:var(--dim)}
   .ERROR{background:color-mix(in srgb,var(--down) 7%,transparent)} .TRADE .x{font-weight:600}
   .empty{color:var(--dim);padding:20px 0}
+  .fab{position:fixed;right:16px;bottom:16px;z-index:20;padding:10px 16px;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .fab[hidden]{display:none}
   @media (max-width:640px){.row{grid-template-columns:1fr;gap:0;padding:6px 4px}.row .t:after{content:""}}
 </style>
 <div class="wrap">
-  <div class="head"><h1>BTST Log</h1><a class="btn" href="/">← BTST Desk</a></div>
+  <div class="head"><h1>BTST Log</h1><a class="btn" href="/" title="back to the BTST Desk">🏠 Home</a></div>
+  <a class="btn fab" id="fab" href="/" title="back to the BTST Desk" hidden>🏠 Home</a>
   <p class="sub">Every step of the desk, newest first. <b>No trade today?</b> Pick <i>Signals</i>: each channel message
   read in the scan window and why it was or was not a signal, then why a signal was not traded. <i>Problems</i> shows the warnings
   and errors (Telegram reader down, Angel login, refused orders).</p>
@@ -799,6 +810,7 @@ let typing;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(load, 300); });
 for (const id of ["day", "limit"]) document.getElementById(id).addEventListener("change", load);
 setInterval(() => { if (document.getElementById("auto").checked && !getSelection().toString()) load(); }, 5000);
+window.addEventListener("scroll", () => { document.getElementById("fab").hidden = window.scrollY < 200; }, {passive: true});
 load();
 </script>
 """
