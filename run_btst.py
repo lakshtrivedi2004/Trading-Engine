@@ -8,7 +8,8 @@ Mode is .btst_mode (repo root): "live" sends real orders, anything else is
 paper. The page switches it (POST /api/mode, btst/modes.py): to PAPER with a
 live trade open only after selling it at market; to LIVE at once, parking an
 open paper trade. The principal set on the page (POST /api/principal) is
-.btst_principal, over config/btst.json "principal".
+.btst_principal, over config/btst.json "principal". The page's Exit button
+(POST /api/exit) sells the open trade at market, its target cancelled first.
 
 Reads from .angel.env: the Angel login (ANGEL_*), TELEGRAM_BTST_CHANNEL (the
 signal channel's link or @name - only there, never in the code), TELEGRAM_API_ID / _HASH (the
@@ -226,8 +227,12 @@ def main():
         return modes.set_principal(strategy, amount, save=save_principal,
                                    notify=notifier.send if notifier else None, log=BOOK.log)
 
+    def exit_now():
+        log("exit of the open trade asked from the page", area="exit")
+        return modes.exit_trade(strategy, log=BOOK.log)
+
     port = args.port or int(cfg.get("port", 9000))
-    web.serve(strategy, store, switch_mode, port=port, book=BOOK, set_principal=set_principal)
+    web.serve(strategy, store, switch_mode, port=port, book=BOOK, set_principal=set_principal, exit_now=exit_now)
     log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | "
         f"scan {cfg.get('scan_start')}-{cfg.get('scan_end')} | model {cfg.get('ai_model') if llm else 'none'}",
         area="start")

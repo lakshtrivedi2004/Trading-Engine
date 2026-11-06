@@ -1,5 +1,6 @@
-"""Switching the BTST desk between paper and live (owner, 24 Oct 2026), and
-setting its principal (owner, 4 Nov 2026).
+"""Switching the BTST desk between paper and live (owner, 24 Oct 2026),
+setting its principal (owner, 4 Nov 2026), and exiting the open trade from the
+page (owner, 6 Nov 2026).
 
     LIVE -> PAPER, no trade open    switch.
     LIVE -> PAPER, a live trade     only with exit_trade (the page asks first):
@@ -19,6 +20,11 @@ new trade invests trade_pct (10%) of it, from the next signal. An open trade
 keeps its size - its top-ups add up to its own first amount. Saved
 (.btst_principal, over config/btst.json) so a restart keeps it; logged and
 sent to Telegram.
+
+Exit (the page's button, in market hours): the target is cancelled first - if
+the cancel is not confirmed nothing is sold (never two sells at once); if it
+had filled, the trade closes as a target hit. Then what the account holds is
+sold at market and the trade closed (exit_reason manual_exit).
 """
 import math
 
@@ -107,3 +113,33 @@ def set_principal(strategy, amount, save=None, notify=None, log=print):
             except Exception:
                 pass
         return {"ok": True, "principal": v, "was": was, "trade_amount": per, "cap": round(cap, 2), "note": note}
+
+
+def exit_trade(strategy, log=print):
+    with strategy.lock:                         # never while step() is managing the same trade
+        job = strategy.store.open_job()
+        if not job or job.get("status") != "open":
+            return {"ok": False, "error": "no trade is open" if not job else
+                    f"the trade is {job.get('status')} - nothing to exit"}
+        jid, sym, q = job["job_id"], job["contract"]["symbol"], job["position"]["qty"]
+        if not strategy._market_open(strategy.now()):
+            log(fmt("WARN", "exit", f"exit of {sym} asked from the page refused - the market is shut"))
+            return {"ok": False, "error": f"the market is closed - {sym} can only be sold in market hours "
+                                          f"({strategy.c('market_open', '09:15')} - {strategy.c('market_close', '15:45')})"}
+        log(fmt("TRADE", "exit", f"exit asked from the page: {sym} x{q} ({job.get('mode')}) - the target "
+                                 f"cancelled first, then sold at market"))
+        gone = strategy._cancel_resting(job, "exit asked from the page")
+        if gone == "unsure":
+            return {"ok": False, "error": f"the target did not confirm cancelled - nothing sold (never two sells "
+                                          f"at once); check the Angel app and try again"}
+        if gone != "closed":
+            job = strategy.store.get_job(jid)
+            st = strategy._target_state(job)
+            if st is not None and st["final"] and not st.get("filled"):
+                job = dict(job, target_order=None)      # cancelled, nothing filled: not cancelled a second time
+            if not strategy.exit_now(job, "manual_exit"):
+                return {"ok": False, "error": f"the market sell of {sym} did not complete - see the log and the "
+                                              f"Angel app"}
+        r = (strategy.store.get_job(jid) or {}).get("result") or {}
+        return {"ok": True, "symbol": sym, "qty": r.get("qty"), "exit_price": r.get("exit_price"),
+                "exit_reason": r.get("exit_reason"), "net_pnl": r.get("net_pnl"), "pnl_pct": r.get("pnl_pct")}

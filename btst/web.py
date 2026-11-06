@@ -15,6 +15,8 @@
                        open live trade at market first; an open paper trade is parked
     POST /api/principal?amount=RS   set the principal (btst/modes.py): each new trade
                        invests trade_pct (10%) of it; an open trade keeps its size
+    POST /api/exit     sell the open trade at market now (btst/modes.py): its target
+                       cancelled first; market hours only
 """
 import json
 import sys
@@ -42,7 +44,8 @@ PAGE = r"""<!DOCTYPE html>
   h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:20px;margin:30px 0 10px;padding-bottom:4px;border-bottom:1px solid var(--rule)}
   a{color:var(--link)}
   .head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--rule);padding-bottom:8px}
-  .head .right{display:flex;gap:8px;align-items:center}
+  .head .right{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  #ctl{display:inline-flex;flex-wrap:wrap;gap:8px}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px;align-items:center}
   .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--hair);background:var(--surface);padding:1px 9px;font-size:12px;border-radius:12px;white-space:nowrap}
   .chip i{width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block}
@@ -170,13 +173,14 @@ const tm = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""
 const tms = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 19)}`;
 const day = s => { if (!s) return "–"; const d = new Date(s.slice(0, 10) + "T12:00:00Z"); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
 const SCEN = {hold: "No top-up (above -25%)", topup_50: "Topped up 50% at -25%: target cut 25%, trailing",
-  topup_100: "Topped up 100%: target = average + 10%",
+  topup_100: "Topped up 100%: target = average + 10%", topup_limit: "Limit buy filled: the target trailing on, floor average + 10%",
   hold_small_loss: "Down ≤ 20%: target held", average_down: "Averaged (old rule)", average_down_deep: "Averaged, trailing (old rule)",
   average_down_failed: "Average-down buy failed", average_down_skipped: "Average down skipped", closed_on_entry_day: "Closed on the entry day"};
-const EXIT = {target: "Target hit", "target (watched)": "Target hit (watched)", time_exit: "15:14 exit", overdue_exit: "Exit at the next open (missed day)"};
+const EXIT = {target: "Target hit", "target (watched)": "Target hit (watched)", time_exit: "15:14 exit", overdue_exit: "Exit at the next open (missed day)",
+  manual_exit: "Exited from the page"};
 const MARKET = {open: ["Market open", "ok"], preopen: ["Pre-open", "mid"], closed: ["Market closed", ""], weekend: ["Weekend", ""], holiday: ["Holiday", ""]};
 const OPEN_ROWS = new Set();
-let BUSY = false, LAST = null;
+let BUSY = false, LAST = null, EXITING = false;
 
 async function switchMode(to){
   const d = LAST || {}, j = d.open_job, parked = (d.parked || []).filter(x => x.mode === "paper")[0];
@@ -195,6 +199,22 @@ async function switchMode(to){
   const r = await (await fetch(`/api/mode?to=${to}${exit ? "&exit=1" : ""}`, {method: "POST"})).json().catch(e => ({ok: false, error: String(e)}));
   BUSY = false;
   alert(r.ok ? `BTST is now ${r.mode.toUpperCase()}` + (r.note ? `\n\n${r.note}` : "") : "Not switched: " + r.error);
+  tick();
+}
+async function exitTrade(){
+  const d = LAST || {}, j = d.open_job;
+  if (!j || j.status !== "open"){ alert("No trade is open."); return; }
+  const c = j.contract || {}, p = j.position || {}, r = (d.days || []).find(x => x.job_id === j.job_id) || {};
+  if (d.market !== "open"){ alert(`The market is closed - ${c.symbol} can only be sold ${(d.rules || {}).market_open}–${(d.rules || {}).market_close}.`); return; }
+  if (!confirm(`Exit ${c.symbol} x${p.qty} now${j.mode === "live" ? " - a LIVE trade, real orders" : " (paper)"}?\n\n`
+      + `1. The target ${n2(j.target_price)} is cancelled (if it does not confirm, nothing is sold).\n`
+      + `2. What the account holds is sold at market.\n\nP&L now: ${rs(r.live_pnl)} (${pc(r.live_pct)}).`)) return;
+  EXITING = true; drawHead(d);
+  const res = await (await fetch("/api/exit", {method: "POST"})).json().catch(e => ({ok: false, error: String(e)}));
+  EXITING = false;
+  alert(res.ok ? `Exited ${res.symbol}: ${res.qty ? `sold ${n0(res.qty)} @ ${n2(res.exit_price)}` : "nothing left at the broker"}`
+      + ` · net ${rs(res.net_pnl)} (${pc(res.pnl_pct)})` + (res.exit_reason && res.exit_reason !== "manual_exit" ? `\n\n${EXIT[res.exit_reason] || res.exit_reason}` : "")
+    : "Not exited: " + res.error);
   tick();
 }
 function toggle(id){ OPEN_ROWS.has(id) ? OPEN_ROWS.delete(id) : OPEN_ROWS.add(id); if (LAST) drawTrades(LAST); }
@@ -217,8 +237,11 @@ function drawHead(d){
   const liveTrade = d.open_job && d.open_job.mode === "live";
   const tip = live ? (liveTrade ? "a live trade is open: you will be asked to sell it at market first, or cancel" : "back to paper trading")
     : (d.open_job ? "real orders with real money; the open paper trade is saved (parked) and resumes on PAPER" : "real orders with real money");
+  const ej = d.open_job && d.open_job.status === "open" ? d.open_job : null;
   document.getElementById("ctl").innerHTML =
-    `<button class="btn ${live ? "" : "danger"}" ${BUSY ? "disabled" : ""} title="${esc(tip)}"
+    `<button class="btn danger" ${!ej || EXITING || BUSY ? "disabled" : ""} onclick="exitTrade()"
+       title="${esc(ej ? `cancel the target, then sell ${(ej.contract || {}).symbol} x${(ej.position || {}).qty} at market` : "no trade open")}">${EXITING ? "Exiting…" : "Exit trade"}</button>`
+    + `<button class="btn ${live ? "" : "danger"}" ${BUSY ? "disabled" : ""} title="${esc(tip)}"
        onclick="switchMode('${live ? "paper" : "live"}')">${BUSY ? "Switching…" : "Switch to " + (live ? "PAPER" : "LIVE")}</button>`;
   document.getElementById("logbtn").innerHTML = "View logs" + (lp ? ` <span class="warn">(${lp})</span>` : "");
 }
@@ -239,6 +262,7 @@ function bar(avg, now, target, low, tr, nowLabel){
 function plan(d, j, p){
   const R = d.rules || {}, base = p.entry_price, t = j.target_price, first = (p.entry_price || 0) * (p.entry_qty || 0);
   const l1 = R.topup_first_loss_pct, l2 = R.topup_second_loss_pct, half = R.topup_first_pct, cut = R.target_cut_pct, fl = R.floor_target_pct;
+  const tol = R.topup_tolerance_pct || 0, lots = x => `${rsp(x)}: the most lots within ${rsp(x * (1 + tol / 100))}, at least 1`;
   const gift = j.gift_check || j.gift_close;
   const giftRow = gift ? `<tr><td>GIFT Nifty</td><td>${n2(gift.price)}${num(gift.move) ? ` · ${gift.move > 0 ? "+" : ""}${n0(gift.move)} points ${esc(gift.measured || "")} · <b class="${gift.verdict === "against" ? "down" : (gift.verdict === "with" ? "up" : "")}">${esc(gift.verdict)}</b> our ${esc((j.signal || {}).side)}` : " · the close (baseline)"} · ${tm(gift.at)} (information only)</td></tr>` : "";
   const gt = j.gift_target, side = esc((j.signal || {}).side), gmin = R.gift_target_min_points;
@@ -249,20 +273,24 @@ function plan(d, j, p){
       : gt.action === "dropped" ? `the raise to ${n2(gt.target)} came after a top-up - not used`
       : `under ${gmin} - the target stays ${n2(gt.target_before)}`}</td></tr>`;
   if (j.decision){
-    const dec = j.decision, tr = j.trail, ups = j.topups || [];
+    const dec = j.decision, tr = j.trail, ups = j.topups || [], lt = j.limit_topup, lim = !!(lt && lt.ok), done = j.topped_pct || 0;
+    const limRow = !lt ? "" : `<tr><td>Limit BUY ${tms(lt.at)}</td><td>${lim ? `${n0(lt.qty)} @ ${n2(lt.price)} (-${lt.loss_pct}%) · ${esc(lt.status || "open")}${lt.booked ? ` · filled ${n0(lt.booked)}` : ""} — instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%`
+      : `not placed (${esc(lt.error || "")}) — the -${l2}% buy stands`}</td></tr>`;
+    const nextRow = done >= 100 || (lim && done > 0) ? "" : `<tr><td>At ${n2(base * (1 - (done ? l2 : l1) / 100))}</td><td>${done ? `(-${l2}%) add the other ${n0(100 - done)}% (${lots(first * (100 - done) / 100)}) → target = new average + ${fl}%`
+      : `(-${l1}%) add ${half}% (${lots(first * half / 100)}) → target cut ${cut}%, then -1 per point, floor average + ${fl}%${lim ? "" : `; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}`}</td></tr>`;
     return `<div class="plan"><div class="k">Today's plan — live from ${esc(R.market_open)}</div><table>
       <tr><td>Open ${tms(dec.at)}</td><td>${n2(dec.ltp)} = ${pc(dec.pnl_pct)} vs the buy ${n2(base)}</td></tr>
       ${ups.map(u => `<tr><td>Top-up ${tms(u.at)}</td><td>${n0(u.pct)}% at ${pc(-u.loss_pct)}: +${n0(u.qty)} @ ${n2(u.price)} (${rsp(u.amount)})</td></tr>`).join("")}
-      ${(j.topped_pct || 0) < 100 ? `<tr><td>${(j.topped_pct || 0) ? "At" : "At"} ${n2(base * (1 - ((j.topped_pct || 0) ? l2 : l1) / 100))}</td><td>${(j.topped_pct || 0) ? `(-${l2}%) add the other ${n0(100 - j.topped_pct)}% → target = new average + ${fl}%` : `(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}) → target cut ${cut}%, then -1 per point, floor average + ${fl}%; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}</td></tr>` : ""}
+      ${limRow}${nextRow}
       ${tr ? `<tr><td>Trailing</td><td>${tr.active ? "on" : "stopped"}: from ${n2(tr.initial)}, 1 point per point below ${n2(tr.ref)} (lowest ${n2(tr.low)}), floor ${n2(tr.floor)} · ${(tr.steps || []).length} step(s)${tr.stop_reason ? " · " + esc(tr.stop_reason) : ""}</td></tr>` : ""}
       <tr><td>Target</td><td>${n2(t)} — sells the whole position (${n0(p.qty)}) when reached</td></tr>
       <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
   }
   return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}</div><table>
-    <tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}</td></tr>
-    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (≈${rsp(first * half / 100)}); target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%</td></tr>
-    <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}%; target = the new average + ${fl}%</td></tr>
-    <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (≈${rsp(first)}) at once; target = the new average + ${fl}%</td></tr>
+    <tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}${R.limit_topup_loss_pct > 0 ? `; opened at ${n2(base * (1 - l1 / 100))} or above, a LIMIT BUY for the other ${100 - half}% goes in at once at ${n2(base * (1 - R.limit_topup_loss_pct / 100))} (-${R.limit_topup_loss_pct}%; ${lots(first * (100 - half) / 100)} at that price) instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%` : ""}</td></tr>
+    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (${lots(first * half / 100)}); target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%</td></tr>
+    <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}% (${lots(first * (100 - half) / 100)}); target = the new average + ${fl}%${R.limit_topup_loss_pct > 0 ? ` - only if it opened below -${l1}% (else the limit buy)` : ""}</td></tr>
+    <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (${lots(first)}) at once; target = the new average + ${fl}%</td></tr>
     <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
 }
 
@@ -368,7 +396,7 @@ function chartSvg(d, id){
   const off = outside.length ? `<div class="n">Outside the recorded minutes: ${outside.map(e => esc(when(e.t) + " " + e.label)).join(" · ")}${rec.status === "recording" ? " (Angel's 1-minute candles fill the gaps when the recording is saved)" : ""}</div>` : "";
   return `<div class="chartbox">${head}${svg}<div class="readout n">Hover the chart for the price, target and P&amp;L at that minute.</div>${off}</div>`;
 }
-const STEP = {first: "first (50%)", second: "second (50%)", full: "full (100%)", missed: "missed (price back)"};
+const STEP = {first: "first (50%)", second: "second (50%)", full: "full (100%)", missed: "missed (price back)", limit: "limit buy (the other 50%)"};
 function topupTable(list, withTrade){
   if (!list.length) return "";
   return `<table><tr><th>Time</th>${withTrade ? "<th>Trade</th>" : ""}<th>Step</th><th>Down</th><th>Bought</th><th>Amount</th>
@@ -385,7 +413,7 @@ function drawTopups(d){
   (d.days || []).forEach(r => (r.topups || []).concat(r.missed_topups || []).forEach(u => all.push(Object.assign({_sym: r.signal || r.symbol, _mode: r.mode, _job: r.job_id}, u))));
   all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
   document.getElementById("topups").innerHTML = all.length ? topupTable(all, true)
-    : `<p class="empty">No top-up yet. A trade adds 50% when it first falls 25% below the buy price, and the rest at -50% (100% at once if it opens 50% down).</p>`;
+    : `<p class="empty">No top-up yet. A trade adds 50% when it first falls 25% below the buy price, and the rest at -50% (100% at once if it opens 50% down; opened above -25%, the rest is a limit buy at -${n0((d.rules || {}).limit_topup_loss_pct)}%) - each time the most lots within that amount + ${n0((d.rules || {}).topup_tolerance_pct)}%, at least 1.</p>`;
 }
 function parkedHtml(d){
   const ps = d.parked || [];
@@ -818,7 +846,7 @@ def logs(book, query):
     return {"now": now_ist().isoformat(timespec="seconds"), "source": source, "counts": counts, "lines": rows}
 
 
-def make_handler(strategy, store, switch_mode, book=None, set_principal=None):
+def make_handler(strategy, store, switch_mode, book=None, set_principal=None, exit_now=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -873,6 +901,8 @@ def make_handler(strategy, store, switch_mode, book=None, set_principal=None):
                 elif u.path == "/api/principal" and set_principal is not None:
                     amount = (parse_qs(u.query).get("amount") or [""])[0]
                     self._send(json.dumps(set_principal(amount), default=str))
+                elif u.path == "/api/exit" and exit_now is not None:
+                    self._send(json.dumps(exit_now(), default=str))
                 else:
                     self._send("{}", code=404)
             except (BrokenPipeError, ConnectionResetError):
@@ -899,8 +929,8 @@ class _Server(ThreadingHTTPServer):
             super().handle_error(request, client_address)
 
 
-def serve(strategy, store, switch_mode, port=9000, host="0.0.0.0", book=None, set_principal=None):
-    httpd = _Server((host, int(port)), make_handler(strategy, store, switch_mode, book, set_principal))
+def serve(strategy, store, switch_mode, port=9000, host="0.0.0.0", book=None, set_principal=None, exit_now=None):
+    httpd = _Server((host, int(port)), make_handler(strategy, store, switch_mode, book, set_principal, exit_now))
     httpd.book = book
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, name="btst-web", daemon=True).start()

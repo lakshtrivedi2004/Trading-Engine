@@ -193,6 +193,21 @@ class AngelBtstBroker:
         self.log(fmt("TRADE", "broker", f"target {oid} resting: {(st or {}).get('status', 'open')}"))
         return dict(order, ok=True, status=(st or {}).get("status", "open"), error=None)
 
+    def place_limit_buy(self, c, qty, price):
+        """A resting LIMIT buy (DAY, CARRYFORWARD): the limit top-up at -53%."""
+        oid, uid, err = self._send(self._params(c, "BUY", qty, price, "DAY"))
+        order = {"side": "BUY", "order_id": oid, "uid": uid, "qty": int(qty), "price_sent": round(price, 2),
+                 "duration": "DAY"}
+        if err:
+            return dict(order, ok=False, error=err, status="refused")
+        self.sleep(1.0)
+        st = self.order_state(order)
+        if st and st["status"] in ("rejected", "cancelled"):
+            self.log(fmt("ERROR", "broker", f"limit buy {oid} {st['status']}: {st['text']}"))
+            return dict(order, ok=False, error=st["text"] or st["status"], status=st["status"])
+        self.log(fmt("TRADE", "broker", f"limit buy {oid} resting: {(st or {}).get('status', 'open')}"))
+        return dict(order, ok=True, status=(st or {}).get("status", "open"), error=None)
+
     def place_amo_sell(self, c, qty, price):
         """An after-market LIMIT sell for the next session (DAY, CARRYFORWARD):
         a NORMAL order sent after the close, which Angel holds as an AMO and
@@ -350,6 +365,22 @@ class PaperBtstBroker:
                                         f"(LTP {ltp}; fills when a trade reaches {price:.2f})"))
         return out
 
+    def place_limit_buy(self, c, qty, price):
+        oid = self._new(c, "BUY", qty, price, "DAY")
+        out = {"side": "BUY", "order_id": oid, "uid": oid, "qty": int(qty), "price_sent": price,
+               "duration": "DAY", "ok": True, "status": "open", "error": None}
+        ltp = self.ltp(c)
+        if ltp and ltp <= price:                    # above the market: a limit buy fills at once, at the market
+            self._fill(oid, ltp)
+            self.log(fmt("TRADE", "broker", f"paper {oid} BUY {c['symbol']} x{qty} LIMIT {price:.2f}: the price "
+                                            f"is already {ltp} - filled at once @ {ltp}"))
+            return dict(out, status="complete")
+        if self.watch is not None:
+            self.watch.mark_low()
+        self.log(fmt("TRADE", "broker", f"paper {oid} BUY {c['symbol']} x{qty} LIMIT {price:.2f} resting "
+                                        f"(LTP {ltp}; fills when a trade reaches {price:.2f})"))
+        return out
+
     def modify_sell(self, order, c, qty, price):
         """Move the resting paper target to `price`; the highest price is
         counted again from now (a touch of the old, higher price never fills it)."""
@@ -381,6 +412,18 @@ class PaperBtstBroker:
                 self.watch.track(c)             # the contract first: a new one would forget the mark
                 self.watch.mark()
             note = f"target {to['order_id']} @ {job.get('target_price')} placed {d}"
+        lt = job.get("limit_topup") or {}
+        if lt.get("ok") and lt.get("order_id") and not lt.get("final") and not lt.get("booked"):
+            from datetime import date
+            try:
+                d = date.fromisoformat(str(lt.get("at") or "")[:10])
+            except ValueError:
+                d = self.today()
+            self._new(c, "BUY", lt["qty"], float(lt["price"]), "DAY", oid=lt["order_id"], day=d)
+            if self.watch is not None and d == self.today():
+                self.watch.track(c)
+                self.watch.mark_low()
+            note += f"; limit top-up {lt['order_id']} BUY x{lt['qty']} @ {lt['price']}"
         self.log(fmt("INFO", "broker", f"paper: adopted {job['job_id']} after the restart - {c['symbol']} "
                                        f"x{p['qty']}, {note} (a touch while the desk was down is not seen)"))
 
@@ -389,6 +432,18 @@ class PaperBtstBroker:
         o = self.orders.get(oid)
         if o is None:
             return None
+        if o["status"] == "open" and o["side"] == "BUY" and o["duration"] == "DAY":
+            if o["day"] < self.today():
+                o["status"] = "cancelled"
+                self.log(fmt("INFO", "broker", f"paper {oid} expired at the close of {o['day']} (a DAY order)"))
+            else:
+                ltp = self.ltp(o["contract"])
+                low = self.watch.trough() if self.watch is not None else None
+                best = min([x for x in (ltp, low) if x] or [float("inf")])
+                if best <= o["price"]:
+                    self._fill(oid, o["price"])
+                    self.log(fmt("TRADE", "broker", f"paper {oid} limit buy filled @ {o['price']:.2f} "
+                                                    f"(LTP {ltp}, lowest traded since placed {low})"))
         if o["status"] == "open" and o["side"] == "SELL":
             if o["duration"] == "DAY" and o["day"] < self.today():
                 o["status"] = "cancelled"

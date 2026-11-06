@@ -467,6 +467,43 @@ r = done.get("result") or {}
 check("the target fills: CLOSED in profit on 195 qty, with the top-ups in the metrics",
       done["status"] == "closed" and r["target_hit"] and r["averaged"] and r["qty"] == 195 and r["net_pnl"] > 0
       and r["topped_pct"] == 100 and r["topups"] == 2, str(r)[:160])
+check("a 1-lot trade: x + 10% is less than a lot at 78 (Rs 3,754 vs Rs 5,070) - 1 lot all the same (at least 1)",
+      [u["qty"] for u in done["topups"]] == [65, 65])
+
+section("4c2. Top-up size: the most lots within x + 10% (x = that % of the first amount), at least 1")
+at(2026, 10, 22, 15, 18)
+PRICE["ltp"] = 100.0
+st, store, broker, logs, sent = desk(cfg={"lots": 4, "topup_tolerance_pct": 10})
+st.on_message(msg(21, SAMPLE, 15, 18))
+st.step()
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 95.0
+st.step()
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 75.0
+st.step()
+j = store.open_job()
+check("4 lots (260 @ 100 = Rs 26,000); at 75: x = Rs 13,000, within Rs 14,300 -> 2 lots (Rs 9,750), not 3 (Rs 14,625)",
+      j["position"]["entry_qty"] == 260 and [u["qty"] for u in j["topups"]] == [130],
+      str([(u["qty"], u["price"]) for u in j.get("topups") or []]))
+check("...the log gives the amount and the most it may cost",
+      any("top up 50% of Rs 26,000 = Rs 13,000 -> 2 lot(s) = 130 qty" in x and "within Rs 14,300, at least 1" in x
+          for x in logs))
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 50.0
+st.step()
+check("at 50: the other 50%, x = Rs 13,000 within Rs 14,300 -> 4 lots (Rs 13,000)",
+      [u["qty"] for u in store.open_job()["topups"]] == [130, 260])
+at(2026, 10, 22, 15, 18)
+PRICE["ltp"] = 100.0
+st, store, broker, logs, sent = desk(cfg={"lots": 4, "topup_tolerance_pct": 10})
+st.on_message(msg(22, SAMPLE, 15, 18))
+st.step()
+at(2026, 10, 23, 9, 15, 5)
+PRICE["ltp"] = 48.0
+st.step()
+check("opens at 48 (-52%): 100% at once, x = Rs 26,000 within Rs 28,600 -> 9 lots (Rs 28,080), not the nearest 8",
+      [u["qty"] for u in store.open_job()["topups"]] == [585], str(store.open_job().get("topups")))
 
 at(2026, 10, 22, 15, 18)
 PRICE["ltp"] = 105.0
@@ -478,10 +515,115 @@ PRICE["ltp"] = 50.0
 st.step()
 j = store.open_job()
 avg = round((6825 + 6500) / 195, 2)
-check(f"a gap-down open at 50 (-52%): 100% at once -> 2 lots (130 @ 50, the nearest to Rs 6,825); average {avg}; "
+check(f"a gap-down open at 50 (-52%): 100% at once -> 2 lots (130 @ 50, the most within Rs 7,508 (Rs 6,825 + 10%)); average {avg}; "
       f"target = average + 10% = {tick_round(avg * 1.1)}; no trailing",
       j["topped_pct"] == 100 and j["position"]["qty"] == 195 and j["target_price"] == tick_round(avg * 1.1)
       and not j.get("trail") and j["topups"][0]["step"] == "full", str({k: j.get(k) for k in ("topped_pct", "target_price")}))
+
+section("4c3. Opened above -25%: the other 50% as a LIMIT BUY at -53%, not the -50% buy (paper)")
+LIM = {"lots": 4, "topup_tolerance_pct": 10, "limit_topup_loss_pct": 53}
+
+
+def lim_day(n, open_px):
+    at(2026, 10, 22, 15, 18)
+    PRICE["ltp"] = 100.0
+    s_, st_, b_, lg_, sent_ = desk(cfg=LIM)
+    s_.on_message(msg(n, SAMPLE, 15, 18))
+    s_.step()
+    at(2026, 10, 23, 9, 15, 5)
+    PRICE["ltp"] = open_px
+    s_.step()
+    return s_, st_, b_, lg_, sent_
+
+
+st, store, broker, logs, sent = lim_day(23, 95.0)
+j = store.open_job()
+lt = j.get("limit_topup") or {}
+check("opened at 95 (-5%): a LIMIT BUY at 47.00 (-53%) for the other 50% - Rs 13,000, the most lots within "
+      "Rs 14,300 at 47 = 4 lots (260); nothing bought at market",
+      lt.get("ok") and lt["price"] == 47.0 and lt["qty"] == 260 and not j.get("topups")
+      and broker.orders[lt["order_id"]]["side"] == "BUY" and broker.orders[lt["order_id"]]["status"] == "open", str(lt))
+check("...said on Telegram", any("LIMIT BUY" in x and "47.00" in x for x in sent))
+b2 = PaperBtstBroker(lambda c: PRICE["ltp"], log=lambda *_: None, today=lambda: CLOCK["t"].date())
+b2.adopt(j)
+check("...a restart (paper) takes the limit buy back with the target",
+      b2.orders.get(lt["order_id"], {}).get("side") == "BUY" and b2.orders[lt["order_id"]]["price"] == 47.0
+      and b2.orders[lt["order_id"]]["status"] == "open")
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 75.0
+st.step()
+j = store.open_job()
+check("75 (-25%): the first 50% at market as before (2 lots), target cut 25%, trailing; the limit buy still resting",
+      [u["step"] for u in j["topups"]] == ["first"] and j["topups"][0]["qty"] == 130 and j["trail"]["active"]
+      and broker.orders[lt["order_id"]]["status"] == "open")
+at(2026, 10, 23, 10, 30)
+PRICE["ltp"] = 50.0
+st.step()
+j = store.open_job()
+check("50 (-50%): no market buy - the -50% buy is skipped, the limit buy at 47 stands for it",
+      len(j["topups"]) == 1 and j["position"]["qty"] == 390)
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 47.0
+st.step()
+j = store.open_job()
+u = j["topups"][-1]
+avgL = round((26000 + 9750 + 260 * 47) / 650, 2)
+check(f"47: the limit buy fills - +260 @ 47; 650 qty, average {avgL}; the target NOT reset: it stays 132.50 "
+      f"(trailed from 157.50) and trails on, its floor now the average + 10% = {tick_round(avgL * 1.1)}; 100% added",
+      u["step"] == "limit" and u["qty"] == 260 and u["price"] == 47.0 and j["position"]["qty"] == 650
+      and j["position"]["avg_price"] == avgL and j["target_price"] == 132.5 and j["trail"]["active"]
+      and j["trail"]["floor"] == tick_round(avgL * 1.1) and j["topped_pct"] == 100
+      and j["decision"]["scenario"] == "topup_limit" and j["limit_topup"]["booked"] == 260,
+      str({k: j.get(k) for k in ("target_price", "topped_pct", "trail")})[:300])
+check("...one target for the whole 650 resting, at 132.50", [(o["qty"], o["price"]) for o in broker.orders.values()
+                                                             if o["side"] == "SELL" and o["status"] == "open"] == [(650, 132.5)])
+at(2026, 10, 23, 11, 30)
+PRICE["ltp"] = 40.0
+st.step()
+j = store.open_job()
+check("...40: trailing on, 1 point per point below the first top-up's 75 - 157.50 - 35 = 122.50; no more buys",
+      j["target_price"] == 122.5 and len(j["topups"]) == 2, str(j["target_price"]))
+
+st, store, broker, logs, sent = lim_day(27, 75.0)
+j = store.open_job()
+check("opened at 75, exactly -25%: the limit buy at 47 goes in, and the first 50% at once",
+      (j.get("limit_topup") or {}).get("ok") and [u["step"] for u in j["topups"]] == ["first"])
+st, store, broker, logs, sent = lim_day(28, 45.0)
+j = store.open_job()
+check("opened at 45 (-55%): the rules as before - no limit buy, 100% at once, target = average + 10%",
+      not j.get("limit_topup") and [u["step"] for u in j["topups"]] == ["full"]
+      and j["target_price"] == tick_round(j["position"]["avg_price"] * 1.1) and not (j.get("trail") or {}).get("active"))
+
+st, store, broker, logs, sent = lim_day(24, 70.0)
+j = store.open_job()
+check("opened at 70 (-30%): no limit buy - as before, 50% at once", not j.get("limit_topup")
+      and [u["step"] for u in j["topups"]] == ["first"])
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 50.0
+st.step()
+check("...and the other 50% at market at 50 (-50%)", [u["step"] for u in store.open_job()["topups"]] == ["first", "second"])
+
+st, store, broker, logs, sent = lim_day(25, 95.0)
+ltC = store.open_job()["limit_topup"]
+at(2026, 10, 23, 15, 14, 5)
+PRICE["ltp"] = 90.0
+st.step()
+done = store.recent_jobs(1)[0]
+check("15:14 with the limit buy resting: it is cancelled, then the 260 sold at market",
+      done["status"] == "closed" and done["result"]["exit_reason"] == "time_exit" and done["result"]["qty"] == 260
+      and broker.orders[ltC["order_id"]]["status"] == "cancelled" and broker.net_qty(done["contract"]) == 0
+      and [o["kind"] for o in done["orders"]].index("limit_topup_cancel") < [o["kind"] for o in done["orders"]].index("exit"))
+
+st, store, broker, logs, sent = lim_day(26, 120.0)
+ltD = store.open_job()["limit_topup"]
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 215.0
+st.step()
+done = store.recent_jobs(1)[0]
+check("the target fills with the limit buy resting: closed as a target hit, the limit buy cancelled, nothing left over",
+      done["status"] == "closed" and done["result"]["exit_reason"] == "target"
+      and broker.orders[ltD["order_id"]]["status"] == "cancelled" and broker.net_qty(done["contract"]) == 0
+      and not any("Angel app" in x for x in sent))
 
 section("4d. SENSEX: target 3 x")
 at(2026, 10, 22, 15, 19)
@@ -1014,6 +1156,10 @@ class Exchange:
         for r in self.rows.values():
             if r["side"] == "SELL" and r["orderstatus"] == "open" and px >= r["price"]:
                 self._fill(r, r["price"])
+            elif r["side"] == "BUY" and r["orderstatus"] == "open" and px <= r["price"]:
+                r.update(orderstatus="complete", filledshares=str(r["qty"]), averageprice=str(r["price"]))
+                self.net += r["qty"]                      # a resting limit buy reached
+                self.held[r["sym"]] = self.held.get(r["sym"], 0) + r["qty"]
 
 
 def live_desk(day=22, cfg=None):
@@ -1149,6 +1295,110 @@ sP.step()
 at(2026, 10, 22, 16, 1)
 sP.step()
 check("paper places no AMO (live only)", stP.open_job() and not stP.open_job().get("amo"))
+
+# the limit top-up, live (owner, 6 Nov 2026)
+LIMC = {"limit_topup_loss_pct": 53, "topup_tolerance_pct": 10}
+
+
+def live_open(cfg, open_px, patch=None):
+    s_, st_, ex_, lg_, sent_ = live_desk(cfg=cfg)
+    if patch:
+        patch(ex_)
+    ex_.close_day()
+    at(2026, 10, 22, 16, 1)
+    s_.step()
+    ex_.open_market(open_px)
+    at(2026, 10, 23, 9, 15, 5)
+    s_.step()
+    return s_, st_, ex_, lg_, sent_
+
+
+sL, stL, exL, lgL, sentL = live_open(LIMC, 120.0)
+jL = stL.open_job()
+ltL = jL.get("limit_topup") or {}
+check("live, opened at 120 (+13%): LIMIT BUY 65 @ 49.80 DAY at Angel (106 - 53%, rounded down; 1 lot), the AMO "
+      "target kept", ltL.get("ok") and ("place", "NORMAL", "BUY", "DAY", "65", "49.80") in exL.events
+      and len(exL.resting_sells()) == 1, str(ltL))
+exL.px = 79.0
+at(2026, 10, 23, 10, 0)
+sL.step()
+exL.px = 52.0
+at(2026, 10, 23, 10, 30)
+sL.step()
+jL = stL.get_job(jL["job_id"])
+iocs = [e for e in exL.events if e[0] == "place" and e[2] == "BUY" and e[3] == "IOC"]
+check("79 (-25.5%): the first 50% at market; 52 (-51%): no second market buy (IOC buys: the entry, the first)",
+      [u["step"] for u in jL["topups"]] == ["first"] and len(iocs) == 2, str(iocs))
+exL.tick(49.5)
+at(2026, 10, 23, 11, 0)
+sL.step()
+jL = stL.get_job(jL["job_id"])
+avgLL = round((106 * 65 + 79 * 65 + 49.8 * 65) / 195, 2)
+check(f"the limit buy fills at 49.80: booked - 195 @ {avgLL}; the old target cancelled, one SELL 195 at the same "
+      f"trailed 130.50 at Angel; trailing on, floor {tick_round(avgLL * 1.1)} (the new average + 10%)",
+      jL["position"]["qty"] == 195 and jL["position"]["avg_price"] == avgLL and jL["target_price"] == 130.5
+      and [(r["qty"], r["price"]) for r in exL.resting_sells()] == [(195, 130.5)] and jL["trail"]["active"]
+      and jL["trail"]["floor"] == tick_round(avgLL * 1.1) and jL["topups"][-1]["step"] == "limit" and exL.net == 195,
+      str([(r["qty"], r["price"]) for r in exL.resting_sells()]))
+at(2026, 10, 23, 15, 14, 5)
+exL.px = 70.0
+sL.step()
+jL = stL.get_job(jL["job_id"])
+check("...15:14: all 195 sold at market", jL["status"] == "closed" and jL["result"]["qty"] == 195 and exL.net == 0)
+
+sM2, stM2, exM2, _, _ = live_open(LIMC, 120.0)
+ltM2 = stM2.open_job()["limit_topup"]
+at(2026, 10, 23, 15, 14, 5)
+exM2.px = 110.0
+sM2.step()
+jM2 = stM2.recent_jobs(1)[0]
+check("live, 15:14 with the limit buy resting: cancelled first (NORMAL), then the target, then SELL 65 at market; no "
+      "buy left at Angel", jM2["status"] == "closed" and exM2.net == 0
+      and ("cancel", ltM2["order_id"], "NORMAL") in exM2.events
+      and not [r for r in exM2.rows.values() if r["side"] == "BUY" and r["orderstatus"] in RESTING])
+
+
+sT, stT, exT, _, sentT = live_open(dict(LIMC, limit_cancel_retry_sec=0), 120.0)
+ltT = stT.open_job()["limit_topup"]
+exT.cancelOrder = lambda oid, variety: {"status": True, "data": {"orderid": oid}}    # accepted, not done
+sT.broker.confirm_sec = 0.05
+exT.tick(215.0)                                     # the target (210) fills
+at(2026, 10, 23, 11, 0)
+sT.step()
+jT = stT.recent_jobs(1)[0]
+check("the target hit, the limit buy's cancel not confirmed: closed as a target hit, said, the buy still at Angel",
+      jT["status"] == "closed" and jT["result"]["exit_reason"] == "target" and not jT["limit_topup"]["final"]
+      and any("did not confirm cancelled" in x for x in sentT)
+      and [r["orderstatus"] for r in exT.rows.values() if r["side"] == "BUY" and r["duration"] == "DAY"] == ["open"])
+del exT.cancelOrder                                 # Angel answers again
+at(2026, 10, 23, 11, 0, 10)
+sT.step()
+jT = stT.recent_jobs(1)[0]
+check("...cancelled again on the next pass until it is: now cancelled, nothing left at Angel",
+      jT["limit_topup"]["final"] and jT["limit_topup"]["status"] == "cancelled"
+      and not [r for r in exT.rows.values() if r["side"] == "BUY" and r["orderstatus"] in RESTING] and exT.net == 0,
+      str(jT["limit_topup"]))
+
+
+def refuse_limit(ex_):
+    orig = ex_.placeOrderFullResponse
+    ex_.placeOrderFullResponse = lambda p: ({"status": False, "message": "price outside the operating range",
+                                             "errorcode": "AB4036", "data": None}
+                                            if p["transactiontype"] == "BUY" and p["duration"] == "DAY" else orig(p))
+
+
+sR, stR, exR, _, sentR = live_open(LIMC, 120.0, refuse_limit)
+jR = stR.open_job()
+check("live, the limit buy refused by Angel: said, and the -50% buy stands",
+      jR.get("limit_topup") and not jR["limit_topup"]["ok"] and any("-50% top-up stands" in x for x in sentR))
+exR.px = 79.0
+at(2026, 10, 23, 10, 0)
+sR.step()
+exR.px = 52.0
+at(2026, 10, 23, 10, 30)
+sR.step()
+check("...so at 79 the first 50%, at 52 the other 50% at market, as before",
+      [u["step"] for u in stR.get_job(jR["job_id"])["topups"]] == ["first", "second"])
 
 section("10. Owner's rules of 24 Oct 2026")
 from btst.session import AngelSessions, Api as SessApi, auth_failed   # noqa: E402
@@ -1543,6 +1793,61 @@ except ValueError:
 srv.server_close()
 check("...the page server ignores a client hang-up, and logs any other request error as one line",
       len(wlog) == 1 and "bad request line" in wlog[0] and "web |" in wlog[0], str(wlog))
+
+section("11b. Exit the open trade from the page (btst/modes.py exit_trade, POST /api/exit)")
+xlog = []
+check("no trade open: nothing to exit", modes.exit_trade(desk()[0], log=xlog.append)["error"] == "no trade is open")
+sX, stX, exX, lgX, sentX = live_desk()             # live: 65 @ 106, the DAY target 210 resting
+jX = stX.open_job()
+toX = jX["target_order"]["order_id"]
+at(2026, 10, 22, 15, 50)
+rX0 = modes.exit_trade(sX, log=xlog.append)
+check("the market shut: refused - the trade still open, nothing cancelled or sold",
+      not rX0["ok"] and "market is closed" in rX0["error"] and stX.open_job()
+      and not [e for e in exX.events if e[0] == "cancel"], rX0["error"])
+at(2026, 10, 22, 15, 20)
+exX.px = 120.0
+e0 = len(exX.events)
+rX = modes.exit_trade(sX, log=xlog.append)
+evX = exX.events[e0:]
+sells = [i for i, e in enumerate(evX) if e[0] == "place" and e[2] == "SELL"]
+jX = stX.get_job(jX["job_id"])
+check("live: the target 210 cancelled first (NORMAL), then SELL 65 IOC at market; closed manual_exit @ 120",
+      rX["ok"] and rX["exit_reason"] == "manual_exit" and rX["qty"] == 65 and rX["exit_price"] == 120.0
+      and [e for e in evX if e[0] == "cancel"] == [("cancel", toX, "NORMAL")] and evX[0][0] == "cancel"
+      and len(sells) == 1 and evX[sells[0]][3] == "IOC"
+      and evX[sells[0]][4] == "65" and jX["status"] == "closed" and exX.net == 0 and not exX.resting_sells()
+      and not stX.open_job(), str(evX))
+check("...logged as asked from the page", any("exit asked from the page" in x for x in xlog))
+sY, stY, exY, _, _ = live_desk()
+exY.tick(215.0)                                     # the target fills at 210 before the desk looks
+rY = modes.exit_trade(sY, log=xlog.append)
+check("the target had already filled: closed as a target hit at 210, nothing sold at market",
+      rY["ok"] and rY["exit_reason"] == "target" and rY["exit_price"] == 210.0
+      and not [e for e in exY.events if e[0] == "place" and e[3] == "IOC" and e[2] == "SELL"] and exY.net == 0, str(rY))
+sZ, stZ, exZ, _, _ = live_desk()
+exZ.cancelOrder = lambda oid, variety: {"status": True, "data": {"orderid": oid}}    # accepted, never cancelled
+sZ.broker.confirm_sec = 0
+rZ = modes.exit_trade(sZ, log=xlog.append)
+check("the cancel not confirmed: nothing sold (never two sells at once) - the trade still open, the target resting",
+      not rZ["ok"] and "nothing sold" in rZ["error"] and stZ.open_job() and len(exZ.resting_sells()) == 1
+      and exZ.net == 65, str(rZ))
+at(2026, 10, 22, 15, 17)
+PRICE["ltp"] = 106.0
+sW, stW, _, _, _ = desk()
+sW.on_message(msg(3, SAMPLE, 15, 17))
+sW.step()
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 130.0
+httpX = web.serve(sW, stW, lambda to, exit_trade=False: {}, port=0, host="127.0.0.1",
+                  exit_now=lambda: modes.exit_trade(sW, log=xlog.append))
+baseX = f"http://127.0.0.1:{httpX.server_address[1]}"
+rW = _json.loads(urllib.request.urlopen(urllib.request.Request(baseX + "/api/exit", method="POST"), timeout=10).read())
+homeX = urllib.request.urlopen(baseX + "/", timeout=10).read().decode()
+httpX.shutdown()
+check("paper, the next day: POST /api/exit sells at the price (130), closed manual_exit; the page has the Exit trade button",
+      rW["ok"] and rW["exit_reason"] == "manual_exit" and rW["exit_price"] == 130.0 and not stW.open_job()
+      and "Exit trade" in homeX and "exitTrade()" in homeX and 'fetch("/api/exit"' in homeX, str(rW))
 
 section("12. GIFT Nifty (information only)")
 from btst import gift as G                                       # noqa: E402

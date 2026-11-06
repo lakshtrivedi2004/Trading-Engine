@@ -61,6 +61,7 @@ class PriceWatch:
         self.feed, self.feed_session, self.feed_failed_at = None, None, 0.0
         self.last = {}                  # ltp, high, at, source
         self.marked, self.base_high, self.top = None, None, None   # marked: the day of the mark
+        self.low_marked, self.bottom = None, None   # the lowest since mark_low() (a paper limit buy)
         self.last_rest, self.ticks, self.rest_calls = 0.0, 0, 0
         self.contract = None            # the open job's contract (self.token)
         self.extra = {}                 # token -> contract, recorded only
@@ -98,6 +99,8 @@ class PriceWatch:
                 self.last.update(ltp=ltp, at=self.clock(), source=source)
             if high > 0:
                 self.last["high"] = high
+            if ltp > 0 and self.low_marked == self.today():
+                self.bottom = min(self.bottom or ltp, ltp)
             if self.marked != self.today():
                 return                              # no mark, or yesterday's: the day high has reset
             if ltp > 0:
@@ -122,6 +125,16 @@ class PriceWatch:
         with self.lock:
             return self.top if self.marked == self.today() else None
 
+    def mark_low(self):
+        """From now on, keep the lowest price traded (a limit buy went in)."""
+        with self.lock:
+            self.low_marked, self.bottom = self.today(), None
+
+    def trough(self):
+        """The lowest price traded since mark_low(), or None."""
+        with self.lock:
+            return self.bottom if self.low_marked == self.today() else None
+
     # ── getting it ──────────────────────────────────────────────────────────
     def track(self, c):
         """Contract c is the one watched (a new one forgets the old one's mark)."""
@@ -130,6 +143,7 @@ class PriceWatch:
             with self.lock:
                 self.token, self.symbol, self.last, self.contract = tok, c["symbol"], {}, c
                 self.marked, self.base_high, self.top = None, None, None
+                self.low_marked, self.bottom = None, None
             self.log(fmt("INFO", "price", f"watching {c['symbol']} ({tok}, {c['exchange']})"))
 
     def release(self):

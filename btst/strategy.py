@@ -20,6 +20,20 @@ Day D+1 (the next trading day), tracked live from the open (owner, 26 Oct
     then down 50%: add the other 50%; target = the new average + 10%
     already down 50% when first seen (a gap down): add 100%; target =
         the new average + 10%
+Each add of x (that % of the first amount) buys the most lots whose cost is
+within x + topup_tolerance_pct (10%), at the price then - at least 1 lot
+(owner, 6 Nov 2026; was the count nearest x): Rs 30,000 bought at 100, at 75
+x = Rs 15,000, so the most lots within Rs 16,500.
+Opening at -25% or better (in profit, or down 25% at most - owner, 6 Nov
+2026): the other 50% goes in at the open as a resting LIMIT BUY at
+limit_topup_loss_pct (53%) below the first buy (100 -> 47, the most lots within
+Rs 16,500 there) instead of the -50% buy; the -25% buy is as above (target cut
+25%, then 1 point lower per point). Filled: the target is not reset - it keeps
+trailing 1 point per point, its floor now the new average + 10%. Cancelled at
+any exit and when the target fills - a cancel not confirmed is tried again
+every limit_cancel_retry_sec (10) until the order is final. Refused by the
+exchange: the -50% buy stands. Opening below -25%: no limit order, the rules
+above.
 GIFT Nifty is read at the entry day's close and at gift_check_at (01:00) and
 reported - information only (btst/gift.py). Read again at gift_target_at
 (09:11) on D+1, it sets the target (owner, 3 Nov 2026): g points in the
@@ -64,7 +78,7 @@ RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_
                  "topup_second_loss_pct": 50.0, "target_cut_pct": 25.0, "floor_target_pct": 10.0,
                  "trail_step_points": 1.0, "amo_at": "17:00", "market_open": "09:15", "market_close": "15:45",
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0,
-                 "principal": 0, "trade_pct": 10.0,
+                 "principal": 0, "trade_pct": 10.0, "topup_tolerance_pct": 10.0, "limit_topup_loss_pct": 0.0,
                  "gift_check_at": "01:00", "gift_target_at": "09:11", "gift_target_min_points": 160.0,
                  "gift_target_max_mult": 3.0, "gift_target_deduct": 0.2, "gift_target_until": "09:15"}
 
@@ -106,6 +120,8 @@ class BtstStrategy:
         self.last_ltp_at = 0.0
         self.last_store_at = 0.0
         self.last_order_check = 0.0
+        self.last_limit_check = 0.0
+        self.last_leftover_check = 0.0
         self.touch_said = None
         self.managing = False
         self.last_trail_modify = 0.0
@@ -480,6 +496,8 @@ class BtstStrategy:
             self._log("exit", f"{self.c('exit_at', '15:14')} reached - target not hit, closing at market", "TRADE")
             self._exit_market(job, "time_exit")
             return
+        if self._limit_topup_check(self.store.get_job(jid) or job):
+            return
         if self._topup_rules(self.store.get_job(jid) or job, ltp):
             return
         if (job.get("trail") or {}).get("active"):
@@ -542,11 +560,18 @@ class BtstStrategy:
         self.store.update_job(jid, set_={"decision": decision})
         job["decision"] = decision
         first, second = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
+        lim = float(self.c("limit_topup_loss_pct", 0) or 0)
+        limit = lim > 0 and pnl_pct >= -first - 1e-9 and not job.get("limit_topup")    # down 25% at most
+        fl = self.c("floor_target_pct", 10.0)
         self._say(f"session open: {ltp:.2f} vs the buy {base:.2f} = {pnl_pct:+.1f}%. Watching live: at -{first:g}% "
                   f"({base * (1 - first / 100):.2f}) top up {self.c('topup_first_pct', 50.0):g}% and cut the target "
-                  f"{self.c('target_cut_pct', 25.0):g}%; at -{second:g}% ({base * (1 - second / 100):.2f}) top up "
-                  f"to 100%, target = average + {self.c('floor_target_pct', 10.0):g}%; out at "
-                  f"{self.c('exit_at', '15:14')} if not hit", jid, True, "decision")
+                  f"{self.c('target_cut_pct', 25.0):g}%, then 1 point lower per point; "
+                  + (f"the other {100 - float(self.c('topup_first_pct', 50.0)):g}% as a LIMIT BUY at -{lim:g}% "
+                     f"({base * (1 - lim / 100):.2f}), placed now, instead of the -{second:g}% buy - the target "
+                     f"trailing on to the average + {fl:g}%"
+                     if limit else f"at -{second:g}% ({base * (1 - second / 100):.2f}) top up to 100%, target = "
+                                   f"average + {fl:g}%")
+                  + f"; out at {self.c('exit_at', '15:14')} if not hit", jid, True, "decision")
         st = self._target_state(job)
         if st and st["status"] == "complete":
             self._close(job, "target", st["avg"] or job["target_price"], None)
@@ -559,6 +584,8 @@ class BtstStrategy:
                           status=st["status"])
         else:
             self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
+        if limit:
+            self._place_limit_topup(self.store.get_job(jid))
         self._topup_rules(self.store.get_job(jid), ltp)
 
     def _topup_rules(self, job, ltp):
@@ -579,8 +606,12 @@ class BtstStrategy:
         done = float(job.get("topped_pct") or 0.0)
         first, second = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
         half = float(self.c("topup_first_pct", 50.0))
+        limit = bool((job.get("limit_topup") or {}).get("ok"))  # the other 50% rests as a limit buy (at -53%)
 
         def step_for(loss):
+            if limit:
+                firsted = any(u.get("step") in ("first", "full") for u in job.get("topups") or [])
+                return (half, "first") if not firsted and loss >= first else None
             if done <= 0 and loss >= second:
                 return 100.0, "full"
             if done <= 0 and loss >= first:
@@ -677,8 +708,9 @@ class BtstStrategy:
         return cur[1], cur[2]
 
     def _topup(self, job, ltp, pct, loss, step):
-        """Add pct% of the first amount at market (whole lots, the count nearest
-        it, at least 1); then the target as the rule says. Never two sells: the
+        """Add pct% of the first amount (x) at market: the most whole lots whose
+        cost is within x + topup_tolerance_pct (10%) at this price, at least 1;
+        then the target as the rule says. Never two sells: the
         resting target (or AMO) is cancelled first."""
         jid, c = job["job_id"], job["contract"]
         pos = job["position"]
@@ -693,7 +725,8 @@ class BtstStrategy:
         pos = job["position"]
         lot = int(c["lot_size"])
         amount = first_amount * pct / 100.0
-        n = max(1, round(amount / (ltp * lot)))
+        cap = amount * (1 + float(self.c("topup_tolerance_pct", 10.0)) / 100.0)
+        n = max(1, int(math.floor(cap / (ltp * lot) + 1e-9)))
         add = n * lot
         missed, low, low_ms = getattr(self, "_missed", (False, None, None))
         if missed:
@@ -702,7 +735,7 @@ class BtstStrategy:
                                   f"topping up now at the market (~{ltp:.2f})", "WARN")
         self._log("decision", f"{-loss:.1f}% below the buy {pos['entry_price']:.2f}: top up {pct:g}% of "
                               f"Rs {first_amount:,.0f} = Rs {amount:,.0f} -> {n} lot(s) = {add} qty @ ~{ltp:.2f} "
-                              f"(Rs {add * ltp:,.0f})", "TRADE")
+                              f"(Rs {add * ltp:,.0f}; the most lots within Rs {cap:,.0f}, at least 1)", "TRADE")
         self._log("order", f"BUY {c['symbol']} x{add} at market (top-up {step})", "TRADE")
         buy = self.broker.buy_market(c, add)
         buy.update(kind=f"topup_{step}", at=self._ts())
@@ -760,6 +793,176 @@ class BtstStrategy:
                      else f" (= average + {floor_pct:g}%)"), jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, f"target_after_topup_{step}")
         return True
+
+    # ── the limit top-up (opened above -25%) ───────────────────────────────
+    def _place_limit_topup(self, job):
+        """The other 50% (x) as a resting LIMIT BUY at limit_topup_loss_pct (53%)
+        below the first buy: the most lots within x + topup_tolerance_pct
+        (10%) at that price, at least 1. Refused: the -50% buy stands."""
+        jid, c, pos = job["job_id"], job["contract"], job["position"]
+        base, lot = float(pos["entry_price"]), int(c["lot_size"])
+        first_amount = base * int(pos["entry_qty"])
+        lim = float(self.c("limit_topup_loss_pct", 53.0))
+        pct = 100.0 - float(self.c("topup_first_pct", 50.0))
+        price = tick_round(base * (1 - lim / 100.0), c["tick"], up=False)
+        amount = first_amount * pct / 100.0
+        cap = amount * (1 + float(self.c("topup_tolerance_pct", 10.0)) / 100.0)
+        q = max(1, int(math.floor(cap / (price * lot) + 1e-9))) * lot
+        self._log("order", f"BUY {c['symbol']} x{q} LIMIT {price:.2f} DAY (limit top-up at -{lim:g}%)", "TRADE")
+        o = self.broker.place_limit_buy(c, q, price)
+        rec = dict(o, kind="limit_topup", at=self._ts(), price=price, pct=pct, loss_pct=lim,
+                   amount=round(amount, 2), cap=round(cap, 2), booked=0)
+        self.store.add_order(jid, rec)
+        self.store.update_job(jid, set_={"limit_topup": rec})
+        second = float(self.c("topup_second_loss_pct", 50.0))
+        if rec.get("ok"):
+            self._say(f"LIMIT BUY {c['symbol']} x{q} @ {price:.2f} resting (-{lim:g}% below the buy {base:.2f}: "
+                      f"{pct:g}% of Rs {first_amount:,.0f} = Rs {amount:,.0f}, the most lots within Rs {cap:,.0f}) - "
+                      f"instead of the -{second:g}% buy; filled, the target keeps trailing 1 point per point down "
+                      f"to the new average + {self.c('floor_target_pct', 10.0):g}%", jid, True, "decision", "TRADE")
+        else:
+            self._say(f"the LIMIT BUY {c['symbol']} x{q} @ {price:.2f} (-{lim:g}%) was not placed ({rec.get('error')}) "
+                      f"- the -{second:g}% top-up stands", jid, True, "order", "WARN")
+
+    def _limit_fill(self, job, new, px, lt):
+        """The job's update for `new` more bought by the limit top-up at px:
+        the position, the average, the top-up's record. The target is not
+        reset (owner, 6 Nov 2026): it stays and keeps trailing 1 point per
+        point, its floor now the new average + floor_target_pct (10%).
+        (update, target)."""
+        c, pos = job["contract"], job["position"]
+        floor_pct = float(self.c("floor_target_pct", 10.0))
+        q = int(pos["qty"]) + new
+        avg = (float(pos["avg_price"]) * int(pos["qty"]) + px * new) / q
+        floor = tick_round(avg * (1 + floor_pct / 100.0), c["tick"], up=True)
+        pct = float(lt["pct"]) * new / int(lt["qty"])
+        done = float(job.get("topped_pct") or 0.0) + pct
+        base, at = float(pos["entry_price"]), self._ts()
+        first_amount = base * int(pos["entry_qty"])
+        target = float(job["target_price"])
+        topups = list(job.get("topups") or []) + [{"at": at, "step": "limit", "pct": round(pct, 2),
+                                                   "loss_pct": round(100.0 * (base - px) / base, 2), "missed": False,
+                                                   "low": None, "low_at": None, "ltp": None, "qty": new,
+                                                   "price": round(px, 2), "amount": round(px * new, 2),
+                                                   "order_id": lt.get("order_id"), "qty_before": int(pos["qty"]),
+                                                   "qty_after": q, "avg_before": round(float(pos["avg_price"]), 2),
+                                                   "avg_after": round(avg, 2),
+                                                   "invested_after": round(float(pos["invested"]) + px * new, 2),
+                                                   "target_before": target, "target_after": target,
+                                                   "floor": floor, "mode": job.get("mode")}]
+        new_pos = dict(pos, qty=q, avg_price=round(avg, 2), invested=round(float(pos["invested"]) + px * new, 2),
+                       added_qty=int(pos.get("added_qty") or 0) + new, added_price=round(px, 2),
+                       added_amount=round(float(pos.get("added_amount") or 0) + px * new, 2), added_at=at)
+        decision = dict(job.get("decision") or {}, scenario="topup_limit",
+                        added_qty=new_pos["added_qty"], added_price=round(px, 2), avg_after=round(avg, 2),
+                        added_amount=new_pos["added_amount"], first_invested=round(first_amount, 2))
+        upd = {"position": new_pos, "topped_pct": round(done, 2), "topups": topups, "decision": decision,
+               "limit_topup": dict(lt, booked=int(lt.get("booked") or 0) + new)}
+        if job.get("trail"):                    # trailing on (again) to the lower floor
+            upd["trail"] = dict(job["trail"], floor=floor, active=target > floor + 1e-9)
+        return upd, target
+
+    def _limit_topup_check(self, job):
+        """The resting limit top-up, every order_poll_sec (paper: every pass).
+        A fill: the target cancelled, the position booked, the target back in
+        at the new average + 10% for the whole position. True if it acted."""
+        lt = job.get("limit_topup") or {}
+        if not lt.get("ok") or lt.get("final"):
+            return False
+        if self.broker.mode != "paper" and time.time() - self.last_limit_check < float(self.c("order_poll_sec", 3)):
+            return False
+        self.last_limit_check = time.time()
+        st = self.broker.order_state(lt)
+        if not st:
+            return False
+        jid, c = job["job_id"], job["contract"]
+        if st["status"] != lt.get("status"):
+            self._log("order", f"limit top-up {lt.get('order_id')} is now {st['status']}"
+                               + (f" (filled {st['filled']} @ {st['avg']})" if st.get("filled") else ""),
+                      "TRADE" if st.get("filled") else ("WARN" if st["status"] == "rejected" else "INFO"))
+        lt = dict(lt, status=st["status"], final=bool(st["final"]))
+        new = int(st["filled"] or 0) - int(lt.get("booked") or 0)
+        if new <= 0:
+            self.store.update_job(jid, set_={"limit_topup": lt})
+            if st["final"] and st["status"] != "complete":
+                self._say(f"the limit top-up {lt.get('order_id')} is {st['status']}" + (f" ({st['text']})" if st.get("text")
+                          else "") + " - nothing bought; no -50% buy today", jid, True, "order", "WARN")
+            return False
+        px = float(st["avg"] or lt["price"])
+        gone = self._cancel_resting(job, f"the limit top-up bought {new} @ {px:.2f} - a new target for the whole "
+                                         f"position follows")
+        if gone == "closed":
+            return True                         # the target filled first: _close cancelled this and said what it bought
+        if gone == "unsure":
+            return True                         # booked on the next pass, once the target is cancelled
+        job = self.store.get_job(jid)
+        upd, target = self._limit_fill(job, new, px, lt)
+        self.store.update_job(jid, set_=upd)
+        p = upd["position"]
+        self._say(f"limit top-up filled: +{new} @ {px:.2f} ({-upd['topups'][-1]['loss_pct']:.1f}% below the buy) - now "
+                  f"{p['qty']} @ {p['avg_price']:.2f}; target {target:.2f} for all {p['qty']}, "
+                  + (f"trailing 1 point per point, floor {upd['topups'][-1]['floor']:.2f} (= the average + "
+                     f"{self.c('floor_target_pct', 10.0):g}%)" if job.get("trail") else "the -25% top-up and its "
+                     "trailing to come"), jid, True, "decision", "TRADE")
+        self._place_target(self.store.get_job(jid), target, "target_after_limit_topup")
+        return True
+
+    def _limit_topup_stop(self, job, why, book=True):
+        """The limit top-up cancelled (an exit, a close). book: what it bought
+        before the cancel joins the position (then it is sold too); else only
+        counted. (the job now, quantity bought and not booked)."""
+        lt = job.get("limit_topup") or {}
+        if not lt.get("ok") or lt.get("final"):
+            return job, 0
+        jid = job["job_id"]
+        self._log("order", f"cancelling the limit top-up {lt.get('order_id')} - {why}")
+        st = self.broker.cancel(lt)
+        self.store.add_order(jid, {"kind": "limit_topup_cancel", "at": self._ts(), "order_id": lt.get("order_id"),
+                                   "state": st, "why": why})
+        lt = dict(lt, status=(st or {}).get("status", "unknown"), final=bool(st and st["final"]))
+        if not st or not st["final"]:
+            self._say(f"the limit top-up {lt.get('order_id')} did not confirm cancelled ({(st or {}).get('status')}) "
+                      f"- check the Angel app", jid, True, "order", "ERROR")
+        new = int((st or {}).get("filled") or 0) - int(lt.get("booked") or 0)
+        if new > 0 and book:
+            job = self.store.get_job(jid)
+            upd, _ = self._limit_fill(job, new, float(st["avg"] or lt["price"]), lt)
+            upd["limit_topup"] = dict(upd["limit_topup"], status=lt["status"], final=lt["final"])
+            self.store.update_job(jid, set_=upd)
+            self._say(f"the limit top-up bought {new} @ {float(st['avg'] or lt['price']):.2f} before the cancel - "
+                      f"booked, sold with the rest", jid, True, "order", "WARN")
+            return self.store.get_job(jid), 0
+        self.store.update_job(jid, set_={"limit_topup": lt})
+        return self.store.get_job(jid) or job, max(0, new)
+
+    def _limit_leftovers(self):
+        """A limit top-up still resting after its trade closed (its cancel not
+        confirmed): cancelled again every limit_cancel_retry_sec (10) until it
+        is final (owner, 6 Nov 2026: cancelled whatever happens). After the
+        session the exchange has cancelled it (a DAY order)."""
+        if time.time() - self.last_leftover_check < float(self.c("limit_cancel_retry_sec", 10)):
+            return
+        self.last_leftover_check = time.time()
+        for j in self.store.recent_jobs(5):
+            lt = j.get("limit_topup") or {}
+            if j.get("status") != "closed" or not lt.get("ok") or lt.get("final") or j.get("mode") != self.broker.mode:
+                continue
+            jid, oid = j["job_id"], lt.get("order_id")
+            closed_day = str((j.get("result") or {}).get("closed_at") or "")[:10]
+            if closed_day != self.now().date().isoformat() or not self._market_open(self.now()):
+                self.store.update_job(jid, set_={"limit_topup": dict(lt, status="expired", final=True)})
+                self._log("order", f"the limit top-up {oid} of {jid}: the session is over - a DAY order, gone")
+                continue
+            st = self.broker.cancel(lt)
+            if not st or not st["final"]:
+                self._log("order", f"the limit top-up {oid} of the closed trade {jid} is still "
+                                   f"{(st or {}).get('status', 'unreadable')} - cancelling again", "WARN")
+                continue
+            self.store.update_job(jid, set_={"limit_topup": dict(lt, status=st["status"], final=True)})
+            extra = int(st.get("filled") or 0) - int(lt.get("booked") or 0)
+            self._say(f"the limit top-up {oid} of the closed trade is now {st['status']}"
+                      + (f" - it bought {extra} of {j['contract']['symbol']}: the account holds them, sell them in "
+                         f"the Angel app" if extra > 0 else ""), jid, True, "order", "ERROR" if extra > 0 else "INFO")
 
     # ── the trailing target (after the first top-up) ───────────────────────
     def _trail(self, job, ltp):
@@ -1391,6 +1594,7 @@ class BtstStrategy:
                             f"Rs {(ltp - p['avg_price']) * p['qty']:+,.0f} on {p['qty']} @ {p['avg_price']:.2f}")
 
     def _exit_market(self, job, reason):
+        job = self._limit_topup_stop(job, reason)[0]   # never a buy left resting; what it bought is sold too
         jid, c = job["job_id"], job["contract"]
         q = int(job["position"]["qty"])
         to = job.get("target_order")
@@ -1443,6 +1647,10 @@ class BtstStrategy:
 
     def _close(self, job, reason, exit_px, sell):
         jid = job["job_id"]
+        _, extra = self._limit_topup_stop(self.store.get_job(jid) or job, f"the trade closed ({reason})", book=False)
+        if extra:
+            self._say(f"the limit top-up bought {extra} of {job['contract']['symbol']} before it was cancelled - the "
+                      f"account holds them after this close: sell them in the Angel app", jid, True, "order", "ERROR")
         job = self.store.get_job(jid) or job
         pos, sig = job["position"], job["signal"]
         q, avg, inv = int(pos["qty"]), float(pos["avg_price"]), float(pos["invested"])
@@ -1597,6 +1805,7 @@ class BtstStrategy:
             else:
                 self.status_note = (f"waiting for a signal ({self.c('scan_start', '15:15')} - "
                                     f"{self.c('scan_end', '15:30')})")
+            self._limit_leftovers()
             self._recording_pass()
             if self.prices is not None:
                 if not self.managing:
