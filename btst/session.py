@@ -96,10 +96,13 @@ class AngelSessions:
             except Exception:
                 return False
 
-    def daily(self, at="09:14"):
-        """Once every trading day at `at`: a fresh login before the open."""
+    def daily(self, at="09:14", trading_day=None):
+        """Once every trading day at `at`: a fresh login before the open.
+        trading_day: the desk's answer for today (a special session on a Sunday is one)."""
         now = self.now()
-        if market_phase(now, start="09:15", end="15:45") in ("weekend", "holiday"):
+        if trading_day is None:
+            trading_day = market_phase(now, start="09:15", end="15:45") not in ("weekend", "holiday")
+        if not trading_day:
             return False
         t = now.hour * 3600 + now.minute * 60 + now.second
         if t < _hm(at) or self.refreshed_on == now.date():

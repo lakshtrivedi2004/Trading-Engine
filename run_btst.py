@@ -38,6 +38,7 @@ from arb.utils import read_channel_messages                        # noqa: E402
 from btst import modes, web                                        # noqa: E402
 from btst.broker import AngelBtstBroker, PaperBtstBroker           # noqa: E402
 from btst.holidays import Holidays                                 # noqa: E402
+from btst import special                                           # noqa: E402
 from btst.logbook import Logbook, fmt                              # noqa: E402
 from btst.recorder import TickRecorder                             # noqa: E402
 from btst.session import AngelSessions, Api                        # noqa: E402
@@ -167,7 +168,7 @@ def main():
                         ltp_poll_sec=float(cfg.get("ltp_poll_sec", 1)), ws_fresh_sec=float(cfg.get("ws_fresh_sec", 5)),
                         use_ws=bool(cfg.get("use_websocket", True)),
                         hours=(cfg.get("market_open", "09:15"), cfg.get("market_close", "15:45")),
-                        ws_dead_sec=float(cfg.get("ws_dead_sec", 90)))
+                        ws_dead_sec=float(cfg.get("ws_dead_sec", 90)), phase=lambda: special.phase(cfg))
 
     def make_broker(mode):
         log(f"broker: {mode.upper()}" + (" - real orders, CARRYFORWARD" if mode == "live"
@@ -236,6 +237,10 @@ def main():
     log(f"BTST desk {mode.upper()} | page http://0.0.0.0:{port} (logs /logs) | "
         f"scan {cfg.get('scan_start')}-{cfg.get('scan_end')} | model {cfg.get('ai_model') if llm else 'none'}",
         area="start")
+    for s_ in special.upcoming(cfg, now_ist().date()):
+        log(f"special session {s_['date']} ({s_.get('name', '')}): {s_['open']} - {s_['close']} - GIFT Nifty for the "
+            f"target {s_['gift_target_at']}, out at {s_['exit_at']}, signals read {s_['scan_start']} - "
+            f"{s_['scan_end']}", area="start")
     if notifier and cfg.get("notify_startup", False):
         notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>")
 
@@ -255,7 +260,7 @@ def main():
     while not stop.is_set():
         try:
             hols.refresh()                          # once a day
-            sess.daily(cfg.get("session_refresh_at", "09:14"))
+            sess.daily(strategy.c("session_refresh_at", "09:14"), special.trading_day(cfg, now_ist().date()))
         except Exception as e:
             log(f"daily refresh error: {e!r}", "ERROR", "angel")
         strategy.health = {"angel": sess.state(), "reader": "up" if reader.is_alive() else "DOWN",

@@ -8,6 +8,9 @@
   "market_open": "09:15",
   "market_close": "15:45",
   "exit_at": "15:14",
+  "special_sessions": {
+    "2026-11-08": {"name": "Muhurat trading", "open": "14:20", "close": "15:40"}
+  },
   "amo_exit": true,
   "amo_at": "17:00",
   "amo_until": "08:55",

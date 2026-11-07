@@ -49,11 +49,13 @@ class PriceWatch:
 
     def __init__(self, session_fn=None, rest_quote=None, log=print, ltp_poll_sec=1.0, ws_fresh_sec=5.0,
                  stale_sec=60.0, use_ws=True, clock=time.time, feed_cls=_Feed, today=lambda: now_ist().date(),
-                 hours=("09:15", "15:45"), ws_dead_sec=90.0):
+                 hours=("09:15", "15:45"), ws_dead_sec=90.0, phase=None):
         self.session_fn, self.rest_quote, self.log = session_fn, rest_quote, log
         self.ltp_poll_sec, self.ws_fresh_sec = float(ltp_poll_sec), float(ws_fresh_sec)
         self.stale_sec, self.use_ws, self.clock, self.feed_cls = float(stale_sec), use_ws, clock, feed_cls
         self.today, self.hours, self.ws_dead_sec = today, hours, float(ws_dead_sec)
+        # the market now (a special session on a Sunday is open - btst/special.py)
+        self.phase = phase or (lambda: market_phase(start=self.hours[0], end=self.hours[1]))
         self.feed_started_at = self.last_ws_at = 0.0
         self.restarts, self.used, self.switch_said_at = 0, None, 0.0
         self.lock = threading.Lock()
@@ -195,7 +197,7 @@ class PriceWatch:
         try:
             f = self.feed_cls(self, sess, max(4, len(tokens) + 2), correlation_id="btstfeed01", log=self._feed_log,
                               stale_sec=30.0,
-                              market_open=lambda: market_phase(start=self.hours[0], end=self.hours[1]) == "open")
+                              market_open=lambda: self.phase() == "open")
             for tok, con in tokens.items():
                 f.register(tok, BSE_FO if con["exchange"] == "BFO" else NSE_FO)
             f.start()
@@ -235,7 +237,7 @@ class PriceWatch:
 
     def _check_feed(self, c=None):
         """A socket quiet for ws_dead_sec in market hours is started again."""
-        if self.feed is None or market_phase(start=self.hours[0], end=self.hours[1]) != "open":
+        if self.feed is None or self.phase() != "open":
             return
         quiet = self.clock() - max(self.last_ws_at, self.feed_started_at)
         if quiet > self.ws_dead_sec:

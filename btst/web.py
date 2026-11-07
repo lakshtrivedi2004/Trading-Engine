@@ -230,6 +230,8 @@ function drawHead(d){
   document.getElementById("chips").innerHTML =
     `<span class="chip ${live ? "live" : "paper"}">${live ? "LIVE" : "PAPER"}</span>`
     + chip(mk[0], mk[1])
+    + (d.special_sessions || []).slice(0, 1).map(s => chip(`${s.name || "Special session"} ${day(s.date)} ${s.open}–${s.close}`, "mid",
+        `GIFT Nifty for the target ${s.gift_target_at}, the open trade out at ${s.exit_at}, signals read ${s.scan_start}–${s.scan_end}`)).join("")
     + chip("Telegram " + (h.reader || "–"), h.reader === "up" ? "ok" : (h.reader ? "bad" : ""), "the signal channel reader")
     + chip("Angel " + (a.last_error ? "error" : (a.logged_in_at ? "logged in " + tm(a.logged_in_at) : "–")), a.last_error ? "bad" : (a.logged_in_at ? "ok" : ""), a.last_error || "")
     + chip("Websocket " + (p.websocket ? "connected" : (p.symbol ? "off" : "idle")), p.websocket ? "ok" : (p.symbol && d.market === "open" ? "bad" : ""), p.symbol || "runs while a trade is open in market hours")

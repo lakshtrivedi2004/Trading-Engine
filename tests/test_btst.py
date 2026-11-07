@@ -2584,5 +2584,166 @@ check("the page has the rule's settings", all(k in web.state(s19, st19)["rules"]
                                             for k in ("gift_target_at", "gift_target_min_points",
                                                       "gift_target_max_mult", "gift_target_deduct")))
 
+section("20. A special session: Muhurat trading, Sunday 8 Nov 2026, 14:20 - 15:40")
+from btst import special as SP                                     # noqa: E402
+
+MUH = {"2026-11-08": {"name": "Muhurat trading", "open": "14:20", "close": "15:40"}}
+c21 = {"market_open": "09:15", "market_close": "15:45", "special_sessions": MUH}
+sun, mon = date(2026, 11, 8), date(2026, 11, 9)
+moved = {k: SP.at(c21, sun, k, v) for k, v in (("market_open", "09:15"), ("gift_target_at", "09:11"),
+                                                ("gift_target_until", "09:15"), ("session_refresh_at", "09:14"),
+                                                ("exit_at", "15:14"), ("scan_start", "15:15"), ("scan_end", "15:45"),
+                                                ("market_close", "15:45"), ("amo_at", "17:00"))}
+check("8 Nov: the times move with the session - GIFT Nifty for the target 14:16 (until 14:20), the login 14:19, "
+      "out at 15:09, signals 15:10 - 15:40; the AMO time stays 17:00",
+      moved == {"market_open": "14:20", "gift_target_at": "14:16", "gift_target_until": "14:20",
+                "session_refresh_at": "14:19", "exit_at": "15:09", "scan_start": "15:10", "scan_end": "15:40",
+                "market_close": "15:40", "amo_at": "17:00"}, str(moved))
+check("...any time set on the day's line is used as set; Monday is as always",
+      SP.at(dict(c21, special_sessions={"2026-11-08": dict(MUH["2026-11-08"], exit_at="15:00")}), sun,
+            "exit_at", "15:14") == "15:00" and SP.at(c21, mon, "exit_at", "15:14") == "15:14")
+ph = [SP.phase(c21, datetime(2026, 11, 8, h, m, tzinfo=IST)) for h, m in ((13, 0), (14, 10), (14, 20), (15, 39), (15, 40))]
+check("a Sunday, open 14:20 - 15:40 (pre-open from 14:05); Saturday stays a weekend",
+      ph == ["closed", "preopen", "open", "open", "closed"]
+      and SP.phase(c21, datetime(2026, 11, 7, 11, 0, tzinfo=IST)) == "weekend", str(ph))
+check("...a trading day; Saturday and the 10 Nov holiday are not",
+      SP.trading_day(c21, sun) and SP.trading_day(c21, mon) and not SP.trading_day(c21, date(2026, 11, 7))
+      and not SP.trading_day(c21, date(2026, 11, 10)))
+check("...a line without both times is ignored", not SP.special({"special_sessions": {"2026-11-08": {"open": "14:20"}}}, sun))
+
+MASTER += [{"name": "NIFTY", "instrumenttype": "OPTIDX", "symbol": "NIFTY09NOV2622800CE", "token": "21",
+            "strike": "2280000.000000", "expiry": "09NOV2026", "lotsize": "65", "exch_seg": "NFO", "tick_size": "5.000000"}]
+
+
+def nov(i, h, mi, d):
+    return SimpleNamespace(id=i, raw_text=SAMPLE, text=SAMPLE, date=datetime(2026, 11, d, h, mi, tzinfo=IST))
+
+
+m21 = {"scan_end": "15:45", "market_close": "15:45", "special_sessions": MUH}
+at(2026, 11, 6, 15, 20)
+PRICE["ltp"] = 100.0
+s21, st21, b21, lg21, sent21 = desk(cfg=m21)
+s21.on_message(nov(1, 15, 20, 6))
+s21.step()
+j21 = st21.open_job()
+check("Friday 6 Nov: bought; its next session is Sunday's Muhurat (then Monday, then Wednesday past the 10th)",
+      j21 and j21["contract"]["symbol"] == "NIFTY09NOV2622800CE" and s21._next_session(date(2026, 11, 6)) == sun
+      and s21._next_session(sun) == mon and s21._next_session(mon) == date(2026, 11, 11))
+at(2026, 11, 7, 11, 0)
+s21.step()
+at(2026, 11, 8, 13, 0)
+s21.step()
+st_ = s21.status()
+check("Saturday, and Sunday before 14:20: nothing done; the page shows the session",
+      not st21.get_job(j21["job_id"]).get("decision") and st_["market"] == "closed"
+      and st_["special_sessions"][0]["exit_at"] == "15:09" and st_["rules"]["exit_at"] == "15:09")
+at(2026, 11, 8, 14, 20, 5)
+PRICE["ltp"] = 90.0
+s21.step()
+j21 = st21.get_job(j21["job_id"])
+check("14:20: the session open - the decision (hold), the target placed again; 'out at 15:09' said",
+      (j21.get("decision") or {}).get("scenario") == "hold" and j21["orders"][-1]["kind"] == "target_day2"
+      and any("out at 15:09" in x for x in sent21), str(j21.get("decision")))
+at(2026, 11, 8, 15, 8)
+s21.step()
+check("...still open at 15:08", st21.get_job(j21["job_id"])["status"] == "open")
+at(2026, 11, 8, 15, 9, 1)
+PRICE["ltp"] = 95.0
+s21.step()
+r21 = st21.get_job(j21["job_id"]).get("result") or {}
+check("15:09: target not hit - sold at market, time_exit", r21.get("exit_reason") == "time_exit"
+      and r21.get("exit_price") == 95.0, str(r21)[:120])
+s21.on_message(nov(2, 15, 5, 8))
+s21.on_message(nov(3, 15, 20, 8))
+at(2026, 11, 8, 15, 20, 30)
+PRICE["ltp"] = 100.0
+s21.step()
+k21 = st21.open_job()
+check("a signal posted 15:05 is not read; one at 15:20 (in 15:10 - 15:40) is BOUGHT - trade date Sunday",
+      not st21.message_seen("test_channel", 2) and k21 and k21["trade_date"] == "2026-11-08"
+      and k21["position"]["qty"] == 65, str((k21 or {}).get("trade_date")))
+at(2026, 11, 8, 15, 41)
+s21.step()
+check("15:41: the session over - nothing managed", not s21.managing and s21.status()["market"] == "closed")
+at(2026, 11, 9, 9, 15, 40)
+PRICE["ltp"] = 120.0
+s21.step()
+k21 = st21.get_job(k21["job_id"])
+at(2026, 11, 9, 15, 10)
+s21.step()
+check("Monday: its session open at 09:15 as always; still held at 15:10 (out at 15:14)",
+      (k21.get("decision") or {}).get("scenario") == "hold" and st21.get_job(k21["job_id"])["status"] == "open"
+      and s21.c("exit_at") == "15:14")
+
+
+def live21(send):
+    """Live: bought Friday, the AMO target placed at 16:01; Sunday 14:20 the
+    session opens - Angel sent the AMO (send) or not."""
+    ex = Exchange()
+    conf = dict(m21, scan_start="15:15", amo_at="16:01", amo_until="08:55", exit_at="15:14")
+    ex.after_hours = lambda: SP.phase(dict(conf, market_close="15:45"), CLOCK["t"]) != "open"
+    store = MongoStore(client=_Client(), db_name="sp")
+    base = {"lots": 1, "decide_at": "09:15:30", "target_mult": {"default": 2.0}, "markers": ["BTST", "Disclaimer"],
+            "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0, "amo_exit": True, "amo_tries": 3,
+            "amo_retry_sec": 300, "gift_target_enabled": False}
+    s_ = BtstStrategy(dict(base, **conf), store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None),
+                      lambda: MASTER, Model(GOOD), "test_channel", log=[].append, now=lambda: CLOCK["t"],
+                      notifier=SimpleNamespace(send=lambda *_: None), cost_model=CostModel.load())
+    at(2026, 11, 6, 15, 20)
+    s_.on_message(nov(1, 15, 20, 6))
+    s_.step()
+    ex.close_day()
+    at(2026, 11, 6, 16, 1)
+    s_.step()
+    at(2026, 11, 7, 16, 1)
+    s_.step()
+    for r in ex.rows.values():
+        if r["amo"] and send:
+            r["exchtime"] = r["exchorderupdatetime"] = "08-Nov-2026 14:05:00"
+        elif r["amo"]:                              # as Angel shows an AMO it holds (7 Nov 2026)
+            r.update(orderstatus="open", exchtime="", exchorderupdatetime="")
+    if send:
+        ex.send_amos()
+    ex.px = 110.0
+    at(2026, 11, 8, 14, 20, 5)
+    s_.step()
+    return s_, store, ex
+
+
+from btst.broker import _state as _bstate                         # noqa: E402
+
+held = {"orderid": "11062be5c625AO", "variety": "AMO", "status": "open", "orderstatus": "open", "text": "",
+        "exchorderupdatetime": "", "exchtime": "", "updatetime": "06-Nov-2026 17:00:02"}
+check("an AMO Angel holds (its row on 7 Nov 2026: open, no exchange time) reads as not sent; at the exchange, "
+      "or a row without those fields, it does not",
+      _bstate(held)["not_sent"] and not _bstate(dict(held, exchtime="08-Nov-2026 14:05:00"))["not_sent"]
+      and not _bstate({"orderstatus": "open"})["not_sent"]
+      and _bstate({"orderstatus": "after market order req received"})["not_sent"])
+sX, stX, exX = live21(send=False)
+jX = stX.open_job()
+amoX = [e for e in exX.events if e[0] == "place" and e[1] == "AMO"]
+cx = [e for e in exX.events if e[0] == "cancel"]
+rest = exX.resting_sells()
+check("live: the AMO Angel did not send by the 14:20 open is cancelled, a normal target SELL 65 @ 210 put in - "
+      "one sell at the exchange", len(amoX) == 1 and len(cx) == 1 and len(rest) == 1
+      and rest[0]["variety"] == "NORMAL" and rest[0]["orderstatus"] == "open" and rest[0]["price"] == 210.0
+      and jX["orders"][-1]["kind"] == "target_day2", str(exX.events[-4:]))
+sY, stY, exY = live21(send=True)
+check("...an AMO Angel did send is kept - no cancel, no second sell",
+      not [e for e in exY.events if e[0] == "cancel"] and len(exY.resting_sells()) == 1
+      and any(h["kind"] == "kept_at_open" for h in stY.open_job()["target_history"]))
+exX.px = 120.0
+at(2026, 11, 8, 15, 9, 1)
+sX.step()
+rX = stX.get_job(jX["job_id"]).get("result") or {}
+check("...15:09: the target cancelled, sold at market", rX.get("exit_reason") == "time_exit" and exX.net == 0
+      and not exX.resting_sells(), str(rX)[:120])
+
+at(2026, 11, 8, 14, 19, 5)
+TCLK["t"] += 4000
+n21 = logins["n"]
+ss.daily("14:19", SP.trading_day(c21, sun))
+check("the Angel login is refreshed on the special session's day too (14:19)", logins["n"] == n21 + 1)
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

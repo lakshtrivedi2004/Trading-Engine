@@ -52,6 +52,10 @@ exit_at (15:14) whatever is still open is cancelled and sold at market. Every st
 close with its metrics - is written to MongoDB (services/mongo.py) under the
 job's id, and logged ("LEVEL area | text", btst/logbook.py) with the reason
 for every trade not taken. No stop-loss, by the owner's design.
+A special session (Muhurat trading - btst/special.py, config/btst.json
+"special_sessions") is a trading day at its own hours, every clock time above
+moved with it; an AMO target Angel has not sent by its open is replaced by a
+normal target.
 
 Never more than one trade open; a job left half-entered by a crash is not
 retried - it is marked for a human to look at.
@@ -63,11 +67,12 @@ import time
 import traceback
 from datetime import datetime, time as dtime, timedelta
 
-from arb.instruments import IST, holidays, market_phase, now_ist
+from arb.instruments import IST, now_ist
 from btst import chart as CH
 from btst import gift as G
 from btst import recorder as REC
 from btst import signal as S
+from btst import special as SP
 from btst import stats as ST
 from btst.contracts import days_left, find_option, tick_round
 from btst.logbook import fmt
@@ -145,12 +150,13 @@ class BtstStrategy:
         self.status_note = "starting"
 
     # ── settings and logging ────────────────────────────────────────────────
-    def c(self, k, default=None):
-        return self.cfg.get(k, default)
+    def c(self, k, default=None, day=None):
+        """A setting - a clock time as it is on `day` (today): moved on a special session's day."""
+        return SP.at(self.cfg, day or self.now().date(), k, self.cfg.get(k, default))
 
     def _market_open(self, now):
         """Orders can be placed: market_open - market_close (09:15 - 15:45) on a trading day."""
-        return market_phase(now, start=self.c("market_open", "09:15"), end=self.c("market_close", "15:45")) == "open"
+        return SP.phase(self.cfg, now) == "open"
 
     def target_mult(self, index):
         m = self.c("target_mult", {}) or {}
@@ -184,9 +190,9 @@ class BtstStrategy:
             self._log("mongo", f"target history for {jid} not saved: {e!r}", "ERROR")
 
     def _next_session(self, day):
-        """The first trading day after `day` (weekends and holidays skipped)."""
+        """The first trading day after `day` (weekends and holidays skipped, a special session not)."""
         d = day + timedelta(days=1)
-        while d.weekday() >= 5 or d.isoformat() in holidays():
+        while not SP.trading_day(self.cfg, d):
             d += timedelta(days=1)
         return d
 
@@ -208,7 +214,7 @@ class BtstStrategy:
         """Say once a day when the scan window opens and when it closes."""
         now = self.now()
         day = now.date().isoformat()
-        if now.weekday() >= 5 or day in holidays():
+        if not SP.trading_day(self.cfg, now.date()):
             return
         s, e, t = _hm(self.c("scan_start", "15:15")), _hm(self.c("scan_end", "15:30")), _secs(now)
         said = self.window_said.setdefault(day, set())
@@ -576,8 +582,16 @@ class BtstStrategy:
         if st and st["status"] == "complete":
             self._close(job, "target", st["avg"] or job["target_price"], None)
             return
-        if st and not st["final"]:
-            to = job["target_order"]
+        to = job.get("target_order") or {}
+        if (st and not st["final"] and to.get("kind") == "amo_target" and st.get("not_sent")
+                and SP.special(self.cfg, self.now().date())):
+            # a special session: an AMO Angel has not sent by the open is not at the exchange
+            gone = self._cancel_resting(job, "the AMO was not sent to the special session - a normal target instead")
+            if gone == "closed":
+                return
+            if gone is None:
+                self._place_target(self.store.get_job(jid), job["target_price"], "target_day2")
+        elif st and not st["final"]:
             self._log("decision", f"the target order {to.get('order_id')} ({to.get('variety', 'NORMAL')}, "
                                   f"{st['status']}) is still at the exchange - kept, no second sell placed")
             self._history(jid, "kept_at_open", price=job["target_price"], order_id=to.get("order_id"),
@@ -1165,8 +1179,8 @@ class BtstStrategy:
         """From the fill to market_close of the next trading day - past the exit too."""
         if self.recorder is None:
             return
-        until = datetime.combine(self._next_session(trade_day), dtime.fromisoformat(self.c("market_close", "15:45")),
-                                 tzinfo=IST)
+        nxt = self._next_session(trade_day)
+        until = datetime.combine(nxt, dtime.fromisoformat(self.c("market_close", "15:45", day=nxt)), tzinfo=IST)
         rec = {"status": "recording", "token": str(c["token"]), "symbol": c["symbol"], "exchange": c["exchange"],
                "from": start_iso, "until": until.isoformat(timespec="seconds"), "file": self.recorder.path(jid)}
         self.store.update_job(jid, set_={"recording": rec})
@@ -1209,10 +1223,11 @@ class BtstStrategy:
     def _window_minutes(self, start, end):
         """Every minute (epoch ms of its start) the market traded between start and end."""
         out = []
-        o, c = dtime.fromisoformat(self.c("market_open", "09:15")), dtime.fromisoformat(self.c("market_close", "15:45"))
         d = start.date()
         while d <= end.date():
-            if d.weekday() < 5 and d.isoformat() not in holidays():
+            if SP.trading_day(self.cfg, d):
+                o = dtime.fromisoformat(self.c("market_open", "09:15", day=d))
+                c = dtime.fromisoformat(self.c("market_close", "15:45", day=d))
                 a = max(start, datetime.combine(d, o, tzinfo=IST))
                 b = min(end, datetime.combine(d, c, tzinfo=IST))
                 t = int(a.timestamp()) // 60 * 60_000
@@ -1362,9 +1377,8 @@ class BtstStrategy:
             j = next((x for x in jobs if x["job_id"] == r.get("job_id")), None)
             if j and (j.get("recording") or {}).get("status") == "recording":
                 r["extremes"] = self.extremes(j) or r.get("extremes")
-        phase = market_phase(datetime.combine(d, dtime(12, 0), tzinfo=IST), start=self.c("market_open", "09:15"),
-                             end=self.c("market_close", "15:45"))
-        return {"date": day, "phase": phase, "trading_day": phase not in ("weekend", "holiday"),
+        phase = SP.phase(self.cfg, datetime.combine(d, dtime(12, 0), tzinfo=IST))
+        return {"date": day, "phase": phase, "trading_day": SP.trading_day(self.cfg, d),
                 "jobs": jobs, "rows": [r for r in rows if r.get("job_id")],
                 "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.messages_on(day)],
                 "no_signal": self.store.get_day(day)}
@@ -1768,7 +1782,7 @@ class BtstStrategy:
         no trade - saved, so the page lists every trading day."""
         now = self.now()
         today = now.date().isoformat()
-        if now.weekday() >= 5 or today in holidays() or _secs(now) < _hm(self.c("scan_end", "15:30")):
+        if not SP.trading_day(self.cfg, now.date()) or _secs(now) < _hm(self.c("scan_end", "15:30")):
             return
         if self.store.any_job_on(today) or self.store.day_recorded(today):
             return
@@ -1825,8 +1839,8 @@ class BtstStrategy:
     def status(self):
         j = self.store.open_job()
         return {"now": self.now().isoformat(timespec="seconds"), "mode": self.broker.mode,
-                "market": market_phase(self.now(), start=self.c("market_open", "09:15"),
-                                       end=self.c("market_close", "15:45")),
+                "market": SP.phase(self.cfg, self.now()),
+                "special_sessions": SP.upcoming(self.cfg, self.now().date()),
                 "note": self.status_note,
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
                 "open_job": _no_channel(j), "jobs": [_no_channel(x) for x in self.store.recent_jobs(20)],

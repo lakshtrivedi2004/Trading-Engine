@@ -36,9 +36,12 @@ def _state(row):
     if not isinstance(row, dict) or not row:
         return None
     status = str(row.get("orderstatus") or row.get("status") or "").lower()
+    # an AMO Angel holds, not yet sent: "open" with no exchange time (7 Nov 2026), or Angel's AMO status
+    waiting = status.startswith("after market") or (status == "open" and "exchtime" in row
+                                                     and not row.get("exchtime") and not row.get("exchorderupdatetime"))
     return {"status": status, "final": status in FINAL or status.startswith("cancelled"),
             "filled": int(_num(row.get("filledshares"))), "avg": _num(row.get("averageprice")),
-            "text": str(row.get("text") or "")}
+            "text": str(row.get("text") or ""), "not_sent": waiting}
 
 
 def _api_variety(variety):
