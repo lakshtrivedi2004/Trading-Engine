@@ -1048,6 +1048,7 @@ class Exchange:
         self.px, self.high, self.rows, self.n, self.net = 106.0, 110.0, {}, 0, 0
         self.held = {}                                    # net quantity per trading symbol
         self.events, self.refuse_amo = [], 0
+        self.freeze, self.book = None, None               # the freeze quantity; what IOCs can still find (None: all)
 
     def ltpData(self, ex, sym, tok):
         return {"status": True, "data": {"ltp": str(self.px), "high": str(self.high)}}
@@ -1067,6 +1068,9 @@ class Exchange:
         if p["variety"] not in VARIETIES:
             self.events.append(("refused", p["variety"], p["transactiontype"], p["duration"], p["quantity"], p["price"]))
             return BAD_VARIETY
+        if self.freeze and int(p["quantity"]) > self.freeze:
+            self.events.append(("refused", "freeze", p["transactiontype"], p["duration"], p["quantity"], p["price"]))
+            return {"status": False, "message": "Quantity is greater than the freeze quantity", "data": None}
         variety = "AMO" if p["duration"] != "IOC" and self.after_hours() else p["variety"]
         self.events.append(("place", variety, p["transactiontype"], p["duration"], p["quantity"], p["price"]))
         if variety == "AMO" and self.refuse_amo:
@@ -1079,8 +1083,12 @@ class Exchange:
                "duration": p["duration"], "qty": q, "price": float(p["price"]), "orderstatus": "open",
                "filledshares": "0", "averageprice": "0", "text": "", "amo": variety == "AMO"}
         if p["duration"] == "IOC":
-            row.update(orderstatus="complete", filledshares=str(q), averageprice=str(self.px))
-            d = q if p["transactiontype"] == "BUY" else -q
+            f = q if self.book is None else min(q, self.book)
+            if self.book is not None:
+                self.book -= f
+            row.update(orderstatus="complete" if f == q else "cancelled", filledshares=str(f),
+                       averageprice=str(self.px) if f else "0")
+            d = f if p["transactiontype"] == "BUY" else -f
             self.net += d
             self.held[p["tradingsymbol"]] = self.held.get(p["tradingsymbol"], 0) + d
         elif variety == "AMO":
@@ -2744,6 +2752,152 @@ TCLK["t"] += 4000
 n21 = logins["n"]
 ss.daily("14:19", SP.trading_day(c21, sun))
 check("the Angel login is refreshed on the special session's day too (14:19)", logins["n"] == n21 + 1)
+
+section("21. Above the freeze quantity: one order in several (owner, 9 Nov 2026)")
+FZ = {"NIFTY": 1800, "SENSEX": 1000, "FINNIFTY": 1800}
+fza = FakeAngel()
+fzb = AngelBtstBroker(fza, freeze_qty=FZ, sleep=lambda s: None, log=lambda *_: None)
+CS = find_option(MASTER, "SENSEX", 73000, "PE", date(2026, 10, 22))
+check("NIFTY 1,800 = 27 lots of 65 (1,755) an order, the rest last; at or under it one order; SENSEX 1,000 = "
+      "50 lots of 20; an index with no freeze set, or none at all, one order",
+      fzb._slices(C, 1950) == [1755, 195] and fzb._slices(C, 1755) == [1755] and fzb._slices(C, 3510) == [1755, 1755]
+      and fzb._slices(CS, 1200) == [1000, 200] and fzb._slices(dict(C, index="MIDCPNIFTY"), 5000) == [5000]
+      and AngelBtstBroker(fza)._slices(C, 5000) == [5000])
+b = fzb.buy_market(C, 1950)
+check("a market BUY of 1,950: two IOCs, 1,755 then 195 - one order to the desk, both fills read back",
+      [p["quantity"] for p in fza.placed] == ["1755", "195"] and b["ok"] and b["filled"] == 1950
+      and b["avg_price"] == 101.5 and b["status"] == "complete" and b["order_id"] == "1 + 2" and len(b["legs"]) == 2, str(b)[:160])
+t = fzb.place_limit_sell(C, 1950, 210.0)
+st_ = fzb.order_state(t)
+check("a target of 1,950: two LIMIT DAY sells at 210, one order (legs); open, nothing filled",
+      t["ok"] and [(p["quantity"], p["price"], p["duration"]) for p in fza.placed[2:]] == [("1755", "210.00", "DAY"),
+                                                                                       ("195", "210.00", "DAY")]
+      and st_ == {"status": "open", "final": False, "filled": 0, "avg": 0.0, "text": "", "not_sent": False}, str(st_))
+fza.rows["u3"].update(orderstatus="complete", filledshares="1755", averageprice="210")
+st_ = fzb.order_state(t)
+check("...one part filled: still open, 1,755 filled @ 210 - complete only when every part is",
+      st_["status"] == "open" and not st_["final"] and st_["filled"] == 1755 and st_["avg"] == 210.0, str(st_))
+st_ = fzb.cancel(t)
+check("...cancel: only the part still open is cancelled; final, 1,755 filled",
+      fza.cancelled == ["4"] and st_["final"] and st_["status"] == "cancelled" and st_["filled"] == 1755, str(st_))
+fzr = FakeAngel()
+_one = fzr.placeOrderFullResponse
+fzr.placeOrderFullResponse = lambda p: _one(p) if not fzr.placed else {"status": False, "message": "RMS: blocked",
+                                                                       "data": ""}
+r_ = AngelBtstBroker(fzr, freeze_qty=FZ, sleep=lambda s: None, log=lambda *_: None).place_limit_sell(C, 1950, 210.0)
+check("all or none: the second part refused - the first cancelled, the target not ok (never only partly in)",
+      not r_["ok"] and "slice 2 of 2" in r_["error"] and "RMS: blocked" in r_["error"] and fzr.cancelled == ["1"]
+      and fzr.rows["u1"]["orderstatus"] == "cancelled", str(r_.get("error")))
+
+
+class Thin(FakeAngel):
+    """IOCs find `room` units each (then nothing)."""
+    def __init__(self, room):
+        super().__init__()
+        self.room = list(room)
+
+    def placeOrderFullResponse(self, p):
+        r = super().placeOrderFullResponse(p)
+        f = min(int(p["quantity"]), self.room.pop(0) if self.room else 0)
+        self.rows[r["data"]["uniqueorderid"]].update(filledshares=str(f), averageprice="101.5" if f else "0",
+                                                      orderstatus="complete" if f == int(p["quantity"]) else "cancelled")
+        return r
+
+
+th = Thin([1000, 950])
+b = AngelBtstBroker(th, freeze_qty=FZ, sleep=lambda s: None, log=lambda *_: None).buy_market(C, 1950)
+check("a part that fills only some: the rest goes in the next order (1,755 -> 1,000 filled, then 950)",
+      [p["quantity"] for p in th.placed] == ["1755", "950"] and b["filled"] == 1950 and b["status"] == "complete")
+th = Thin([1755, 0])
+b = AngelBtstBroker(th, freeze_qty=FZ, sleep=lambda s: None, log=lambda *_: None).buy_market(C, 1950)
+check("...a part that fills nothing stops it: 1,755 of 1,950, ok (what filled is held)",
+      [p["quantity"] for p in th.placed] == ["1755", "195"] and b["ok"] and b["filled"] == 1755
+      and b["status"] == "cancelled")
+
+exF = Exchange()
+exF.freeze = 1800
+stF = MongoStore(client=_Client(), db_name="fz")
+sentF = []
+sF = BtstStrategy({"principal": 1900000, "trade_pct": 10, "amount_tolerance_pct": 10, "scan_start": "15:15",
+                   "scan_end": "15:30", "exit_at": "15:14", "target_mult": {"default": 2.0},
+                   "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
+                   "trail_modify_gap_sec": 0, "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55",
+                   "amo_tries": 3, "amo_retry_sec": 300, "gift_enabled": False, "limit_topup_loss_pct": 53.0},
+                  stF, AngelBtstBroker(exF, freeze_qty={"NIFTY": 1800}, sleep=lambda s: None, log=lambda *_: None),
+                  lambda: MASTER, Model(GOOD), "test_channel", log=[].append, now=lambda: CLOCK["t"],
+                  notifier=SimpleNamespace(send=sentF.append), cost_model=CostModel.load())
+places = lambda kind=None: [(e[2], e[3], e[4], e[5]) for e in exF.events if e[0] == "place" and (kind is None or e[1] == kind)]
+at(2026, 10, 22, 15, 16)
+sF.on_message(msg(3, SAMPLE, 15, 16))
+sF.step()
+jF = stF.open_job()
+check("live, Rs 1,90,000 a trade at 106: 30 lots = 1,950 - bought as IOCs of 1,755 and 195; the job holds 1,950",
+      places()[:2] == [("BUY", "IOC", "1755", "108.65"), ("BUY", "IOC", "195", "108.65")]
+      and jF["position"]["qty"] == 1950 and exF.held["NIFTY27OCT2622800CE"] == 1950
+      and any("2 orders - above the freeze quantity" in x for x in sentF), str(places()[:2]))
+check("...the target: SELL 1,755 + 195 LIMIT 210 DAY, one target order of two parts; nothing refused",
+      [(r["qty"], r["price"]) for r in exF.resting_sells()] == [(1755, 210.0), (195, 210.0)]
+      and len(jF["target_order"]["legs"]) == 2 and not [e for e in exF.events if e[0] == "refused"])
+exF.close_day()
+at(2026, 10, 22, 16, 1)
+sF.step()
+check("16:01: the AMO target in two parts too (1,755 + 195 @ 210)",
+      places("AMO") == [("SELL", "DAY", "1755", "210.00"), ("SELL", "DAY", "195", "210.00")], str(places("AMO")))
+exF.open_market(100.0)
+at(2026, 10, 23, 9, 15, 30)
+sF.step()
+jF = stF.get_job(jF["job_id"])
+check("09:15 open at 100 (-5.7%): both AMO parts at the exchange - kept; the LIMIT BUY at -53% (49.80) is "
+      "35 lots = 2,275 - in two, 1,755 + 520",
+      any(h["kind"] == "kept_at_open" for h in jF["target_history"]) and not [e for e in exF.events if e[0] == "cancel"]
+      and places()[-2:] == [("BUY", "DAY", "1755", "49.80"), ("BUY", "DAY", "520", "49.80")]
+      and len(jF["limit_topup"]["legs"]) == 2, str(places()[-2:]))
+exF.tick(79.0)
+at(2026, 10, 23, 9, 30)
+sF.step()
+jF = stF.get_job(jF["job_id"])
+cx = [e[1] for e in exF.events if e[0] == "cancel"]
+check("79 (-25.5%): both AMO parts cancelled by their ids at the exchange, top-up 22 lots (1,430 - one order), "
+      "the new target 157.50 for 3,380 in two (1,755 + 1,625)",
+      sorted(cx) == ["X5", "X6"] and jF["position"]["qty"] == 3380 and jF["target_price"] == 157.5
+      and [(r["qty"], r["price"]) for r in exF.resting_sells()] == [(1755, 157.5), (1625, 157.5)], str(cx))
+exF.tick(70.0)
+at(2026, 10, 23, 9, 40)
+sF.step()
+mods = [e for e in exF.events if e[0] == "modify"]
+check("70: the target trails to 148.50 - both parts modified, no second sell",
+      len(mods) == 2 and all(m[3] == "148.50" for m in mods) and len(exF.resting_sells()) == 2
+      and {r["price"] for r in exF.resting_sells()} == {148.5}, str(mods))
+exF.tick(49.0)
+at(2026, 10, 23, 10, 0)
+sF.step()
+jF = stF.get_job(jF["job_id"])
+check("49: the limit buy fills in both parts (2,275 @ 49.80) - booked; the target for all 5,655 in four "
+      "(1,755 x 3 + 390)", jF["position"]["qty"] == 5655 and exF.held["NIFTY27OCT2622800CE"] == 5655
+      and [r["qty"] for r in exF.resting_sells()] == [1755, 1755, 1755, 390], str([r["qty"] for r in exF.resting_sells()]))
+exF.book = 4000
+at(2026, 10, 23, 15, 14, 1)
+sF.step()
+jF = stF.get_job(jF["job_id"])
+check("15:14 exit with only 4,000 to be had: 4,000 of 5,655 sold, the trade NOT closed - the other 1,655 next pass",
+      jF["status"] == "open" and (jF.get("exit_sold") or {}).get("qty") == 4000
+      and exF.held["NIFTY27OCT2622800CE"] == 1655 and not exF.resting_sells()
+      and any("4000 of 5655 sold" in x and "other 1655" in x for x in sentF), str(jF.get("exit_sold")))
+exF.book, exF.px = None, 60.0
+at(2026, 10, 23, 15, 14, 5)
+sF.step()
+rF = stF.get_job(jF["job_id"]).get("result") or {}
+avgF = round((4000 * 49.0 + 1655 * 60.0) / 5655, 2)
+check("...next pass: the 1,655 sold (one order); closed at the average of every exit sell; nothing held, no "
+      "order ever above the freeze", rF.get("exit_reason") == "time_exit" and exF.held["NIFTY27OCT2622800CE"] == 0
+      and rF.get("qty") == 5655 and rF.get("exit_price") == avgF
+      and all(int(e[4]) <= 1755 for e in exF.events if e[0] == "place")
+      and not [e for e in exF.events if e[0] == "refused"], f"{rF.get('exit_price')} vs {avgF}")
+one = {"side": "SELL", "filled": 1950, "avg_price": 200.0}
+cm = CostModel.load()
+check("charges: each part of a sliced order pays its brokerage (Rs 20 + GST)",
+      abs(sF._cost([dict(one, legs=[{"qty": 1755}, {"qty": 195}])]) - sF._cost([one])
+          - cm.brokerage_per_order * (1 + cm.gst_rate)) < 1e-6)
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

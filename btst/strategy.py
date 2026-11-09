@@ -57,6 +57,10 @@ A special session (Muhurat trading - btst/special.py, config/btst.json
 moved with it; an AMO target Angel has not sent by its open is replaced by a
 normal target.
 
+Above the index's freeze quantity (config/btst.json "freeze_qty") every order
+goes in as several (btst/broker.py); an exit sell that fills only part sells
+the rest on the next pass, never more than is held (owner, 9 Nov 2026).
+
 Never more than one trade open; a job left half-entered by a crash is not
 retried - it is marked for a human to look at.
 """
@@ -383,8 +387,9 @@ class BtstStrategy:
         self.store.update_job(jid, set_={"status": "open", "position": pos, "target_price": target,
                                          "target_mult": mult, "ltp_high": px, "ltp_low": px})
         self._start_recording(jid, c, pos["entry_at"], today)
-        self._say(f"BOUGHT {c['symbol']} x{q} @ {px:.2f} (Rs {px * q:,.0f}; signal {sig['price']:g}); "
-                  f"target {target:.2f} = {mult:g} x the signal's price", jid, True, "entry", "TRADE")
+        self._say(f"BOUGHT {c['symbol']} x{q} @ {px:.2f} (Rs {px * q:,.0f}; signal {sig['price']:g}"
+                  + (f"; {len(buy['legs'])} orders - above the freeze quantity" if buy.get("legs") else "")
+                  + f"); target {target:.2f} = {mult:g} x the signal's price", jid, True, "entry", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target")
 
     def _size(self, c, ltp):
@@ -1625,6 +1630,8 @@ class BtstStrategy:
             if st and st.get("filled"):
                 self._log("exit", f"{st['filled']} of the target filled before the cancel", "TRADE")
                 q -= int(st["filled"])
+        sold = job.get("exit_sold") or {}           # an earlier exit that sold part: only the rest now
+        q -= int(sold.get("qty") or 0)
         held = self.broker.net_qty(c)
         self._log("exit", f"the broker holds {held} of {c['symbol']}, the job {q}")
         if held is not None and held < q:
@@ -1632,7 +1639,8 @@ class BtstStrategy:
                       jid, True, "exit", "WARN")
             q = max(0, held)
         if q <= 0:
-            self._close(job, f"{reason} (nothing left at the broker)", job.get("last_ltp") or 0.0, None)
+            self._close(job, f"{reason} (nothing left at the broker)", float(sold["value"]) / int(sold["qty"])
+                        if sold else job.get("last_ltp") or 0.0, None)
             return
         self._log("order", f"SELL {c['symbol']} x{q} at market ({reason})", "TRADE")
         sell = self.broker.sell_market(c, q)
@@ -1646,7 +1654,16 @@ class BtstStrategy:
                   "TRADE")
         self._history(jid, "exit", price=float(sell["avg_price"]), qty=int(sell["filled"]),
                       order_id=sell.get("order_id"), why=reason)
-        self._close(job, reason, float(sell["avg_price"]), sell)
+        f, px = int(sell["filled"]), float(sell["avg_price"])
+        if sold:                                    # the average over every exit sell
+            px = (float(sold["value"]) + px * f) / (int(sold["qty"]) + f)
+        if f < q:
+            n = int(sold.get("qty") or 0) + f
+            self.store.update_job(jid, set_={"exit_sold": {"qty": n, "value": round(px * n, 4)}})
+            self._say(f"EXIT SELL {c['symbol']}: {f} of {q} sold @ {float(sell['avg_price']):.2f} - the other "
+                      f"{q - f} on the next pass", jid, True, "order", "WARN")
+            return
+        self._close(job, reason, px, sell)
 
     # ── close and metrics ───────────────────────────────────────────────────
     def _cost(self, orders):
@@ -1657,6 +1674,8 @@ class BtstStrategy:
         for o in orders:
             if o.get("filled") and o.get("avg_price"):
                 total += leg_cost(float(o["avg_price"]), int(o["filled"]), o.get("side", "BUY"), "OPT", self.cm)
+                parts = sum(1 for x in o.get("legs") or [] if x.get("filled", 1))   # above the freeze: several orders
+                total += max(0, parts - 1) * self.cm.brokerage_per_order * (1 + self.cm.gst_rate)
         return total
 
     def _close(self, job, reason, exit_px, sell):
@@ -1670,7 +1689,8 @@ class BtstStrategy:
         q, avg, inv = int(pos["qty"]), float(pos["avg_price"]), float(pos["invested"])
         orders = list(job.get("orders") or [])
         if reason == "target" and exit_px:
-            orders.append({"side": "SELL", "filled": q, "avg_price": exit_px})
+            orders.append({"side": "SELL", "filled": q, "avg_price": exit_px,
+                           "legs": (job.get("target_order") or {}).get("legs")})
         gross = (float(exit_px) - avg) * q
         cost = self._cost(orders)
         net = gross - cost

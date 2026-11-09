@@ -15,6 +15,11 @@ a NORMAL order sent after the close, and is modified and cancelled as NORMAL
 to the exchange, an AMO gets a new order id (its uid stays): cancels and
 modifies first read the id now by the uid (4 Nov 2026).
 Every fill is read back from Angel (individual_order_details), never assumed.
+An exchange refuses an order above the index's freeze quantity (config/btst.json
+"freeze_qty" - NSE from 2 Nov 2026: NIFTY 1,800 = 27 lots of 65): a bigger one
+goes in as several orders of the most whole lots allowed, recorded as one
+order with its parts in `legs` - its state, cancel and modify cover them all
+(owner, 9 Nov 2026). At or under the freeze nothing changes.
 """
 import math
 import time
@@ -53,9 +58,10 @@ class AngelBtstBroker:
     mode = "live"
 
     def __init__(self, api, protection_pct=2.5, product="CARRYFORWARD", confirm_sec=8.0,
-                 log=print, sleep=time.sleep, clock=time.time):
+                 log=print, sleep=time.sleep, clock=time.time, freeze_qty=None):
         self.api, self.protection_pct, self.product = api, float(protection_pct), product
         self.confirm_sec, self.log, self.sleep, self.clock = float(confirm_sec), log, sleep, clock
+        self.freeze = {str(k).upper(): int(v) for k, v in (freeze_qty or {}).items()}
 
     def quote(self, c):
         """{ltp, high}: the last price and the exchange's day high, or None."""
@@ -123,7 +129,85 @@ class AngelBtstBroker:
         self.log(fmt("TRADE", "broker", f"accepted: order {oid} (uid {uid})"))
         return str(oid), str(uid or ""), None
 
+    # ── above the freeze quantity: one order in several ─────────────────────
+    def _slices(self, c, qty):
+        """The quantities `qty` goes in as: itself, or - above the index's
+        freeze quantity - the most whole lots allowed per order, then the rest."""
+        qty, lot = int(qty), int(c.get("lot_size") or 1)
+        per = self.freeze.get(str(c.get("index") or "").upper(), 0) // lot * lot
+        if per <= 0 or qty <= per:
+            return [qty]
+        return [per] * (qty // per) + ([qty % per] if qty % per else [])
+
+    @staticmethod
+    def _joined(legs, **fields):
+        """One order of its parts: the ids joined, each part kept in `legs`."""
+        sent = [o for o in legs if o.get("order_id")]
+        return dict(legs[0], order_id=" + ".join(o["order_id"] for o in sent), uid=" + ".join(o.get("uid") or ""
+                    for o in sent), legs=[{k: o.get(k) for k in ("order_id", "uid", "qty", "filled", "avg_price",
+                                                                 "status") if k in o} for o in sent], **fields)
+
+    def _sliced(self, one, c, qty, price):
+        """A resting order above the freeze: `one` for each slice, all at the
+        price. All or none - a slice refused cancels those already in, so a
+        target is never only partly at the exchange."""
+        cut, legs = self._slices(c, qty), []
+        for n in cut:
+            legs.append(one(c, n, price))
+            if not legs[-1].get("ok"):
+                break
+        bad = legs[-1]
+        if bad.get("ok"):
+            self.log(fmt("TRADE", "broker", f"{bad['side']} {c['symbol']} x{int(qty)} @ {price:.2f}: {len(legs)} orders "
+                                            f"of at most {cut[0]} (the freeze quantity)"))
+            return self._joined(legs, qty=int(qty))
+        for o in legs[:-1]:
+            st = self.cancel(o)
+            if st and st.get("filled"):
+                self.log(fmt("ERROR", "broker", f"order {o['order_id']} filled {st['filled']} before its cancel"))
+        self.log(fmt("ERROR", "broker", f"slice {len(legs)} of {len(cut)} refused ({bad.get('error')}) - "
+                                        f"the {len(legs) - 1} already in cancelled"))
+        return dict(bad, qty=int(qty), error=f"slice {len(legs)} of {len(cut)}: {bad.get('error')}")
+
+    def _market_sliced(self, c, side, qty, per):
+        """Above the freeze: IOCs one after another, each at most `per` at a
+        fresh price; what one leaves unfilled goes in the next. It stops at one
+        that fills nothing (refused, no price, nothing there)."""
+        legs, left = [], qty
+        while left > 0 and len(legs) < qty // per + 3:
+            legs.append(self._market(c, side, min(left, per)))
+            if not legs[-1].get("filled"):
+                break
+            left -= int(legs[-1]["filled"])
+        done = qty - left
+        avg = sum(float(o["avg_price"]) * int(o["filled"]) for o in legs if o.get("filled")) / done if done else 0.0
+        self.log(fmt("TRADE" if not left else "WARN", "broker", f"{side} {c['symbol']} x{qty} in {len(legs)} orders "
+                                                                f"of at most {per} (the freeze quantity): filled {done}"
+                                                                + (f" @ {avg:.2f}" if done else "")))
+        last = legs[-1]
+        return self._joined(legs, qty=qty, ok=done > 0, filled=done, avg_price=round(avg, 4) if done else
+                            last.get("avg_price"), status="complete" if not left else last.get("status"),
+                            error=None if done else last.get("error"))
+
+    def _legs_state(self, legs):
+        """A sliced order's state: filled and the average over its parts; final
+        when every part is, complete when every part is; not sent if a resting
+        part is not."""
+        sts = [self.order_state(o) for o in legs]
+        if any(s is None for s in sts):
+            return None
+        live = [s for s in sts if not s["final"]]
+        short = [s for s in sts if s["status"] != "complete"]
+        filled = sum(s["filled"] for s in sts)
+        return {"status": live[0]["status"] if live else (short[0]["status"] if short else "complete"),
+                "final": not live, "filled": filled,
+                "avg": round(sum(s["avg"] * s["filled"] for s in sts) / filled, 4) if filled else 0.0,
+                "text": "; ".join(f"{o.get('order_id')}: {s['text']}" for o, s in zip(legs, sts) if s["text"]),
+                "not_sent": any(s.get("not_sent") for s in live)}
+
     def order_state(self, order):
+        if order.get("legs"):
+            return self._legs_state(order["legs"])
         row = None
         uid, oid = order.get("uid"), order.get("order_id")
         try:
@@ -139,6 +223,9 @@ class AngelBtstBroker:
         return _state(row)
 
     def _market(self, c, side, qty):
+        cut = self._slices(c, qty)
+        if len(cut) > 1:
+            return self._market_sliced(c, side, int(qty), cut[0])
         ltp = self.ltp(c)
         if not ltp:
             return {"ok": False, "error": "no LTP for the contract", "filled": 0}
@@ -183,6 +270,8 @@ class AngelBtstBroker:
         return self._market(c, "SELL", qty)
 
     def place_limit_sell(self, c, qty, price):
+        if len(self._slices(c, qty)) > 1:
+            return self._sliced(self.place_limit_sell, c, qty, price)
         oid, uid, err = self._send(self._params(c, "SELL", qty, price, "DAY"))
         order = {"side": "SELL", "order_id": oid, "uid": uid, "qty": int(qty), "price_sent": round(price, 2),
                  "duration": "DAY"}
@@ -198,6 +287,8 @@ class AngelBtstBroker:
 
     def place_limit_buy(self, c, qty, price):
         """A resting LIMIT buy (DAY, CARRYFORWARD): the limit top-up at -53%."""
+        if len(self._slices(c, qty)) > 1:
+            return self._sliced(self.place_limit_buy, c, qty, price)
         oid, uid, err = self._send(self._params(c, "BUY", qty, price, "DAY"))
         order = {"side": "BUY", "order_id": oid, "uid": uid, "qty": int(qty), "price_sent": round(price, 2),
                  "duration": "DAY"}
@@ -215,6 +306,8 @@ class AngelBtstBroker:
         """An after-market LIMIT sell for the next session (DAY, CARRYFORWARD):
         a NORMAL order sent after the close, which Angel holds as an AMO and
         sends to the exchange for the open. Recorded as variety AMO."""
+        if len(self._slices(c, qty)) > 1:
+            return self._sliced(self.place_amo_sell, c, qty, price)
         oid, uid, err = self._send(self._params(c, "SELL", qty, price, "DAY"))
         order = {"side": "SELL", "order_id": oid, "uid": uid, "qty": int(qty), "price_sent": round(price, 2),
                  "duration": "DAY", "variety": "AMO"}
@@ -250,7 +343,21 @@ class AngelBtstBroker:
     def modify_sell(self, order, c, qty, price):
         """Move a resting LIMIT sell to `price` (the trailing target, the GIFT
         Nifty target on the AMO): Angel's modifyOrder - one order all along,
-        never a second sell."""
+        never a second sell. Sliced: each part still open, at its own quantity."""
+        if order.get("legs"):
+            errs, n = [], 0
+            for o in order["legs"]:
+                st = self.order_state(o)
+                if st and st["final"]:
+                    continue
+                n += 1
+                r = self.modify_sell(dict(o, variety=order.get("variety"), duration=order.get("duration")), c,
+                                     o["qty"], price)
+                if not r.get("ok"):
+                    errs.append(r.get("error"))
+            if not n:
+                return {"ok": False, "error": "none of its orders is open"}
+            return {"ok": not errs, "error": "; ".join(errs) or None}
         oid = self._live_id(order)
         params = {"variety": _api_variety(order.get("variety")), "orderid": oid, "ordertype": "LIMIT",
                   "producttype": self.product, "duration": order.get("duration") or "DAY", "price": f"{price:.2f}",
@@ -271,7 +378,14 @@ class AngelBtstBroker:
 
     def cancel(self, order):
         """Cancel a resting order; its final state (it may have filled first).
-        An AMO is cancelled as NORMAL, by its id at the exchange."""
+        An AMO is cancelled as NORMAL, by its id at the exchange. Sliced: each
+        part still open, then the state of them all."""
+        if order.get("legs"):
+            for o in order["legs"]:
+                st = self.order_state(o)
+                if not (st and st["final"]):
+                    self.cancel(dict(o, variety=order.get("variety")))
+            return self.order_state(order)
         oid, variety = self._live_id(order), _api_variety(order.get("variety"))
         try:
             r = self.api.cancelOrder(oid, variety)

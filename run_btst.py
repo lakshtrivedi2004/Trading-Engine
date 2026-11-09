@@ -162,7 +162,8 @@ def main():
 
     master = DailyMaster()
 
-    rest = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log)
+    rest = AngelBtstBroker(api, protection_pct=cfg.get("market_protection_pct", 2.5), log=BOOK.log,
+                           freeze_qty=cfg.get("freeze_qty"))
 
     prices = PriceWatch(session_fn=sess.session, rest_quote=rest.quote, log=BOOK.log,
                         ltp_poll_sec=float(cfg.get("ltp_poll_sec", 1)), ws_fresh_sec=float(cfg.get("ws_fresh_sec", 5)),
@@ -241,6 +242,9 @@ def main():
         log(f"special session {s_['date']} ({s_.get('name', '')}): {s_['open']} - {s_['close']} - GIFT Nifty for the "
             f"target {s_['gift_target_at']}, out at {s_['exit_at']}, signals read {s_['scan_start']} - "
             f"{s_['scan_end']}", area="start")
+    if cfg.get("freeze_qty"):
+        log("live orders above the freeze quantity go in as several: "
+            + ", ".join(f"{k} {v}" for k, v in cfg["freeze_qty"].items()), area="start")
     if notifier and cfg.get("notify_startup", False):
         notifier.send(f"🌙 <b>BTST DESK UP</b> · <code>{mode.upper()}</code>")
 
