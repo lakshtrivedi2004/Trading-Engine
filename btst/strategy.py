@@ -38,7 +38,7 @@ GIFT Nifty is read at the entry day's close and at gift_check_at (01:00) and
 reported - information only (btst/gift.py). Read again at gift_target_at
 (09:11) on D+1, it sets the target (owner, 3 Nov 2026): g points in the
 trade's favour (up for a CE, down for a PE) under gift_target_min_points
-(160) - the target stays; from 160 - min(3, 2 + (g - 100) / 100 - d) x the
+(160) - the target stays; from 160 - min(3.9, 2 + (g - 100) / 100 - d) x the
 signal's price, d gift_target_deduct (0.2: 190 points, 2.7 x). The top-ups
 and the trailing above then work from that target as from the 2 x.
 Every target change (placed, AMO, trailed, replaced) is kept on the job
@@ -89,7 +89,7 @@ RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0,
                  "principal": 0, "trade_pct": 10.0, "topup_tolerance_pct": 10.0, "limit_topup_loss_pct": 0.0,
                  "gift_check_at": "01:00", "gift_target_at": "09:11", "gift_target_min_points": 160.0,
-                 "gift_target_max_mult": 3.0, "gift_target_deduct": 0.2, "gift_target_until": "09:15"}
+                 "gift_target_max_mult": 3.9, "gift_target_deduct": 0.2, "gift_target_until": "09:15"}
 
 
 def _no_channel(job):
@@ -1486,9 +1486,10 @@ class BtstStrategy:
         session's date sets the target. Its move since the entry day's close
         (else on the day), g points in the trade's favour (up for a CE, down
         for a PE): under gift_target_min_points (160) the target stays; from
-        160 it becomes min(gift_target_max_mult (3), m + (g - 100) / 100 - d)
-        x the signal's price, m the trade's multiple (2), d gift_target_deduct
-        (0.2; 0.1 at first - owner, 3 Nov 2026) - 190 points: 2.7 x.
+        160 it becomes min(gift_target_max_mult, m + (g - 100) / 100 - d) x
+        the signal's price, m the trade's multiple (2), d gift_target_deduct
+        (0.2; 0.1 at first - owner, 3 Nov 2026) - 190 points: 2.7 x; the
+        most 3.9 x from 310 points (3 x at first - owner, 10 Nov 2026).
         Only ever up, once a trade, never after a top-up. A failed read is
         tried again (gift_target_retry_sec, 20 s) until gift_target_until
         (09:15, the open - owner, 3 Nov 2026); not read by then, the target
@@ -1559,7 +1560,7 @@ class BtstStrategy:
                    mult_before=m0, target_before=cur, mult=None, target=cur, action="kept", applied=False)
         if favour is None or favour < lo:
             return rec
-        mult = round(min(float(self.c("gift_target_max_mult", 3.0)),
+        mult = round(min(float(self.c("gift_target_max_mult", 3.9)),
                          m0 + (favour - 100.0) / 100.0 - float(self.c("gift_target_deduct", 0.2))), 4)
         target = tick_round(float(job["signal"]["price"]) * mult, job["contract"]["tick"], up=True)
         return dict(rec, mult=mult, target=target, action="raise" if target > cur + 1e-9 else "kept")

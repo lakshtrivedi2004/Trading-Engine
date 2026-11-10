@@ -2457,10 +2457,11 @@ s19.step()
 r19 = st19.get_job(j19["job_id"]).get("result") or {}
 check("...and it fills there: CLOSED at 283.50, a target hit", r19.get("exit_price") == 283.5 and r19.get("target_hit"))
 
-for pts, mult, tp in ((160, 2.4, 252.0), (250, 3.0, 315.0)):
+for pts, mult, tp in ((160, 2.4, 252.0), (250, 3.3, 346.5), (310, 3.9, 409.5), (400, 3.9, 409.5)):
     s_, st_, *_ = gift_0913(pts)
     j_ = st_.open_job()
-    check(f"GIFT +{pts}: {mult:g} x = {tp:.2f}" + (" (3 x at most)" if mult == 3.0 else " (160 is enough)"),
+    check(f"GIFT +{pts}: {mult:g} x = {tp:.2f}" + (" (3.9 x at most)" if mult == 3.9 else
+                                                   " (160 is enough)" if pts == 160 else ""),
           j_["gift_target"]["mult"] == mult and j_["target_price"] == tp, str(j_.get("gift_target"))[:200])
 for pts, what in ((159, "+159: under 160"), (-190, "-190: against our CE")):
     s_, st_, br_, lg_, sent_ = gift_0913(pts)
