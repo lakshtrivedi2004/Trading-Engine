@@ -2017,7 +2017,10 @@ check("max profit / loss over the whole window: the best (+Rs 8,060 at 230, 13:0
       ex["max_profit"] == round((230 - 106) * 65, 2) and ex["max_profit_after_exit"] and ex["max_profit_price"] == 230.0
       and ex["max_loss"] == 65.0 and not ex["max_loss_after_exit"] and ex["max_profit_at"] == "2026-10-23T13:00+05:30",
       str(ex))
-rowR = [r for r in stats.by_day(stR.recent_jobs()) if r.get("job_id") == jR["job_id"]][0]
+check("...tick by tick from the saved ticks, the chart and the saved figures alike",
+      "tick by tick" in ex["basis"] and "tick by tick" in jR["recording"]["extremes"]["basis"]
+      and jR["recording"]["extremes"]["max_profit"] == ex["max_profit"], str(ex["basis"]))
+rowR =[r for r in stats.by_day(stR.recent_jobs()) if r.get("job_id") == jR["job_id"]][0]
 check("...saved with the recording and shown in the trades table's row", rowR["extremes"]["max_profit"] == ex["max_profit"]
       and "recorded" in rowR["extremes"]["basis"])
 check("the events for the markers: buy, the targets, the exit",
@@ -2899,6 +2902,40 @@ cm = CostModel.load()
 check("charges: each part of a sliced order pays its brokerage (Rs 20 + GST)",
       abs(sF._cost([dict(one, legs=[{"qty": 1755}, {"qty": 195}])]) - sF._cost([one])
           - cm.brokerage_per_order * (1 + cm.gst_rate)) < 1e-6)
+
+section("22. Max profit / max loss tick by tick (owner, 12 Nov 2026)")
+from btst import recorder as REC22                                 # noqa: E402
+
+
+def ms22(h, m, s, d=12):
+    return int(datetime(2026, 11, d, h, m, s, tzinfo=IST).timestamp() * 1000)
+
+
+# SENSEX 81600 PE, 12 Nov 2026: 445 at the open, the -25% top-up and the -53% fill all in the 09:15 minute
+j22 = {"trade_date": "2026-11-11",
+       "position": {"qty": 340, "avg_price": 291.26, "entry_qty": 120, "entry_price": 403.62,
+                    "entry_at": "2026-11-11T15:26:59+05:30"},
+       "topups": [{"at": "2026-11-12T09:15:17+05:30", "qty": 80, "price": 300.45, "pct": 50.0, "loss_pct": 25.19},
+                  {"at": "2026-11-12T09:15:58+05:30", "qty": 140, "price": 189.7, "pct": 50.0, "loss_pct": 53.0}]}
+t22 = [(ms22(15, 27, 2, 11), 403.5), (ms22(15, 28, 18, 11), 410.1), (ms22(15, 44, 42, 11), 368.95),
+       (ms22(9, 15, 2), 445.0), (ms22(9, 15, 14), 301.95), (ms22(9, 15, 18), 302.2), (ms22(9, 15, 56), 186.15),
+       (ms22(9, 15, 59), 191.85), (ms22(9, 16, 7), 215.75), (ms22(10, 0, 10), 46.9)]
+b22 = REC22.bars(t22)
+old22, new22 = CH19.extremes(j22, b22), CH19.extremes(j22, b22, t22)
+check("minute bars alone: 445 read with the position at 09:15's end (340 @ 291.26) - the +52,272 the page showed",
+      old22["max_profit"] == 52271.6, str(old22["max_profit"]))
+check("tick by tick: 445 at 09:15:02 was held as 120 @ 403.62 - +4,965.60 (+10.25%)",
+      new22["max_profit"] == 4965.6 and new22["max_profit_price"] == 445.0 and new22["max_profit_pct"] == 10.25
+      and new22["max_profit_at"] == "2026-11-12T09:15+05:30" and "tick by tick" in new22["basis"], str(new22)[:300])
+check("...the max loss as it was: 46.90 at 10:00 with 340 @ 291.26 - -83,082.40 (-83.90%)",
+      new22["max_loss"] == -83082.4 and new22["max_loss_price"] == 46.9 and new22["max_loss_pct"] == -83.9
+      and new22["high"] == 445.0 and new22["low"] == 46.9 and new22["day2_high"] == 445.0, str(new22)[:300])
+m22 = REC22.merge(b22, [{"t": ms22(11, 0, 0), "o": 50.0, "h": 60.0, "l": 40.0, "c": 55.0}])
+c22 = CH19.extremes(j22, m22, t22)
+check("...a minute only Angel's candle has (the desk down) still counts: 40 at 11:00 - -85,428.40",
+      c22["max_loss_price"] == 40.0 and c22["max_loss_at"] == "2026-11-12T11:00+05:30" and c22["max_loss"] == -85428.4
+      and c22["candle_minutes"] == 1, str(c22)[:300])
+check("the chart's figures are the same", CH19.build(j22, b22, t22)["extremes"] == new22)
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

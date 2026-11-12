@@ -59,39 +59,53 @@ def _positions(job):
     return steps
 
 
-def extremes(job, bars):
+def _points(bars, ticks):
+    """What extremes walks, in time order: [(ms the position is read at, ms,
+    high, low)] - each tick where the recording has them, a minute's high and
+    low (the position at its end) where only Angel's candle has it."""
+    pts = [(b["t"] + 59_999, b["t"], b["h"], b["l"]) for b in bars]
+    if not ticks:
+        return pts
+    have = {ms - ms % 60_000 for ms, _ in ticks}
+    return sorted([(ms, ms, p, p) for ms, p in ticks] + [x for x in pts if x[1] not in have])
+
+
+def extremes(job, bars, ticks=None):
     """The best and the worst the position could have shown over the recorded
     window - the buy to the next session's close, past the exit too: P&L at each
-    minute's high and low, with the position held then (top-ups count; after
-    the exit, the position as it was at the exit)."""
+    price with the position held then (top-ups count; after the exit, the
+    position as it was at the exit). Tick by tick where `ticks` [(ms, price)]
+    has them (owner, 12 Nov 2026): on a fast open the high, the -25% top-up and
+    the -53% fill can all be in one minute - SENSEX 81600 PE, 12 Nov: 445 at
+    09:15:02 held 120 @ 403.62 (+4,966), not the 340 @ 291.26 held at the
+    minute's end (+52,272)."""
     steps = _positions(job)
     r = job.get("result") or {}
     exit_t = _ms(r.get("closed_at")) if r else None
     best = worst = hi = lo = day2 = None
     entry_day = str(job.get("trade_date") or "")
     i = 0
-    for b in bars:
-        t = b["t"] + 59_999
+    for t, bt, h, l in _points(bars, ticks):
         if t < steps[0][0]:
             continue
-        if (datetime.fromtimestamp(b["t"] / 1000, tz=IST).date().isoformat() > entry_day
-                and (day2 is None or b["h"] > day2[0])):
-            day2 = (b["h"], b["t"])             # the next session's high - after the exit too
+        if (datetime.fromtimestamp(bt / 1000, tz=IST).date().isoformat() > entry_day
+                and (day2 is None or h > day2[0])):
+            day2 = (h, bt)                      # the next session's high - after the exit too
         while i + 1 < len(steps) and steps[i + 1][0] <= t:
             i += 1
         _, q, a = steps[i]
         if not q or not a:
             continue
-        if hi is None or b["h"] > hi[0]:
-            hi = (b["h"], b["t"])
-        if lo is None or b["l"] < lo[0]:
-            lo = (b["l"], b["t"])
-        up, down = (b["h"] - a) * q, (b["l"] - a) * q
-        after = bool(exit_t and b["t"] >= exit_t)
+        if hi is None or h > hi[0]:
+            hi = (h, bt)
+        if lo is None or l < lo[0]:
+            lo = (l, bt)
+        up, down = (h - a) * q, (l - a) * q
+        after = bool(exit_t and bt >= exit_t)
         if best is None or up > best[0]:
-            best = (up, b["h"], b["t"], after, round(100.0 * (b["h"] - a) / a, 2))
+            best = (up, h, bt, after, round(100.0 * (h - a) / a, 2))
         if worst is None or down < worst[0]:
-            worst = (down, b["l"], b["t"], after, round(100.0 * (b["l"] - a) / a, 2))
+            worst = (down, l, bt, after, round(100.0 * (l - a) / a, 2))
     if best is None:
         return None
     iso = lambda ms: datetime.fromtimestamp(ms / 1000, tz=IST).isoformat(timespec="minutes")   # IST, whatever the server's zone
@@ -102,10 +116,10 @@ def extremes(job, bars):
             "high": hi[0], "high_at": iso(hi[1]), "low": lo[0], "low_at": iso(lo[1]),
             "day2_high": day2[0] if day2 else None, "day2_high_at": iso(day2[1]) if day2 else None,
             "candle_minutes": sum(1 for b in bars if b.get("src") == "candle"),
-            "basis": "recorded prices, buy to the next session's close"}
+            "basis": "recorded prices" + (", tick by tick" if ticks else "") + ", buy to the next session's close"}
 
 
-def build(job, bars):
+def build(job, bars, ticks=None):
     """{job_id, symbol, bars: [{t, o, h, l, c, src, target, avg, qty, pnl, hold_pnl, open}], events, ...}."""
     ev = events(job)
     r = job.get("result") or {}
@@ -131,7 +145,7 @@ def build(job, bars):
     c = job.get("contract") or {}
     return {"job_id": job.get("job_id"), "symbol": c.get("symbol"), "side": (job.get("signal") or {}).get("side"),
             "mode": job.get("mode"), "status": job.get("status"), "bars": out, "events": ev,
-            "extremes": extremes(job, bars),
+            "extremes": extremes(job, bars, ticks),
             "recording": job.get("recording"), "exit": {"t": exit_t, "price": r.get("exit_price"),
                                                        "reason": r.get("exit_reason"), "net_pnl": r.get("net_pnl")}
             if exit_t else None}

@@ -1324,7 +1324,7 @@ class BtstStrategy:
                 gz_value = gz
             filled = sum(1 for b in merged if b.get("src") == "candle")
             fresh = self.store.get_job(jid) or job
-            ext = CH.extremes(fresh, merged)
+            ext = CH.extremes(fresh, merged, ticks)
             self.store.save_ticks({"job_id": jid, "symbol": r.get("symbol"), "token": r.get("token"),
                                    "exchange": r.get("exchange"), "from": r.get("from"), "until": r.get("until"),
                                    "count": len(ticks), "bars": merged, "gz": gz_value, "gz_bytes": len(gz),
@@ -1357,7 +1357,7 @@ class BtstStrategy:
         hit = cache.get(job["job_id"])
         if hit and time.time() - hit[0] < 15:
             return hit[1]
-        ext = CH.extremes(job, self.recorder.all_bars(job["job_id"]))
+        ext = CH.extremes(job, self.recorder.all_bars(job["job_id"]), self.recorder.read(job["job_id"]))
         if ext:
             ext["basis"] = "recorded so far (the recording runs to " + rec.get("until", "?")[:16].replace("T", " ") + ")"
         cache[job["job_id"]] = (time.time(), ext)
@@ -1393,14 +1393,15 @@ class BtstStrategy:
         job = self.store.get_job(job_id)
         if not job:
             return {"error": f"no job {job_id}"}
-        saved = self.store.get_ticks(job_id) if (job.get("recording") or {}).get("status") == "saved" else None
+        saved = self.store.get_ticks(job_id, raw=True) if (job.get("recording") or {}).get("status") == "saved" else None
         if saved:
             bars, source = saved.get("bars") or [], "mongo"
+            ticks = REC.unzip(saved["gz"]) if saved.get("gz") else None
         elif self.recorder is not None:
-            bars, source = self.recorder.all_bars(job_id), "recording"
+            bars, source, ticks = self.recorder.all_bars(job_id), "recording", self.recorder.read(job_id)
         else:
-            bars, source = [], "none"
-        out = CH.build(_no_channel(job), bars)
+            bars, source, ticks = [], "none", None
+        out = CH.build(_no_channel(job), bars, ticks)
         out["source"] = source
         base = float((job.get("position") or {}).get("entry_price") or 0)
         if base:                                # the top-up levels, against the first buy price
