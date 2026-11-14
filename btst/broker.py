@@ -529,8 +529,9 @@ class PaperBtstBroker:
                 self.watch.track(c)             # the contract first: a new one would forget the mark
                 self.watch.mark()
             note = f"target {to['order_id']} @ {job.get('target_price')} placed {d}"
-        lt = job.get("limit_topup") or {}
-        if lt.get("ok") and lt.get("order_id") and not lt.get("final") and not lt.get("booked"):
+        for lt in (job.get("limit_topup") or {}, job.get("limit_topup2") or {}):   # two on the option's expiry day
+            if not (lt.get("ok") and lt.get("order_id") and not lt.get("final") and not lt.get("booked")):
+                continue
             from datetime import date
             try:
                 d = date.fromisoformat(str(lt.get("at") or "")[:10])

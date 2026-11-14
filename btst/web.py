@@ -266,12 +266,16 @@ function bar(avg, now, target, low, tr, nowLabel){
 
 function plan(d, j, p){
   const R = d.rules || {}, base = p.entry_price, t = j.target_price, first = (p.entry_price || 0) * (p.entry_qty || 0);
-  const l1 = R.topup_first_loss_pct, l2 = R.topup_second_loss_pct, half = R.topup_first_pct, cut = R.target_cut_pct, fl = R.floor_target_pct;
+  // the option's expiry day as the next session: -53% / -87%, the target the average + 5% after each (owner, 14 Nov 2026)
+  const xd = (j.contract || {}).expiry_date, xp = !!xd && xd === (j.decision ? String(j.decision.at).slice(0, 10) : d.next_session);
+  const l1 = xp ? R.expiry_topup_first_loss_pct : R.topup_first_loss_pct, l2 = xp ? R.expiry_topup_second_loss_pct : R.topup_second_loss_pct;
+  const half = R.topup_first_pct, cut = R.target_cut_pct, fl = xp ? R.expiry_target_pct : R.floor_target_pct, lp = xp ? 0 : R.limit_topup_loss_pct;
+  const xRow = xp ? `<tr><td>Expiry day</td><td>${esc((j.contract || {}).symbol || "")} expires ${day(xd)}: LIMIT BUYs at the open - ${half}% at ${n2(base * (1 - l1 / 100))} (-${l1}%), the other ${100 - half}% at ${n2(base * (1 - l2 / 100))} (-${l2}%); after each fill the target = the new average + ${fl}% (no cut, no trailing); the target filled first, every limit buy left is cancelled</td></tr>` : "";
   const tol = R.topup_tolerance_pct || 0, lots = x => `${rsp(x)}: the most lots within ${rsp(x * (1 + tol / 100))}, at least 1`;
   const gift = j.gift_check || j.gift_close;
   const giftRow = gift ? `<tr><td>GIFT Nifty</td><td>${n2(gift.price)}${num(gift.move) ? ` · ${gift.move > 0 ? "+" : ""}${n0(gift.move)} points ${esc(gift.measured || "")} · <b class="${gift.verdict === "against" ? "down" : (gift.verdict === "with" ? "up" : "")}">${esc(gift.verdict)}</b> our ${esc((j.signal || {}).side)}` : " · the close (baseline)"} · ${tm(gift.at)} (information only)</td></tr>` : "";
   const gt = j.gift_target, side = esc((j.signal || {}).side), gmin = R.gift_target_min_points;
-  const gtRow = !gt ? `<tr><td>GIFT ${esc(R.gift_target_at)}</td><td>${gmin}+ points for our ${side}: target = min(${R.gift_target_max_mult}, ${j.target_mult || 2} + (points − 100)/100 − ${R.gift_target_deduct}) × the signal's price; under ${gmin}, or not read by ${esc(R.gift_target_until)}, it stays</td></tr>`
+  const gtRow = !gt ? `<tr><td>GIFT ${esc(R.gift_target_at)}</td><td>${gmin}+ points for our ${side} since GIFT's ${esc(R.gift_base_at)} open on the entry day${j.gift_base ? " (" + n2(j.gift_base.price) + ")" : ""}: target = min(${R.gift_target_max_mult}, ${j.target_mult || 2} + (points − 100)/100 − ${R.gift_target_deduct}) × the signal's price; under ${gmin}, or not read by ${esc(R.gift_target_until)}, it stays</td></tr>`
     : `<tr><td>GIFT ${tms(gt.at)}</td><td>${num(gt.favour) ? `${gt.favour > 0 ? "+" : ""}${n0(gt.favour)} points ${esc(gt.measured || "")} for our ${side} · ` : ""}${
       gt.action === "raise" ? `<b class="up">target ${n2(gt.target_before)} → ${n2(gt.target)}</b> (${gt.mult}× the signal's price)${gt.applied ? "" : " · being put in"}`
       : gt.action === "unread" ? "not read in time - the target stayed"
@@ -279,12 +283,13 @@ function plan(d, j, p){
       : `under ${gmin} - the target stays ${n2(gt.target_before)}`}</td></tr>`;
   if (j.decision){
     const dec = j.decision, tr = j.trail, ups = j.topups || [], lt = j.limit_topup, lim = !!(lt && lt.ok), done = j.topped_pct || 0;
-    const limRow = !lt ? "" : `<tr><td>Limit BUY ${tms(lt.at)}</td><td>${lim ? `${n0(lt.qty)} @ ${n2(lt.price)} (-${lt.loss_pct}%) · ${esc(lt.status || "open")}${lt.booked ? ` · filled ${n0(lt.booked)}` : ""} — instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%`
-      : `not placed (${esc(lt.error || "")}) — the -${l2}% buy stands`}</td></tr>`;
-    const nextRow = done >= 100 || (lim && done > 0) ? "" : `<tr><td>At ${n2(base * (1 - (done ? l2 : l1) / 100))}</td><td>${done ? `(-${l2}%) add the other ${n0(100 - done)}% (${lots(first * (100 - done) / 100)}) → target = new average + ${fl}%`
-      : `(-${l1}%) add ${half}% (${lots(first * half / 100)}) → target cut ${cut}%, then -1 per point, floor average + ${fl}%${lim ? "" : `; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}`}</td></tr>`;
+    const lim2 = !!(j.limit_topup2 && j.limit_topup2.ok);
+    const limRow = [lt, j.limit_topup2].filter(x => x).map(x => `<tr><td>Limit BUY ${tms(x.at)}</td><td>${x.ok ? `${n0(x.qty)} @ ${n2(x.price)} (-${x.loss_pct}%) · ${esc(x.status || "open")}${x.booked ? ` · filled ${n0(x.booked)}` : ""} — ${xp ? `filled → target = the new average + ${fl}%; cancelled if the target fills first` : `instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%`}`
+      : `not placed (${esc(x.error || "")}) — ${xp ? `bought at market at -${x.loss_pct}% instead` : `the -${l2}% buy stands`}`}</td></tr>`).join("");
+    const nextRow = done >= 100 || (lim && done > 0) || (xp && (lim || lim2)) ? "" : `<tr><td>At ${n2(base * (1 - (done ? l2 : l1) / 100))}</td><td>${done ? `(-${l2}%) add the other ${n0(100 - done)}% (${lots(first * (100 - done) / 100)}) → target = new average + ${fl}%`
+      : `(-${l1}%) add ${half}% (${lots(first * half / 100)}) → ${xp ? `target = new average + ${fl}%` : `target cut ${cut}%, then -1 per point, floor average + ${fl}%`}${lim ? "" : `; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}`}</td></tr>`;
     return `<div class="plan"><div class="k">Today's plan — live from ${esc(R.market_open)}</div><table>
-      <tr><td>Open ${tms(dec.at)}</td><td>${n2(dec.ltp)} = ${pc(dec.pnl_pct)} vs the buy ${n2(base)}</td></tr>
+      ${xRow}<tr><td>Open ${tms(dec.at)}</td><td>${n2(dec.ltp)} = ${pc(dec.pnl_pct)} vs the buy ${n2(base)}</td></tr>
       ${ups.map(u => `<tr><td>Top-up ${tms(u.at)}</td><td>${n0(u.pct)}% at ${pc(-u.loss_pct)}: +${n0(u.qty)} @ ${n2(u.price)} (${rsp(u.amount)})</td></tr>`).join("")}
       ${limRow}${nextRow}
       ${tr ? `<tr><td>Trailing</td><td>${tr.active ? "on" : "stopped"}: from ${n2(tr.initial)}, 1 point per point below ${n2(tr.ref)} (lowest ${n2(tr.low)}), floor ${n2(tr.floor)} · ${(tr.steps || []).length} step(s)${tr.stop_reason ? " · " + esc(tr.stop_reason) : ""}</td></tr>` : ""}
@@ -292,9 +297,9 @@ function plan(d, j, p){
       <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
   }
   return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}</div><table>
-    <tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}${R.limit_topup_loss_pct > 0 ? `; opened at ${n2(base * (1 - l1 / 100))} or above, a LIMIT BUY for the other ${100 - half}% goes in at once at ${n2(base * (1 - R.limit_topup_loss_pct / 100))} (-${R.limit_topup_loss_pct}%; ${lots(first * (100 - half) / 100)} at that price) instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%` : ""}</td></tr>
-    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (${lots(first * half / 100)}); target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%</td></tr>
-    <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}% (${lots(first * (100 - half) / 100)}); target = the new average + ${fl}%${R.limit_topup_loss_pct > 0 ? ` - only if it opened below -${l1}% (else the limit buy)` : ""}</td></tr>
+    ${xRow}<tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}${lp > 0 ? `; opened at ${n2(base * (1 - l1 / 100))} or above, a LIMIT BUY for the other ${100 - half}% goes in at once at ${n2(base * (1 - lp / 100))} (-${lp}%; ${lots(first * (100 - half) / 100)} at that price) instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%` : ""}</td></tr>
+    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (${lots(first * half / 100)}); ${xp ? `target = the new average + ${fl}%` : `target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%`}</td></tr>
+    <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}% (${lots(first * (100 - half) / 100)}); target = the new average + ${fl}%${lp > 0 ? ` - only if it opened below -${l1}% (else the limit buy)` : ""}</td></tr>
     <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (${lots(first)}) at once; target = the new average + ${fl}%</td></tr>
     <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
 }
@@ -551,7 +556,7 @@ function detail(r){
   return ((r.topups || []).length ? `<h4>Top-ups</h4>` + topupTable(r.topups, false) : "")
     + `<h4>Timeline</h4>` + tbl(["Time", "What happened"], t.events.map(e => `<tr><td>${tms(e.at)}</td><td class="l">${esc(e.text)}</td></tr>`))
     + `<h4>Target history</h4>` + tbl(["Time", "Kind", "Price", "From", "Order", "Status", "Why"], t.targets.map(h => `<tr><td>${tms(h.at)}</td><td class="l">${esc(h.kind)}</td><td>${n2(h.price)}</td><td>${n2(h.previous)}</td><td class="l">${esc(h.order_id || (h.watched ? "watched" : ""))}</td><td class="l">${esc(h.status || (h.ok === false ? "refused" : ""))}</td><td class="l">${esc(h.why || h.error || "")}</td></tr>`))
-    + `<h4>GIFT Nifty reads</h4>` + tbl(["Time", "Read", "Price", "Day change", "Previous close", "Expiry"], (t.gift || []).map(g => `<tr><td>${tms(g.at)}</td><td class="l">${esc({close: "entry day's close", night: "night (information)", morning: "morning (target)"}[g.kind] || g.kind || "")}</td><td>${n2(g.price)}</td><td>${num(g.day_change) ? (g.day_change > 0 ? "+" : "") + n2(g.day_change) : ""}</td><td>${n2(g.prev_close)}</td><td class="l">${esc(g.expiry || "")}</td></tr>`))
+    + `<h4>GIFT Nifty reads</h4>` + tbl(["Time", "Read", "Price", "Day change", "Previous close", "Expiry"], (t.gift || []).map(g => `<tr><td>${tms(g.at)}</td><td class="l">${esc({close: "entry day's close", base: "16:35 open (the target's baseline)", night: "night (information)", morning: "morning (target)"}[g.kind] || g.kind || "")}</td><td>${n2(g.price)}</td><td>${num(g.day_change) ? (g.day_change > 0 ? "+" : "") + n2(g.day_change) : ""}</td><td>${n2(g.prev_close)}</td><td class="l">${esc(g.expiry || "")}</td></tr>`))
     + `<h4>AMO checks</h4>` + tbl(["Time", "For", "Action", "Order", "Status", "Why / error"], t.amo.map(a => `<tr><td>${tms(a.at)}</td><td class="l">${esc(a.slot)}</td><td class="l">${esc(a.action)}</td><td class="l">${esc(a.order_id || "")}</td><td class="l">${esc(a.status || "")}</td><td class="l">${esc(a.why || a.error || "")}</td></tr>`))
     + `<h4>Orders</h4>` + tbl(["Time", "Kind", "Side", "Qty", "Price", "Filled", "Status", "Order", "Error"], t.orders.map(o => `<tr><td>${tms(o.at)}</td><td class="l">${esc(o.kind)}${o.variety === "AMO" ? ' <span class="tag">AMO</span>' : ""}</td><td class="l">${esc(o.side || "")}</td><td>${n0(o.qty)}</td><td>${n2(o.price_sent)}</td><td>${o.filled ? n0(o.filled) + " @ " + n2(o.avg_price) : ""}</td><td class="l">${esc(o.status || "")}</td><td class="l">${esc(o.order_id || "")}</td><td class="l">${esc(o.error || "")}</td></tr>`));
 }
@@ -567,6 +572,7 @@ function drawTrades(d){
       : `under ${n0(GR.gift_target_min_points)} · target stays`}</span>`;
     else if (g.action === "unread") h = `<span class="n">not read by ${esc(GR.gift_target_until || "")}${g.tries ? " (" + n0(g.tries) + " tries)" : ""} · target stays</span>`;
     else if (num(g.night)) h = `${n2(g.night)}<span class="n">${tm(g.night_at)}${num(g.night_move) ? " · " + pts(g.night_move) : ""} · information only</span>`;
+    if (num(g.base)) h += `<span class="n">${esc(GR.gift_base_at || "")} open ${n2(g.base)}</span>`;
     if (num(g.close)) h += `<span class="n">close ${n2(g.close)}</span>`;
     return h || `<span class="n">–</span>`; };
   // GIFT Nifty's morning move against how far the option went the next day - a multiple of the signal's price,
@@ -591,7 +597,7 @@ function drawTrades(d){
       + `<span class="n" title="${esc((x.basis || "") + (x.candle_minutes ? " - " + x.candle_minutes + " minute(s) from Angel's 1-minute candles (the desk down or the socket silent)" : ""))}" style="font-style:italic">${/recorded/.test(x.basis || "") ? (/so far/.test(x.basis) ? "recording…" : "buy → next close") : "while open"}${x.candle_minutes ? " · " + n0(x.candle_minutes) + " min candles" : ""}</span>`; };
   if (!rows.length){ document.getElementById("days").innerHTML = `<p class="empty">No BTST yet.</p>`; return; }
   document.getElementById("days").innerHTML = `<table><tr><th>Date</th><th>Trade</th><th>Bought</th><th>Avg · invested</th>
-      <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th title="GIFT Nifty in the morning (gift_target_at - gift_target_until): it can raise the target; the entry day's close below">GIFT Nifty</th><th title="GIFT Nifty's morning move (the 01:00 one for older trades) against the next day's high - a multiple of the signal's price, after the exit too">GIFT vs max target</th><th>Next day</th><th>Result</th><th></th></tr>` +
+      <th>Now / exit</th><th>P&amp;L</th><th title="the best and the worst the position could have shown, from the buy to the next session's close - after the exit too">Max profit / loss</th><th>Target</th><th title="GIFT Nifty in the morning (gift_target_at - gift_target_until): it can raise the target, measured from its 16:35 open on the entry day; that and the entry day's close below">GIFT Nifty</th><th title="GIFT Nifty's morning move (the 01:00 one for older trades) against the next day's high - a multiple of the signal's price, after the exit too">GIFT vs max target</th><th>Next day</th><th>Result</th><th></th></tr>` +
     rows.map(r => {
       if (!r.job_id) return `<tr class="quiet"><td>${day(r.date)}</td><td class="l" colspan="${COLS - 1}">No signal — ${n0(r.messages_read)} message(s) read in the scan window · no trade</td></tr>`;
       const open = r.status === "open", parkedRow = r.status === "parked", rej = !open && !parkedRow && r.status !== "closed";

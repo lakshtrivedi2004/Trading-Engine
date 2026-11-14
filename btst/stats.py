@@ -136,7 +136,9 @@ def by_day(jobs, quiet_days=()):
         row["topups"] = j.get("topups") or []
         row["missed_topups"] = j.get("missed_topups") or []
         gc, gn, gm = j.get("gift_close") or {}, j.get("gift_check") or {}, j.get("gift_target") or {}
+        gb = j.get("gift_base") or {}
         row["gift"] = ({"close": gc.get("price"), "close_at": gc.get("at"),            # the entry day's close
+                        "base": gb.get("price"), "base_time": gb.get("time") or gb.get("at"),   # its 16:35 open
                         "night": gn.get("price"), "night_at": gn.get("at"), "night_move": gn.get("move"),
                         "morning": gm.get("price"), "morning_at": gm.get("at"), "move": gm.get("move"),
                         "points": gm.get("favour"), "measured": gm.get("measured"), "action": gm.get("action"),

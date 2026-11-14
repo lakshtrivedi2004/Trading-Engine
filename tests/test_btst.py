@@ -2394,7 +2394,7 @@ def gift_at(today):
 
 
 def gift_desk(model=None, text=SAMPLE, cfg=None):
-    """Bought at 106 on Thu 22 Oct, signal 105, target 210; GIFT Nifty 22,600 at the close."""
+    """Bought at 106 on Thu 22 Oct, signal 105, target 210; GIFT Nifty 22,600 at the close and at 16:35."""
     at(2026, 10, 22, 15, 16)
     PRICE["ltp"] = 106.0
     s_, st_, br_, lg_, sent_ = desk(model=model, cfg={**TIERS, "gift_target_enabled": True, "gift_target_deduct": 0.2,
@@ -2404,6 +2404,8 @@ def gift_desk(model=None, text=SAMPLE, cfg=None):
     s_.on_message(msg(3, text, 15, 16))
     s_.step()
     at(2026, 10, 22, 15, 50)
+    s_.step()
+    at(2026, 10, 22, 16, 36)                    # GIFT's evening session open: the morning's baseline
     s_.step()
     return s_, st_, br_, lg_, sent_
 
@@ -2426,25 +2428,27 @@ at(2026, 10, 23, 9, 13, 2)
 s19.step()
 j19 = st19.open_job()
 g19 = j19.get("gift_target") or {}
-check("09:13, GIFT +190 since the close: min(3, 2 + 90/100 - 0.2) = 2.7 x the signal's 105 = 283.50, in at once",
+check("09:13, GIFT +190 since its 16:35 open: min(3.9, 2 + 90/100 - 0.2) = 2.7 x the signal's 105 = 283.50, in at once",
       g19.get("action") == "raise" and g19.get("favour") == 190.0 and g19.get("mult") == 2.7
       and j19["target_price"] == 283.5 and j19["target_mult"] == 2.7 and g19.get("applied")
       and j19["target_history"][-1]["kind"] == "gift_target", str(g19)[:300])
 check("...on the SIGNAL's price (105), not the buy (106): 2.7 x 105 = 283.50, not 2.7 x 106 = 286.20",
       j19["signal"]["price"] == 105 and j19["position"]["entry_price"] == 106.0 and j19["target_price"] == 283.5)
-check("...said on Telegram, measured since the entry day's close",
-      g19.get("measured") == "since the entry day's close" and any("2.7 x" in x and "283.50" in x for x in sent19))
+check("...said on Telegram, measured since 16:35 on the entry day",
+      g19.get("measured") == "since 16:35 on the entry day" and any("2.7 x" in x and "283.50" in x for x in sent19))
 reads19 = {r["kind"]: r for r in j19.get("gift_reads") or []}
-check("every GIFT Nifty read kept on the job: the close 22,600 and the morning 22,790 (price, day change, expiry)",
+check("every GIFT Nifty read kept on the job: the close and 16:35 at 22,600, the morning 22,790 (price, day "
+      "change, expiry)",
       reads19.get("close", {}).get("price") == 22600.0 and reads19.get("morning", {}).get("price") == 22790.0
       and reads19["morning"]["day_change"] == 240.0
-      and [r["kind"] for r in j19["gift_reads"]] == ["close", "night", "morning"]
+      and [r["kind"] for r in j19["gift_reads"]] == ["close", "base", "night", "morning"]
       and reads19["morning"]["expiry"] == "27-Oct-2026", str(j19.get("gift_reads"))[:300])
 row19 = next(r for r in stats.by_day([j19]) if r.get("job_id") == j19["job_id"])
 check("...and in the trades table's row: morning 22,790, +190, target 210 -> 283.50 at 2.7 x, the close 22,600",
       row19["gift"]["morning"] == 22790.0 and row19["gift"]["move"] == 190.0 and row19["gift"]["action"] == "raise"
       and row19["gift"]["target_before"] == 210.0 and row19["gift"]["target"] == 283.5 and row19["gift"]["mult"] == 2.7
-      and row19["gift"]["close"] == 22600.0 and row19["timeline"]["gift"] == j19["gift_reads"], str(row19["gift"]))
+      and row19["gift"]["close"] == 22600.0 and row19["gift"]["base"] == 22600.0
+      and row19["timeline"]["gift"] == j19["gift_reads"], str(row19["gift"]))
 at(2026, 10, 23, 9, 14)
 s19.step()
 check("...once a trade", len([h for h in st19.open_job()["target_history"] if h["kind"] == "gift_target"]) == 1)
@@ -2507,7 +2511,8 @@ s_.step()
 check("09:13, NSE IX down: logged, nothing decided yet", not st_.open_job().get("gift_target")
       and any("GIFT Nifty" in x and "not read" in x for x in lg_))
 check("...the failed try is not saved - only prices fetched are",
-      [r["kind"] for r in st_.open_job().get("gift_reads") or []] == ["close"], str(st_.open_job().get("gift_reads")))
+      [r["kind"] for r in st_.open_job().get("gift_reads") or []] == ["close", "base"],
+      str(st_.open_job().get("gift_reads")))
 at(2026, 10, 23, 9, 13, 12)
 s_.gift_failed_at -= 10
 s_.step()
@@ -2518,7 +2523,7 @@ s_.step()
 j_ = st_.open_job()
 check("...read again 22 s after the failure, before the open: 2.7 x = 283.50 - saved once",
       j_["gift_target"]["action"] == "raise" and j_["target_price"] == 283.5
-      and [r["kind"] for r in j_["gift_reads"]] == ["close", "morning"], str(j_.get("gift_target"))[:200])
+      and [r["kind"] for r in j_["gift_reads"]] == ["close", "base", "morning"], str(j_.get("gift_target"))[:200])
 
 s_, st_, br_, lg_, sent_ = gift_desk()
 GT.update(price=22790.0, fail=100)
@@ -2553,6 +2558,8 @@ at(2026, 10, 22, 15, 45)
 sL.step()
 exL.close_day()
 at(2026, 10, 22, 16, 1)
+sL.step()
+at(2026, 10, 22, 16, 36)
 sL.step()
 amoL = stL.open_job()["amo"]
 at(2026, 10, 23, 9, 0)
@@ -2936,6 +2943,201 @@ check("...a minute only Angel's candle has (the desk down) still counts: 40 at 1
       c22["max_loss_price"] == 40.0 and c22["max_loss_at"] == "2026-11-12T11:00+05:30" and c22["max_loss"] == -85428.4
       and c22["candle_minutes"] == 1, str(c22)[:300])
 check("the chart's figures are the same", CH19.build(j22, b22, t22)["extremes"] == new22)
+
+section("23. GIFT Nifty's move from its 16:35 evening open on the entry day (owner, 12 Nov 2026)")
+GB = {"price": 22600.0, "time": None, "days": []}
+
+
+def gift_b(day):
+    GB["days"].append(day)
+    return {"price": GB["price"], "prev_close": 22550.0, "day_change": GB["price"] - 22550.0, "underlying": 22600.0,
+            "expiry": "27-Oct-2026", "high": GB["price"], "low": 22500.0, "time": GB["time"]}
+
+
+def friday_desk():
+    """A CE bought at 106 on Fri 23 Oct (signal 105, target 210); GIFT Nifty 22,600 at the close."""
+    at(2026, 10, 23, 15, 16)
+    PRICE["ltp"] = 106.0
+    s_, st_, br_, lg_, sent_ = desk(cfg={**TIERS, "gift_target_enabled": True, "gift_target_deduct": 0.2,
+                                         "gift_target_modify_gap_sec": 0})
+    s_.gift_fetch = gift_b
+    GB.update(price=22600.0, time=None, days=[])
+    s_.on_message(msg(3, SAMPLE, 15, 16, day=23))
+    s_.step()
+    at(2026, 10, 23, 15, 50)
+    s_.step()
+    return s_, st_, br_, lg_, sent_
+
+
+s23, st23, _, lg23, sent23 = friday_desk()
+at(2026, 10, 23, 16, 34, 50)
+s23.step()
+check("16:34:50: GIFT's evening session not open yet - no baseline", not st23.open_job().get("gift_base"))
+GB.update(price=22610.0, time="2026-10-23T15:39:58+05:30")
+n23 = len(GB["days"])
+at(2026, 10, 23, 16, 35, 5)
+s23.step()
+check("16:35:05, its last trade still 15:39:58 (the day session's): not the baseline",
+      not st23.open_job().get("gift_base") and len(GB["days"]) == n23 + 1)
+at(2026, 10, 23, 16, 35, 15)
+s23.step()
+check("...not asked again within 30 s", len(GB["days"]) == n23 + 1)
+GB.update(price=22650.0, time="2026-10-23T16:35:20+05:30")
+s23.gift_base_try_at -= 30
+at(2026, 10, 23, 16, 35, 40)
+s23.step()
+b23 = st23.open_job().get("gift_base") or {}
+check("16:35:40, traded at 16:35:20: 22,650 is the baseline - the contract Monday's 09:11 reads (asked for Mon 26)",
+      b23.get("price") == 22650.0 and GB["days"][-1] == date(2026, 10, 26)
+      and [r["kind"] for r in st23.open_job()["gift_reads"]] == ["close", "base"], str(b23))
+n23 = len(GB["days"])
+at(2026, 10, 23, 16, 50)
+s23.step()
+check("...once", len(GB["days"]) == n23)
+GB.update(price=22700.0, time="2026-10-24T02:44:59+05:30")
+at(2026, 10, 26, 1, 0, 5)
+s23.step()
+gk23 = st23.open_job().get("gift_check") or {}
+check("Monday 01:00 (information): +50 since Friday's 16:35, not +100 since the close",
+      gk23.get("move") == 50.0 and gk23.get("measured") == "since 16:35 on the entry day", str(gk23)[:200])
+GB.update(price=22840.0, time="2026-10-26T09:12:58+05:30")
+at(2026, 10, 26, 9, 13, 2)
+s23.step()
+g23 = st23.open_job().get("gift_target") or {}
+check("Monday 09:13, the weekend between: +190 since Friday's 16:35 (22,650 -> 22,840), not +240 since the close - "
+      "2.7 x = 283.50", g23.get("base") == 22650.0 and g23.get("favour") == 190.0
+      and g23.get("measured") == "since 16:35 on the entry day" and st23.open_job()["target_price"] == 283.5,
+      str(g23)[:300])
+
+s23b, st23b, _, lg23b, sent23b = friday_desk()
+at(2026, 10, 23, 17, 0)                         # the desk down from 16:35 to 17:00
+s23b.step()
+check("not read by 17:00 (the desk down): no baseline, none taken later", not st23b.open_job().get("gift_base"))
+GB.update(price=22840.0, time="2026-10-26T09:12:58+05:30")
+at(2026, 10, 26, 9, 13, 2)
+s23b.step()
+g23b = st23b.open_job().get("gift_target") or {}
+check("...Monday 09:13: +240 since the close is not used - the target stays 210, said so",
+      g23b.get("action") == "kept" and g23b.get("favour") is None and st23b.open_job()["target_price"] == 210.0
+      and any("16:35 price on the entry day was not read, the target stays 210.00" in x for x in sent23b),
+      str(g23b)[:200] + str(sent23b[-1:]))
+
+section("24. The option's expiry day as the next session: limit buys at -60% and -87%, the target the average + 5% "
+        "(owner, 14 Nov 2026)")
+XP = {"lots": 4, "topup_tolerance_pct": 10, "limit_topup_loss_pct": 53}
+
+
+def xp_day(n, open_px, before_open=None):
+    """260 @ 100 on Mon 26 Oct - the NIFTY 27 Oct option, so Tue 27 Oct, the next session, is its expiry day."""
+    at(2026, 10, 26, 15, 18)
+    PRICE["ltp"] = 100.0
+    s_, st_, b_, lg_, sent_ = desk(cfg=XP)
+    s_.on_message(msg(n, SAMPLE, 15, 18, day=26))
+    s_.step()
+    if before_open:
+        before_open(b_)
+    at(2026, 10, 27, 9, 15, 5)
+    PRICE["ltp"] = open_px
+    s_.step()
+    return s_, st_, b_, lg_, sent_
+
+
+def xp_px(h, mi, px, s_):
+    at(2026, 10, 27, h, mi)
+    PRICE["ltp"] = px
+    s_.step()
+
+
+def sells(b_):
+    return [(o["qty"], o["price"]) for o in b_.orders.values() if o["side"] == "SELL" and o["status"] == "open"]
+
+
+sX, stX, bX, lgX, sentX = xp_day(40, 95.0)
+jX = stX.open_job()
+l1, l2 = jX.get("limit_topup") or {}, jX.get("limit_topup2") or {}
+check("opened at 95 on the option's expiry day: LIMIT BUYs at once - 50% at 40.00 (-60%; Rs 13,000, the most lots "
+      "within Rs 14,300 = 5 lots, 325) and the other 50% at 13.00 (-87%; 16 lots, 1,040); not the -53% one",
+      jX["contract"]["expiry_date"] == "2026-10-27" and l1.get("ok") and l1["price"] == 40.0 and l1["qty"] == 325
+      and l1["loss_pct"] == 60.0 and l2.get("ok") and l2["price"] == 13.0 and l2["qty"] == 1040
+      and l2["loss_pct"] == 87.0 and not jX.get("topups"), str((l1, l2))[:300])
+check("...said so on Telegram", any("expires today" in x and "-60%" in x and "-87%" in x for x in sentX))
+xp_px(10, 0, 75.0, sX)
+xp_px(10, 30, 50.0, sX)
+jX = stX.open_job()
+check("75 (-25%), then 50 (-50%): nothing bought at market, no target cut, no trailing - the target stays 210",
+      not jX.get("topups") and jX["target_price"] == 210.0 and not jX.get("trail"), str(jX.get("topups")))
+xp_px(11, 0, 40.0, sX)
+jX = stX.open_job()
+check("40 (-60%): the first limit buy fills - 585 @ 66.67; the target = the average + 5% = 70.00, for all 585; the "
+      "-87% buy still resting", [u["step"] for u in jX["topups"]] == ["limit"] and jX["position"]["qty"] == 585
+      and jX["target_price"] == 70.0 and sells(bX) == [(585, 70.0)] and not jX.get("trail")
+      and bX.orders[l2["order_id"]]["status"] == "open", str({k: jX.get(k) for k in ("target_price", "position")})[:300])
+xp_px(11, 30, 70.0, sX)
+jX = stX.get_job(jX["job_id"])
+check("70: the target fills before the -87% buy - closed, a target hit; the -87% limit buy cancelled",
+      jX["status"] == "closed" and (jX.get("result") or {}).get("target_hit")
+      and bX.orders[l2["order_id"]]["status"] == "cancelled" and jX["limit_topup2"]["final"],
+      str((jX.get("result") or {}).get("exit_reason")) + " " + bX.orders[l2["order_id"]]["status"])
+
+sX, stX, bX, lgX, sentX = xp_day(41, 95.0)
+xp_px(11, 0, 40.0, sX)
+xp_px(12, 0, 13.0, sX)
+jX = stX.open_job()
+check("both fill (40, then 13): 1,625 @ 32.32; the target twice the average + 5% - 70.00, then 33.95; 100% added",
+      [u["step"] for u in jX["topups"]] == ["limit", "limit2"] and jX["position"]["qty"] == 1625
+      and jX["position"]["avg_price"] == 32.32 and jX["target_price"] == 33.95 and jX["topped_pct"] == 100
+      and sells(bX) == [(1625, 33.95)]
+      and [h["price"] for h in jX["target_history"] if h["kind"].startswith("target_after")] == [70.0, 33.95],
+      str({k: jX.get(k) for k in ("target_price", "topped_pct")}))
+xp_px(12, 30, 9.0, sX)
+check("...9 (-91%): nothing more", len(stX.open_job()["topups"]) == 2)
+
+sX, stX, bX, lgX, sentX = xp_day(42, 95.0)
+xp_px(11, 0, 40.0, sX)
+jid_x, l2 = stX.open_job()["job_id"], stX.open_job()["limit_topup2"]
+xp_px(15, 14, 45.0, sX)
+jX = stX.get_job(jid_x)
+check("15:14 with the -87% buy resting: cancelled, the 585 sold at market",
+      jX["status"] == "closed" and jX["result"]["exit_reason"] == "time_exit" and jX["result"]["qty"] == 585
+      and bX.orders[l2["order_id"]]["status"] == "cancelled", str(jX.get("result"))[:200])
+
+sX, stX, bX, lgX, sentX = xp_day(43, 10.0)
+for mi in (16, 17):
+    xp_px(9, mi, 10.0, sX)
+jX = stX.open_job()
+check("opened at 10 (-90%): both limit buys fill at once at the market - 1,625 @ 24.40, the target 25.65 "
+      "(the average + 5%)", [u["step"] for u in jX["topups"]] == ["limit", "limit2"]
+      and jX["position"]["qty"] == 1625 and jX["position"]["avg_price"] == 24.4 and jX["target_price"] == 25.65,
+      str({k: jX.get(k) for k in ("topups", "target_price")})[:300])
+
+
+def refuse_deep(b_):
+    real = b_.place_limit_buy
+    b_.place_limit_buy = lambda c, q, p: (dict(ok=False, error="price out of range", status="refused", side="BUY")
+                                          if p < 20 else real(c, q, p))
+
+
+sX, stX, bX, lgX, sentX = xp_day(44, 95.0, before_open=refuse_deep)
+jX = stX.open_job()
+check("the -87% limit buy refused: said so - that level is bought at market instead",
+      jX["limit_topup"]["ok"] and not jX["limit_topup2"]["ok"]
+      and any("was not placed" in x and "at market" in x for x in sentX))
+xp_px(11, 0, 40.0, sX)
+xp_px(12, 0, 13.0, sX)
+jX = stX.open_job()
+check("...40: the -60% limit fills; 13 (-87%): the other 50% at market, 16 lots - the target the average + 5% = 33.95",
+      [u["step"] for u in jX["topups"]] == ["limit", "second"] and jX["topups"][1]["qty"] == 1040
+      and jX["target_price"] == 33.95 and not jX.get("trail"), str(jX.get("topups"))[:300])
+
+st, store, broker, logs, sent = lim_day(45, 95.0)
+j = store.open_job()
+check("not the expiry day (a 27 Oct option on Fri 23 Oct): as before - one limit buy at -53%, no second",
+      j["contract"]["expiry_date"] == "2026-10-27" and j["limit_topup"]["price"] == 47.0 and not j.get("limit_topup2"))
+b3 = PaperBtstBroker(lambda c: PRICE["ltp"], log=lambda *_: None, today=lambda: CLOCK["t"].date())
+sX, stX, bX, lgX, sentX = xp_day(46, 95.0)
+b3.adopt(stX.open_job())
+check("a restart (paper) takes both expiry-day limit buys back",
+      sorted(o["price"] for o in b3.orders.values() if o["side"] == "BUY") == [13.0, 40.0])
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)
