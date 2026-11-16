@@ -3139,5 +3139,100 @@ b3.adopt(stX.open_job())
 check("a restart (paper) takes both expiry-day limit buys back",
       sorted(o["price"] for o in b3.orders.values() if o["side"] == "BUY") == [13.0, 40.0])
 
+section("25. GIFT Nifty 0 to 50 points our way at 09:11: the target down to 1.72 x (owner, 16 Nov 2026)")
+s25, st25, br25, lg25, sent25 = gift_0913(30)
+j25 = st25.open_job()
+g25 = j25.get("gift_target") or {}
+check("CE, GIFT +30 since 16:35: the target 210 (2 x) -> 1.72 x the signal's 105 = 180.60, in at once",
+      g25.get("action") == "lower" and g25.get("rule") == "small" and g25.get("favour") == 30.0
+      and g25.get("mult") == 1.72 and j25["target_price"] == 180.6 and j25["target_mult"] == 1.72
+      and g25.get("applied") and j25["target_history"][-1]["kind"] == "gift_target"
+      and j25["target_history"][-1]["previous"] == 210.0, str(g25)[:300])
+check("...said on Telegram", any("+30 points" in x and "(0 to 50)" in x and "1.72 x" in x and "180.60" in x
+                                 and "was 210.00" in x for x in sent25), str(sent25[-2:])[:300])
+for pts, act, tp, why in ((0, "lower", 180.6, "0 (GIFT flat) counts"), (50, "lower", 180.6, "+50 counts"),
+                          (51, "kept", 210.0, "+51: over 50, under 160"), (-1, "kept", 210.0, "-1: against our CE"),
+                          (-30, "kept", 210.0, "-30: against our CE"), (159, "kept", 210.0, "+159: as before"),
+                          (160, "raise", 252.0, "+160: raised as before")):
+    s_, st_, br_, lg_, sent_ = gift_0913(pts)
+    j_ = st_.open_job()
+    check(f"GIFT {pts:+d} for a CE: {why} - target {tp:.2f}", j_["gift_target"]["action"] == act
+          and j_["target_price"] == tp, str(j_.get("gift_target"))[:200])
+    if pts in (51, -30):
+        check(f"...said why ({pts:+d})", any("the target stays 210.00" in x and
+                                             ("over 50, under 160" if pts == 51 else "against us") in x for x in sent_),
+              str(sent_[-1:])[:200])
+s_, st_, *_ = gift_0913(-30, model=Model(dict(GOOD, side="PE")), text=pe)
+j_ = st_.open_job()
+check("a PE: GIFT -30 is 30 points its way - 1.72 x = 180.60", j_["signal"]["side"] == "PE"
+      and j_["gift_target"]["favour"] == 30.0 and j_["gift_target"]["action"] == "lower" and j_["target_price"] == 180.6,
+      str(j_.get("gift_target"))[:200])
+s_, st_, *_ = gift_0913(30, model=Model(dict(GOOD, side="PE")), text=pe)
+check("...a PE, GIFT +30 is against it - the target stays 210", st_.open_job()["gift_target"]["favour"] == -30.0
+      and st_.open_job()["target_price"] == 210.0)
+s_, st_, *_ = gift_0913(30, cfg={"gift_target_small_mult": 1.8, "gift_target_small_points": 20})
+check("the settings: gift_target_small_points 20 -> +30 is over it, the target stays",
+      st_.open_job()["gift_target"]["action"] == "kept" and st_.open_job()["target_price"] == 210.0)
+s_, st_, *_ = gift_0913(15, cfg={"gift_target_small_mult": 1.8})
+check("...gift_target_small_mult 1.8 -> 189.00", st_.open_job()["target_price"] == 189.0)
+
+at(2026, 10, 23, 9, 14)
+s25.step()
+check("...once a trade", len([h for h in st25.open_job()["target_history"] if h["kind"] == "gift_target"]) == 1)
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 120.0
+s25.step()
+j25 = st25.open_job()
+check("the open: the day's target goes in at 180.60, not 210",
+      j25["orders"][-1]["kind"] == "target_day2" and j25["orders"][-1]["price"] == 180.6, str(j25["orders"][-1]))
+at(2026, 10, 23, 11, 0)
+PRICE["ltp"] = 185.0
+s25.step()
+r25 = st25.get_job(j25["job_id"]).get("result") or {}
+check("...and it fills there: CLOSED at 180.60, a target hit", r25.get("exit_price") == 180.6 and r25.get("target_hit"),
+      str(r25)[:200])
+row25 = next(r for r in stats.by_day([st25.get_job(j25["job_id"])]) if r.get("job_id") == j25["job_id"])
+check("...the trades table's row: +30, lower, 210 -> 180.60 at 1.72 x", row25["gift"]["action"] == "lower"
+      and row25["gift"]["points"] == 30.0 and row25["gift"]["target_before"] == 210.0
+      and row25["gift"]["target"] == 180.6 and row25["gift"]["mult"] == 1.72 and row25["target_mult"] == 1.72,
+      str(row25["gift"]))
+
+s_, st_, br_, lg_, sent_ = gift_0913(30)
+at(2026, 10, 23, 9, 15, 40)
+PRICE["ltp"] = 95.0
+s_.step()
+at(2026, 10, 23, 10, 0)
+PRICE["ltp"] = 78.0
+s_.step()
+j_ = st_.open_job()
+check("a top-up works from the lowered target: -26.4% -> target 180.60 cut 25% = 135.45, trailing from it",
+      j_["topped_pct"] == 50 and j_["topups"][0]["target_before"] == 180.6 and j_["target_price"] == 135.45
+      and j_["trail"]["initial"] == 135.45, str({k: j_.get(k) for k in ("target_price", "trail")})[:200])
+
+sL, stL, exL, lgL, sentL = live_desk(cfg={"gift_target_enabled": True, "gift_target_modify_gap_sec": 0})
+sL.gift_fetch = gift_at
+GT.update(price=22600.0, fail=0)
+at(2026, 10, 22, 15, 45)
+sL.step()
+exL.close_day()
+at(2026, 10, 22, 16, 1)
+sL.step()
+at(2026, 10, 22, 16, 36)
+sL.step()
+amoL = stL.open_job()["amo"]
+at(2026, 10, 23, 9, 0)
+exL.send_amos()
+GT["price"] = 22625.0
+at(2026, 10, 23, 9, 13, 2)
+sL.step()
+jL = stL.open_job()
+liveL = exL.rows[amoL["uid"]]["orderid"]
+check("live, GIFT +25: the AMO waiting for the open is modified down to 180.60 - one sell, not a second",
+      [e for e in exL.events if e[0] == "modify"] == [("modify", liveL, "NORMAL", "180.60")]
+      and jL["target_price"] == 180.6 and len(exL.resting_sells()) == 1 and exL.resting_sells()[0]["price"] == 180.6,
+      str([e for e in exL.events if e[0] == "modify"]))
+check("the page has the new settings", all(k in web.state(s25, st25)["rules"]
+                                         for k in ("gift_target_small_points", "gift_target_small_mult")))
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

@@ -28,6 +28,8 @@
   "gift_target_min_points": 160,
   "gift_target_max_mult": 3.9,
   "gift_target_deduct": 0.2,
+  "gift_target_small_points": 50,
+  "gift_target_small_mult": 1.72,
   "target_mult": {"default": 2.0, "SENSEX": 2.0},
   "topup_first_loss_pct": 25.0,
   "topup_first_pct": 50.0,

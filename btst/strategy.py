@@ -46,10 +46,13 @@ reported - information only (btst/gift.py). Read again at gift_target_at
 (09:11) on D+1, it sets the target (owner, 3 Nov 2026): g points in the
 trade's favour (up for a CE, down for a PE) since GIFT's evening session
 opened (gift_base_at, 16:35) on the entry day - a weekend or holiday between
-is in the span (owner, 12 Nov 2026; was since the close) - under gift_target_min_points
-(160) - the target stays; from 160 - min(3.9, 2 + (g - 100) / 100 - d) x the
-signal's price, d gift_target_deduct (0.2: 190 points, 2.7 x). The top-ups
-and the trailing above then work from that target as from the 2 x.
+is in the span (owner, 12 Nov 2026; was since the close) - 0 to
+gift_target_small_points (50) for us: the target comes down to
+gift_target_small_mult (1.72) x the signal's price (owner, 16 Nov 2026);
+against us, or over 50 and under gift_target_min_points (160): the target
+stays; from 160 - min(3.9, 2 + (g - 100) / 100 - d) x the signal's price, d
+gift_target_deduct (0.2: 190 points, 2.7 x). The top-ups and the trailing
+above then work from that target as from the 2 x.
 Every target change (placed, AMO, trailed, replaced) is kept on the job
 (target_history), and the trailing state (trail) with each step.
 The exchange cancels every order at the close. Live, the target goes back in
@@ -94,6 +97,7 @@ from btst.logbook import fmt
 # The resting limit top-ups a job can have: one at -53%; on the option's expiry day one at -60%
 # and one at -87% (owner, 14 Nov 2026).
 LIMIT_KEYS = ("limit_topup", "limit_topup2")
+GIFT_MOVES = ("raise", "lower")            # a morning GIFT decision that changes the target
 
 # What the page shows of the rules - with the values the code falls back to.
 RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_pct": 50.0,
@@ -104,7 +108,8 @@ RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_
                  "expiry_topup_first_loss_pct": 60.0, "expiry_topup_second_loss_pct": 87.0, "expiry_target_pct": 5.0,
                  "gift_check_at": "01:00", "gift_base_at": "16:35", "gift_base_until": "17:00",
                  "gift_target_at": "09:11", "gift_target_min_points": 160.0,
-                 "gift_target_max_mult": 3.9, "gift_target_deduct": 0.2, "gift_target_until": "09:15"}
+                 "gift_target_max_mult": 3.9, "gift_target_deduct": 0.2, "gift_target_until": "09:15",
+                 "gift_target_small_points": 50.0, "gift_target_small_mult": 1.72}
 
 
 def _no_channel(job):
@@ -655,7 +660,7 @@ class BtstStrategy:
         base = float(job["position"]["entry_price"])
         low, low_ms = self._session_low(job, ltp)
         done = float(job.get("topped_pct") or 0.0)
-        first, second = self._topup_levels(job)    # the option's expiry day: -53% / -87%
+        first, second = self._topup_levels(job)    # the option's expiry day: -60% / -87%
         half = float(self.c("topup_first_pct", 50.0))
         limit = bool((job.get("limit_topup") or {}).get("ok"))  # the other 50% rests as a limit buy (at -53%)
         expiry = self._expiry_day(job)
@@ -1632,19 +1637,21 @@ class BtstStrategy:
         session's date sets the target. Its move since its evening session
         opened on the entry day (_gift_base, 16:35 - owner, 12 Nov 2026; not
         read: the target stays), g points in the trade's favour (up for a CE,
-        down for a PE): under gift_target_min_points (160) the target stays; from
-        160 it becomes min(gift_target_max_mult, m + (g - 100) / 100 - d) x
-        the signal's price, m the trade's multiple (2), d gift_target_deduct
-        (0.2; 0.1 at first - owner, 3 Nov 2026) - 190 points: 2.7 x; the
-        most 3.9 x from 310 points (3 x at first - owner, 10 Nov 2026).
-        Only ever up, once a trade, never after a top-up. A failed read is
+        down for a PE): 0 to gift_target_small_points (50) - down to
+        gift_target_small_mult (1.72) x the signal's price (owner, 16 Nov
+        2026); against us, or over 50 and under gift_target_min_points (160),
+        the target stays; from 160 it becomes min(gift_target_max_mult, m +
+        (g - 100) / 100 - d) x the signal's price, m the trade's multiple (2),
+        d gift_target_deduct (0.2; 0.1 at first - owner, 3 Nov 2026) - 190
+        points: 2.7 x; the most 3.9 x from 310 points (3 x at first - owner,
+        10 Nov 2026). Once a trade, never after a top-up. A failed read is
         tried again (gift_target_retry_sec, 20 s) until gift_target_until
         (09:15, the open - owner, 3 Nov 2026); not read by then, the target
         stays. True if it changed the job."""
         if not self.c("gift_enabled", True) or not self.c("gift_target_enabled", True):
             return False
         gt = job.get("gift_target") or {}
-        if gt and (gt.get("action") != "raise" or gt.get("applied")):
+        if gt and (gt.get("action") not in GIFT_MOVES or gt.get("applied")):
             return False
         now, jid = self.now(), job["job_id"]
         t = _secs(now)
@@ -1678,16 +1685,21 @@ class BtstStrategy:
             side = (job.get("signal") or {}).get("side", "")
             pts = (f"{gt['favour']:+.0f} points {gt['measured']} for our {side}" if gt["favour"] is not None
                    else f"no move - {gt['measured']}")
-            if gt["action"] != "raise":
+            small = gt.get("rule") == "small"
+            if gt["action"] not in GIFT_MOVES:
                 self._say(f"GIFT Nifty {q['price']:,.1f}: {pts}"
-                          + ("" if gt["favour"] is None else f" - under {gt['min_points']:g}" if gt.get("mult") is None
-                             else f" - {gt['mult']:g} x = {gt['target']:.2f} is not above it")
+                          + ("" if gt["favour"] is None
+                             else f" - against us" if gt["favour"] < 0 and gt.get("mult") is None
+                             else f" - over {gt['small_points']:g}, under {gt['min_points']:g}" if gt.get("mult") is None
+                             else f" - {gt['mult']:g} x = {gt['target']:.2f} is not "
+                                  + ("below" if small else "above") + " it")
                           + f", the target stays {gt['target_before']:.2f}", jid, True, "gift")
                 return True
-            self._say(f"GIFT Nifty {q['price']:,.1f}: {pts} (>= {gt['min_points']:g}) - target {gt['mult_before']:g} "
-                      f"x -> {gt['mult']:g} x the signal's {float(job['signal']['price']):g} = {gt['target']:.2f} "
-                      f"(was {gt['target_before']:.2f}); the top-ups and trailing work from it", jid, True, "gift",
-                      "TRADE")
+            self._say(f"GIFT Nifty {q['price']:,.1f}: {pts} "
+                      + (f"(0 to {gt['small_points']:g})" if small else f"(>= {gt['min_points']:g})")
+                      + f" - target {gt['mult_before']:g} x -> {gt['mult']:g} x the signal's "
+                        f"{float(job['signal']['price']):g} = {gt['target']:.2f} (was {gt['target_before']:.2f}); the "
+                        f"top-ups and trailing work from it", jid, True, "gift", "TRADE")
         if time.time() - self.gift_target_try_at < float(self.c("gift_target_modify_gap_sec", 10)):
             return False
         self.gift_target_try_at = time.time()
@@ -1700,21 +1712,28 @@ class BtstStrategy:
         side = (job.get("signal") or {}).get("side", "")
         favour = None if move is None else round(move if side == "CE" else -move, 2)
         lo = float(self.c("gift_target_min_points", 160.0))
+        small = float(self.c("gift_target_small_points", 50.0))
         m0 = float(job.get("target_mult") or self.target_mult((job.get("signal") or {}).get("indices")))
         cur = float(job["target_price"])
         rec = dict(q, at=self._ts(), base=base, move=round(move, 2) if move is not None else None, favour=favour,
                    measured=f"since {self.c('gift_base_at', '16:35')} on the entry day" if base
                    else f"GIFT's {self.c('gift_base_at', '16:35')} price on the entry day was not read", min_points=lo,
-                   mult_before=m0, target_before=cur, mult=None, target=cur, action="kept", applied=False)
+                   small_points=small, mult_before=m0, target_before=cur, mult=None, target=cur, action="kept",
+                   applied=False)
+        if favour is not None and 0 <= favour <= small + 1e-9:     # a little our way: the target comes down
+            mult = float(self.c("gift_target_small_mult", 1.72))
+            target = tick_round(float(job["signal"]["price"]) * mult, job["contract"]["tick"], up=True)
+            return dict(rec, rule="small", mult=mult, target=target,
+                        action="lower" if target < cur - 1e-9 else "kept")
         if favour is None or favour < lo:
             return rec
         mult = round(min(float(self.c("gift_target_max_mult", 3.9)),
                          m0 + (favour - 100.0) / 100.0 - float(self.c("gift_target_deduct", 0.2))), 4)
         target = tick_round(float(job["signal"]["price"]) * mult, job["contract"]["tick"], up=True)
-        return dict(rec, mult=mult, target=target, action="raise" if target > cur + 1e-9 else "kept")
+        return dict(rec, rule="raise", mult=mult, target=target, action="raise" if target > cur + 1e-9 else "kept")
 
     def _apply_gift_target(self, job, gt):
-        """The raised target in: the resting sell modified (the AMO before the
+        """The new target in (raised, or lowered): the resting sell modified (the AMO before the
         open, live), or - none resting (paper before the open: yesterday's DAY
         target died) - the price the open places. True once it is in."""
         jid, price, cur = job["job_id"], float(gt["target"]), float(job["target_price"])

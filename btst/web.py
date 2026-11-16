@@ -166,6 +166,10 @@ const esc = s => String(s ?? "").replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;"
 const num = x => x != null && x !== "" && !isNaN(x);
 const n0 = x => !num(x) ? "–" : Number(x).toLocaleString("en-IN", {maximumFractionDigits: 0});
 const n2 = x => !num(x) ? "–" : Number(x).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+// why the morning GIFT read left the target where it was
+const giftWhy = (g, R) => !num(g.favour) ? "no move read" : g.favour < 0 ? "against us"
+  : !num(g.mult) ? `over ${R.gift_target_small_points}, under ${R.gift_target_min_points}`
+  : `${g.mult}× is not ${g.favour <= R.gift_target_small_points ? "below" : "above"} it`;
 const cls = x => x > 0 ? "up" : (x < 0 ? "down" : "");
 const rs = x => !num(x) ? "–" : (x < 0 ? "−₹" : (x > 0 ? "+₹" : "₹")) + n0(Math.abs(x));
 const rsp = x => !num(x) ? "–" : "₹" + n0(x);
@@ -275,12 +279,12 @@ function plan(d, j, p){
   const gift = j.gift_check || j.gift_close;
   const giftRow = gift ? `<tr><td>GIFT Nifty</td><td>${n2(gift.price)}${num(gift.move) ? ` · ${gift.move > 0 ? "+" : ""}${n0(gift.move)} points ${esc(gift.measured || "")} · <b class="${gift.verdict === "against" ? "down" : (gift.verdict === "with" ? "up" : "")}">${esc(gift.verdict)}</b> our ${esc((j.signal || {}).side)}` : " · the close (baseline)"} · ${tm(gift.at)} (information only)</td></tr>` : "";
   const gt = j.gift_target, side = esc((j.signal || {}).side), gmin = R.gift_target_min_points;
-  const gtRow = !gt ? `<tr><td>GIFT ${esc(R.gift_target_at)}</td><td>${gmin}+ points for our ${side} since GIFT's ${esc(R.gift_base_at)} open on the entry day${j.gift_base ? " (" + n2(j.gift_base.price) + ")" : ""}: target = min(${R.gift_target_max_mult}, ${j.target_mult || 2} + (points − 100)/100 − ${R.gift_target_deduct}) × the signal's price; under ${gmin}, or not read by ${esc(R.gift_target_until)}, it stays</td></tr>`
+  const gtRow = !gt ? `<tr><td>GIFT ${esc(R.gift_target_at)}</td><td>${gmin}+ points for our ${side} since GIFT's ${esc(R.gift_base_at)} open on the entry day${j.gift_base ? " (" + n2(j.gift_base.price) + ")" : ""}: target = min(${R.gift_target_max_mult}, ${j.target_mult || 2} + (points − 100)/100 − ${R.gift_target_deduct}) × the signal's price; 0 to ${R.gift_target_small_points} points: target = ${R.gift_target_small_mult}× the signal's price${num((j.signal || {}).price) ? " (" + n2(Math.ceil(j.signal.price * R.gift_target_small_mult * 20 - 1e-6) / 20) + ")" : ""}; against us, ${R.gift_target_small_points}–${gmin}, or not read by ${esc(R.gift_target_until)}, it stays</td></tr>`
     : `<tr><td>GIFT ${tms(gt.at)}</td><td>${num(gt.favour) ? `${gt.favour > 0 ? "+" : ""}${n0(gt.favour)} points ${esc(gt.measured || "")} for our ${side} · ` : ""}${
-      gt.action === "raise" ? `<b class="up">target ${n2(gt.target_before)} → ${n2(gt.target)}</b> (${gt.mult}× the signal's price)${gt.applied ? "" : " · being put in"}`
+      gt.action === "raise" || gt.action === "lower" ? `<b class="${gt.action === "raise" ? "up" : "down"}">target ${n2(gt.target_before)} → ${n2(gt.target)}</b> (${gt.mult}× the signal's price)${gt.applied ? "" : " · being put in"}`
       : gt.action === "unread" ? "not read in time - the target stayed"
-      : gt.action === "dropped" ? `the raise to ${n2(gt.target)} came after a top-up - not used`
-      : `under ${gmin} - the target stays ${n2(gt.target_before)}`}</td></tr>`;
+      : gt.action === "dropped" ? `the change to ${n2(gt.target)} came after a top-up - not used`
+      : `${giftWhy(gt, R)} - the target stays ${n2(gt.target_before)}`}</td></tr>`;
   if (j.decision){
     const dec = j.decision, tr = j.trail, ups = j.topups || [], lt = j.limit_topup, lim = !!(lt && lt.ok), done = j.topped_pct || 0;
     const lim2 = !!(j.limit_topup2 && j.limit_topup2.ok);
@@ -567,9 +571,9 @@ function drawTrades(d){
   const giftCell = g => { if (!g) return `<span class="n">–</span>`;
     let h = "";
     if (num(g.morning)) h = `${n2(g.morning)}<span class="n">${tm(g.morning_at)}${num(g.move) ? " · " + pts(g.move) : ""}</span><span class="n">${
-      g.action === "raise" ? `<b class="up">target ${n2(g.target_before)} → ${n2(g.target)}</b> · ${g.mult}×${g.applied ? "" : " · being put in"}`
-      : g.action === "dropped" ? "raise not used - a top-up came first"
-      : `under ${n0(GR.gift_target_min_points)} · target stays`}</span>`;
+      g.action === "raise" || g.action === "lower" ? `<b class="${g.action === "raise" ? "up" : "down"}">target ${n2(g.target_before)} → ${n2(g.target)}</b> · ${g.mult}×${g.applied ? "" : " · being put in"}`
+      : g.action === "dropped" ? "change not used - a top-up came first"
+      : `${giftWhy({favour: g.points, mult: g.mult}, GR)} · target stays`}</span>`;
     else if (g.action === "unread") h = `<span class="n">not read by ${esc(GR.gift_target_until || "")}${g.tries ? " (" + n0(g.tries) + " tries)" : ""} · target stays</span>`;
     else if (num(g.night)) h = `${n2(g.night)}<span class="n">${tm(g.night_at)}${num(g.night_move) ? " · " + pts(g.night_move) : ""} · information only</span>`;
     if (num(g.base)) h += `<span class="n">${esc(GR.gift_base_at || "")} open ${n2(g.base)}</span>`;
@@ -583,10 +587,10 @@ function drawTrades(d){
     if (!num(hi) && num(x.high) && String(x.high_at || "").slice(0, 10) > (r.date || "")) { hi = x.high; at = x.high_at; }
     if (!num(mv) && !num(hi)) return `<span class="n">–</span>`;
     const mx = num(hi) && sp ? hi / sp : null, tm_ = r.target_mult, avgd = !!r.added_qty, buy = avgd ? r.avg_price : r.entry_price;
-    const raised = g.action === "raise" && g.applied;
+    const raised = (g.action === "raise" || g.action === "lower") && g.applied;
     return `${num(mv) ? pts(mv) : "–"}<span class="n">GIFT ${morning ? tm(g.morning_at) : (num(g.night) ? tm(g.night_at) + " (night)" : "")}</span>`
       + (num(hi) ? `<span class="n">max ${n2(hi)}${mx ? ` = <b>${mx.toFixed(2)}×</b>` : ""}${num(buy) ? ` · <span class="${hi >= buy ? "up" : "down"}">${pc(100 * (hi - buy) / buy)}</span> profit vs the ${avgd ? "average" : "buy"} ${n2(buy)}` : ""}${num(sp) && sp > 0 ? ` · <span class="${hi >= sp ? "up" : "down"}">${pc(100 * (hi - sp) / sp)}</span> vs the signal ${n2(sp)}` : ""}${at ? " · " + tm(at) : ""}</span>` : `<span class="n">max –</span>`)
-      + (num(tm_) ? `<span class="n">that day's target <b>${tm_}×</b> · ${raised ? "raised from " + (g.mult_before || 2) + "×" : "not updated"}${mx ? ` · <b class="${mx >= tm_ ? "up" : "down"}">${mx >= tm_ ? "reached" : "not reached"}</b>` : ""}</span>` : ""); };
+      + (num(tm_) ? `<span class="n">that day's target <b>${tm_}×</b> · ${raised ? (g.action === "raise" ? "raised" : "lowered") + " from " + (g.mult_before || 2) + "×" : "not updated"}${mx ? ` · <b class="${mx >= tm_ ? "up" : "down"}">${mx >= tm_ ? "reached" : "not reached"}</b>` : ""}</span>` : ""); };
   const ext = x => { if (!x) return `<span class="n">–</span>`;
     const hm = s => s ? s.slice(11, 16) + " " + day(s).replace(/^\w+ /, "") : "";
     const tag = a => a ? ` <span class="tag" title="after the trade was closed">after exit</span>` : "";
