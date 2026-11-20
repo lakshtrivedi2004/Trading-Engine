@@ -1589,7 +1589,7 @@ class BtstStrategy:
         try:
             out = []
             for g in self.store.gift_sessions_on(day):
-                g = {k: v for k, v in g.items() if k not in ("points", "last_minute")}
+                g = {k: v for k, v in g.items() if k not in ("points", "last_minute", "gz")}
                 out.append(g)
             return out
         except Exception as e:
@@ -1614,8 +1614,14 @@ class BtstStrategy:
         a_ms = int(datetime.fromisoformat(str(a)).timestamp() * 1000)
         b_ms = int(datetime.fromisoformat(str(b)).timestamp() * 1000)
         pts, sessions, at_buy = [], [], None
+        live = dict(self.gift_rec.live) if self.gift_rec is not None else {}
         for d in docs:
+            d.pop("gz", None)
             base = d.get("base")
+            if live.get("status") == "recording" and live.get("session_id") == d.get("session_id") and live.get("at"):
+                t = int(datetime.fromisoformat(live["at"]).timestamp() * 1000)     # the price read seconds ago
+                if not d.get("points") or t > d["points"][-1][0]:
+                    d["points"] = list(d.get("points") or []) + [[t, live["last"]]]
             sessions.append({k: d.get(k) for k in ("session_id", "session", "start", "end", "base", "base_from",
                                                      "first", "high", "low", "last", "change", "expiry")})
             for t, px in d.get("points") or []:

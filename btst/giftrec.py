@@ -3,10 +3,19 @@
 NSE IX trades GIFT Nifty in two sessions (IST): 06:30 - 15:40 and 16:35 -
 02:45 (the second ends after midnight and belongs to the day it started).
 While a session is on, the near-month future's last price is read every
-gift_record_sec (60 s) on a thread of its own - a slow NSE IX never holds up
-the trade - and kept in MongoDB (btst_gift), one document a session: the
-points since the PREVIOUS session's last price (its "base"), the first, high,
-low and last price, and one price a minute for the page's chart.
+gift_record_sec (1 s - owner, 20 Nov 2026: NSE IX's quote changes up to once a
+second at times; ~0.2 s and ~2% of a CPU a read) on a thread of its own - a
+slow NSE IX never holds up the trade. Every new price (a new quote time) is
+kept:
+  - in a local file while the session runs (.cache/gift/<session>.csv,
+    "epoch_ms,price"), gzipped into the session's MongoDB document when it
+    ends (gz, ticks) and the file removed - a session left open by a stop is
+    saved on the next start;
+  - in MongoDB (btst_gift), one document a session, written once a minute
+    (gift_save_sec, 60): the points since the PREVIOUS session's last price
+    (its "base"), first, high, low and last, and one price a minute for the
+    page's chart. A document rewritten every second would load the shared Atlas
+    cluster for nothing; the page's live figures come from memory (state).
 
 The base: the last price recorded in the session before (the 15:40 close for
 the evening session, the 02:45 close for the morning one - a weekend or a
@@ -16,8 +25,11 @@ close of this contract instead - said so (base_from).
 
 The evening session reads the contract of the next day (as the desk's GIFT
 target does), so on GIFT's expiry day the evening is already the next month,
-and the morning after reads the same contract.
+and the morning after reads the same contract. A failed read is tried again
+after 2, 4, 8 ... at most 60 s (gift_record_sec doubling).
 """
+import gzip
+import os
 import threading
 import time as _time
 from datetime import datetime, time, timedelta
@@ -26,6 +38,7 @@ from arb.instruments import IST
 from btst.logbook import fmt
 
 SESSIONS = (("06:30", "15:40"), ("16:35", "02:45"))
+DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "gift")
 
 
 def _t(hm):
@@ -63,16 +76,32 @@ def _iso(dt):
     return dt.isoformat(timespec="seconds") if dt else None
 
 
+def unzip(gz):
+    """[(epoch_ms, price)] from a session's gzipped prices."""
+    out = []
+    for line in gzip.decompress(gz).decode().splitlines():
+        a, _, b = line.partition(",")
+        if a and b:
+            out.append((int(a), float(b)))
+    return out
+
+
 class GiftRecorder:
-    def __init__(self, store, fetch, cfg=None, now=None, log=None, clock=_time.time):
+    def __init__(self, store, fetch, cfg=None, now=None, log=None, clock=_time.time, folder=None):
         self.store, self.fetch = store, fetch
         self.c = cfg or (lambda k, d=None: d)
         self.now = now or (lambda: datetime.now(IST))
         self.log = log or (lambda *_: None)
         self.clock = clock
+        self.dir = folder or self.c("gift_dir", None) or DIR
         self.cur = None                         # the session being recorded (its document, no points)
         self.last_try = 0.0
-        self.err_said = None                # when a failed read was last logged (once every 10 min)
+        self.wait = None                        # after a failed read: seconds to the next try
+        self.fails = 0
+        self.err_said = None                    # when a failed read was last logged (once every 10 min)
+        self.saved_at = 0.0
+        self.last_quote = None                  # (quote time, price) last kept - a new one is a new price
+        self.swept = False
         self.live = {"status": "starting"}
 
     def _sessions(self):
@@ -81,18 +110,24 @@ class GiftRecorder:
     def _say(self, text, level="INFO"):
         self.log(fmt(level, "gift", text))
 
+    def _file(self, sid):
+        return os.path.join(self.dir, f"{sid}.csv")
+
     def run(self, stop):
-        """The thread: a pass every few seconds until `stop` is set."""
+        """The thread: a pass every 0.2 s until `stop` is set (a read every gift_record_sec)."""
         while not stop.is_set():
             try:
                 self.pass_once()
             except Exception as e:
                 self._say(f"GIFT Nifty recorder error: {e!r}", "ERROR")
-            stop.wait(5)
+            stop.wait(0.2)
 
     def pass_once(self):
         now = self.now()
         ses = session_at(now, self._sessions())
+        if not self.swept:
+            self.swept = True
+            self._sweep(session_id(ses[0], ses[1]) if ses else None)
         if self.cur and (not ses or session_id(ses[0], ses[1]) != self.cur["session_id"]):
             self._end(self.cur)
         if not ses:
@@ -101,7 +136,8 @@ class GiftRecorder:
                 self.live = dict(self.live, status="closed",
                                  next_open=_iso(nxt[1]) if nxt else None, next_session=nxt[0] if nxt else None)
             return
-        if self.clock() - self.last_try < float(self.c("gift_record_sec", 60)):
+        every = self.wait if self.wait is not None else float(self.c("gift_record_sec", 3))
+        if self.clock() - self.last_try < every:
             return
         self.last_try = self.clock()
         no, start, end = ses
@@ -110,12 +146,17 @@ class GiftRecorder:
         try:
             q = self.fetch(day)
         except Exception as e:
+            self.fails += 1
+            self.wait = min(60.0, float(self.c("gift_record_sec", 3)) * 2 ** self.fails)
             if self.err_said is None or self.clock() - self.err_said > 600:
                 self.err_said = self.clock()
-                self._say(f"GIFT Nifty not read for session {no} ({e!r}) - trying again every "
-                          f"{float(self.c('gift_record_sec', 60)):g} s", "WARN")
+                self._say(f"GIFT Nifty not read for session {no} ({e!r}) - trying again in {self.wait:g} s, "
+                          f"backing off to every 60 s", "WARN")
             self.live = dict(self.live, status="error", error=repr(e)[:160], at=_iso(now))
             return
+        if self.fails:
+            self._say(f"GIFT Nifty read again after {self.fails} failure(s)")
+        self.fails, self.wait, self.err_said = 0, None, None
         qt = None
         try:
             qt = datetime.fromisoformat(q["time"]) if q.get("time") else None
@@ -125,29 +166,45 @@ class GiftRecorder:
             self.live = dict(self.live, status="no_trading", quote_time=q.get("time"), at=_iso(now),
                              session=no, start=_iso(start), end=_iso(end))
             return                              # a quote from before the session: not trading (a holiday)
-        self.err_said = None
         doc = self.cur if self.cur and self.cur["session_id"] == sid else self._open(sid, no, start, end, q)
         px = float(q["price"])
         when = qt or now
+        key = (q.get("time") or _iso(now), px)
+        fresh = key != self.last_quote and (q.get("time") is not None or px != doc.get("last"))
+        if fresh:
+            self.last_quote = key
+            os.makedirs(self.dir, exist_ok=True)
+            with open(self._file(sid), "a") as fh:
+                fh.write(f"{int(when.timestamp() * 1000)},{px:g}\n")
+            doc["ticks"] = int(doc.get("ticks") or 0) + 1
         minute = int(when.timestamp() * 1000) // 60000 * 60000
         upd = {"last": px, "last_at": _iso(when), "high": max(doc.get("high") or px, px),
                "low": min(doc.get("low") or px, px), "change": round(px - doc["base"], 2),
                "n": int(doc.get("n") or 0) + (1 if minute != doc.get("last_minute") else 0),
-               "last_minute": minute, "expiry": q.get("expiry")}
+               "last_minute": minute, "expiry": q.get("expiry"), "ticks": int(doc.get("ticks") or 0)}
         point = [minute, px] if minute != doc.get("last_minute") else None
-        self.store.gift_point(sid, upd, point)
+        if point or self.clock() - self.saved_at >= float(self.c("gift_save_sec", 60)):
+            self.store.gift_point(sid, upd, point)
+            self.saved_at = self.clock()
         doc.update(upd)
         self.cur = doc
         self.live = {"status": "recording", "session": no, "session_id": sid, "start": _iso(start), "end": _iso(end),
                      "base": doc["base"], "base_at": doc.get("base_at"), "base_from": doc.get("base_from"),
-                     "first": doc.get("first"), "last": px, "at": _iso(when), "change": upd["change"],
-                     "high": upd["high"], "low": upd["low"], "expiry": q.get("expiry"), "points": upd["n"]}
+                     "first": doc.get("first"), "last": px, "at": _iso(when), "read_at": _iso(now),
+                     "change": upd["change"], "high": upd["high"], "low": upd["low"], "expiry": q.get("expiry"),
+                     "points": upd["n"], "ticks": upd["ticks"]}
 
     def _open(self, sid, no, start, end, q):
         """The session's document: the one saved (a restart), else a new one with its base."""
         old = self.store.gift_session(sid)
         if old:
             old.pop("points", None)
+            old.pop("gz", None)
+            try:
+                with open(self._file(sid)) as fh:
+                    old["ticks"] = sum(1 for _ in fh)
+            except OSError:
+                pass
             self._say(f"GIFT Nifty session {no} ({sid}) recording again after a restart - base {old['base']:,.2f}")
             return old
         px = float(q["price"])
@@ -164,19 +221,50 @@ class GiftRecorder:
         doc = {"session_id": sid, "day": start.date().isoformat(), "session": no, "start": _iso(start),
                "end": _iso(end), "expiry": q.get("expiry"), "base": base, "base_at": base_at, "base_from": base_from,
                "first": px, "first_at": q.get("time") or _iso(self.now()), "last": px, "high": px, "low": px,
-               "change": round(px - base, 2), "n": 0, "last_minute": None, "points": [], "closed": False}
+               "change": round(px - base, 2), "n": 0, "ticks": 0, "last_minute": None, "points": [], "closed": False}
         self.store.save_gift_session(doc)
         self._say(f"GIFT Nifty session {no} open ({start:%H:%M} - {end:%H:%M}): first {px:,.2f}, base {base:,.2f} "
-                  f"({base_from}) - recorded every {float(self.c('gift_record_sec', 60)):g} s")
+                  f"({base_from}) - read every {float(self.c('gift_record_sec', 3)):g} s, every new price kept")
         doc = dict(doc)
         doc.pop("points")
         return doc
 
+    def _save_file(self, sid):
+        """The session's prices gzipped into its document, the local file removed. The count, or None."""
+        path = self._file(sid)
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        except OSError:
+            return None
+        n = raw.count(b"\n")
+        self.store.save_gift_ticks(sid, gzip.compress(raw), n)
+        os.remove(path)
+        return n
+
     def _end(self, doc):
-        self.store.gift_point(doc["session_id"], {"closed": True}, None)
+        n = self._save_file(doc["session_id"])
+        final = {k: doc.get(k) for k in ("last", "last_at", "high", "low", "change", "n", "last_minute", "expiry")}
+        final.update(closed=True, ticks=n if n is not None else doc.get("ticks"))
+        self.store.gift_point(doc["session_id"], final, None)
         self._say(f"GIFT Nifty session {doc['session']} ({doc['session_id']}) ended: last {doc['last']:,.2f}, "
-                  f"{doc['change']:+,.2f} points since {doc['base']:,.2f}, {doc.get('n', 0)} minute(s) saved")
+                  f"{doc['change']:+,.2f} points since {doc['base']:,.2f}, {doc.get('n', 0)} minute(s), "
+                  f"{n if n is not None else 0} price(s) saved")
         self.cur = None
+        self.last_quote = None
+
+    def _sweep(self, current):
+        """On start: a session file left by a stop (not the session on now) saved into its document."""
+        try:
+            names = [f[:-4] for f in os.listdir(self.dir) if f.endswith(".csv")]
+        except OSError:
+            return
+        for sid in names:
+            if sid == current:
+                continue
+            n = self._save_file(sid)
+            self.store.gift_point(sid, {"closed": True, "ticks": n}, None)
+            self._say(f"GIFT Nifty session {sid}: {n} price(s) left by a stop - saved")
 
 
 def start(recorder, stop):

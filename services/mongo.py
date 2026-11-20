@@ -15,7 +15,8 @@ Collections
                    no trade, and how many messages were read
     btst_gift      GIFT Nifty, one document a session (btst/giftrec.py): its
                    base (the session before's last price), first, high, low,
-                   last, the change in points, and one price a minute
+                   last, the change in points, one price a minute, and every
+                   price read (every 3 s) gzipped once the session ends (gz)
 """
 import os
 import sys
@@ -167,7 +168,11 @@ class MongoStore:
 
     # ── GIFT Nifty sessions (btst/giftrec.py) ───────────────────────────────
     def gift_session(self, session_id, points=True):
-        return self.gift.find_one({"session_id": session_id}, {"_id": 0} if points else {"_id": 0, "points": 0})
+        return self.gift.find_one({"session_id": session_id}, {"_id": 0} if points else {"_id": 0, "points": 0, "gz": 0})
+
+    def save_gift_ticks(self, session_id, gz, count):
+        """Every price of the session, gzipped "epoch_ms,price" lines (btst/giftrec.py)."""
+        self.gift.update_one({"session_id": session_id}, {"$set": {"gz": gz, "ticks": count}})
 
     def save_gift_session(self, doc):
         self.gift.update_one({"session_id": doc["session_id"]}, {"$set": doc}, upsert=True)
@@ -181,7 +186,7 @@ class MongoStore:
 
     def gift_sessions(self, limit=20, points=False):
         """The newest sessions first."""
-        proj = {"_id": 0} if points else {"_id": 0, "points": 0}
+        proj = {"_id": 0, "gz": 0} if points else {"_id": 0, "points": 0, "gz": 0}
         return list(self.gift.find({}, proj).sort("start", -1).limit(int(limit)))
 
     def gift_session_before(self, start_iso):
@@ -190,10 +195,10 @@ class MongoStore:
 
     def gift_sessions_on(self, day, points=False):
         """The sessions that started on `day` (YYYY-MM-DD), morning first."""
-        proj = {"_id": 0} if points else {"_id": 0, "points": 0}
+        proj = {"_id": 0, "gz": 0} if points else {"_id": 0, "points": 0, "gz": 0}
         return sorted(self.gift.find({"day": day}, proj), key=lambda d: d.get("start") or "")
 
     def gift_between(self, a_iso, b_iso):
         """The sessions overlapping [a, b], with their points, oldest first."""
-        out = self.gift.find({"start": {"$lte": b_iso}, "end": {"$gte": a_iso}}, {"_id": 0})
+        out = self.gift.find({"start": {"$lte": b_iso}, "end": {"$gte": a_iso}}, {"_id": 0, "gz": 0})
         return sorted(out, key=lambda d: d.get("start") or "")

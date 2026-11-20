@@ -9,6 +9,7 @@
     GET  /api/logs?limit=&group=errors|trades|signals|ai&q=&day=YYYY-MM-DD
     GET  /api/day?date=YYYY-MM-DD   History: that day's trades (entered, or in their next
                        session), their rows, and the messages read
+    GET  /api/gift     GIFT Nifty now (btst/giftrec.py) - the page reads it every second
     GET  /api/chart?job=ID   a trade's recorded prices as 1-minute bars, its target,
                        average, position and P&L at each minute, and its events
     POST /api/mode?to=paper|live[&exit=1]   switch mode (btst/modes.py): exit=1 sells an
@@ -743,7 +744,7 @@ function drawGift(d){
   let h = `<span class="k">GIFT Nifty</span>`;
   if (g.status === "recording")
     h += `<b class="big">${n2(g.last)}</b><b class="${cls(g.change)}">${pts(g.change)}</b>`
-      + `<span class="n">session ${g.session} (${hmOf(g.start)}–${hmOf(g.end)}) · since ${n2(g.base)}, ${esc(g.base_from || "")} · high ${n2(g.high)} · low ${n2(g.low)} · ${tms(g.at)} · ${esc(g.expiry || "")} · ${n0(g.points)} min saved</span>`;
+      + `<span class="n">session ${g.session} (${hmOf(g.start)}–${hmOf(g.end)}) · since ${n2(g.base)}, ${esc(g.base_from || "")} · high ${n2(g.high)} · low ${n2(g.low)} · price of ${tms(g.at)}, read ${tms(g.read_at)} · ${esc(g.expiry || "")} · ${n0(g.ticks)} prices kept</span>`;
   else if (g.status === "closed")
     h += (num(g.last) ? `<b class="big">${n2(g.last)}</b><b class="${cls(g.change)}">${pts(g.change)}</b><span class="n">session ${g.session} closed at ${hmOf(g.end)}</span>` : `<span class="n">no session on now</span>`)
       + (g.next_open ? `<span class="n">next: session ${g.next_session} at ${tm(g.next_open)}</span>` : "");
@@ -763,7 +764,10 @@ function giftChart(d, id){
   if (!d || d.error) return "";
   const g = d.gift, B = d.bars || [];
   if (!g || !(g.points || []).length) return B.length ? `<div class="chartbox"><p class="empty">GIFT Nifty: nothing recorded over this trade (GIFT is recorded from 20 Nov 2026).</p></div>` : "";
-  const P = g.points;
+  let P = g.points;
+  const lv = LAST && LAST.gift_live;            // the price read every 3 s, between the chart's reloads
+  if (lv && lv.status === "recording" && lv.at && (d.recording || {}).status === "recording"){
+    const t = Date.parse(lv.at); if (t > P[P.length - 1].t) P = P.concat([{t, p: lv.last, chg: lv.change, s: lv.session}]); }
   const W = 1000, L = 56, R = 56, T = 12, GH = 130, GAP = 24, QH = 110, BOT = 22, H = T + GH + GAP + QH + BOT;
   const t0 = Math.min(P[0].t, B.length ? B[0].t : P[0].t), t1 = Math.max(P[P.length - 1].t, B.length ? B[B.length - 1].t : P[P.length - 1].t);
   const X = t => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R);
@@ -786,7 +790,8 @@ function giftChart(d, id){
   const dayOf = t => new Date(t).toLocaleDateString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short"});
   let prevDay = dayOf(t0);
   svg += `<text x="${L}" y="${H - 6}">${esc(prevDay)}</text>`;
-  const ticks = []; for (let t = Math.ceil(t0 / 3600000) * 3600000; t <= t1; t += 3600000) if (X(t) - L > 70) ticks.push(t);
+  const IST_MS = 19800000, ticks = [];       // whole IST hours (a whole UTC hour is half past in India)
+  for (let t = Math.ceil((t0 + IST_MS) / 3600000) * 3600000 - IST_MS; t <= t1; t += 3600000) if (X(t) - L > 70) ticks.push(t);
   ticks.forEach(t => { const dt = new Date(t), hh = +dt.toLocaleString("en-GB", {timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false});
     const dd = dt.toLocaleDateString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short"});
     if (dd !== prevDay && hh < 3){ prevDay = dd; svg += `<line x1="${X(t)}" x2="${X(t)}" y1="${T}" y2="${P0 + QH}" stroke="var(--hair)" stroke-dasharray="3 3"/><text x="${X(t) + 3}" y="${H - 6}">${esc(dd)}</text>`; }
@@ -806,29 +811,37 @@ function giftChart(d, id){
     svg += poly(sg.map(b => `${X(b.t + 30000).toFixed(1)},${PY(pnl(b)).toFixed(1)}`), sg[0].open ? `stroke="var(--ink)" stroke-width="1.4"` : `stroke="var(--dim)" stroke-width="1.2" stroke-dasharray="2 3"`); });
   if (d.exit && d.exit.t) svg += `<line x1="${X(d.exit.t)}" x2="${X(d.exit.t)}" y1="${P0}" y2="${P0 + QH}" stroke="var(--dim)" stroke-dasharray="4 3"/><text x="${X(d.exit.t) + 3}" y="${P0 + 10}">exit ${rs(d.exit.net_pnl)}</text>`;
   svg += `<line class="gcur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--dim)" style="display:none"/></svg>`;
-  return `<div class="chartbox"><div class="legend"><span><b style="color:#3366cc">—</b> GIFT Nifty, points since its session's base (the session before's last price)</span><span><b style="color:var(--ink)">—</b> P&L while open</span><span>· · if held, after the exit</span>${num(g.at_buy) ? `<span style="margin-left:auto">GIFT at the buy ${n2(g.at_buy)}</span>` : ""}</div>${svg}<div class="readout gread"></div></div>`;
+  return `<div class="chartbox"><div class="legend"><span><b style="color:#3366cc">—</b> GIFT Nifty, points since its session's base (the session before's last price)</span><span><b style="color:var(--ink)">—</b> P&L while open</span><span>· · if held, after the exit</span>${num(g.at_buy) ? `<span style="margin-left:auto">GIFT at the buy ${n2(g.at_buy)}</span>` : ""}</div>${P[0].t - t0 > 3 * 3600000 ? `<p class="sub" style="margin:0 0 4px">GIFT Nifty recorded from ${esc(tm(new Date(P[0].t + 19800000).toISOString().slice(0, 16)))} only (the recording began on 20 Nov 2026, 13:45) - the line starts there.</p>` : ""}${svg}<div class="readout gread"></div></div>`;
 }
 function giftHover(evt, id){
   const d = CHARTS[id], sc = GIFT_SCALE[id], svg = evt.currentTarget; if (!d || !sc || !d.gift) return;
   const r = svg.getBoundingClientRect(), x = (evt.clientX - r.left) / r.width * sc.W;
-  const t = sc.t0 + (x - sc.L) / (sc.W - sc.L - sc.R) * (sc.t1 - sc.t0);
+  const t = Math.max(sc.t0, Math.min(sc.t1, sc.t0 + (x - sc.L) / (sc.W - sc.L - sc.R) * (sc.t1 - sc.t0)));
   const P = d.gift.points; let p = null; for (const q of P){ if (q.t <= t) p = q; else break; }
   let b = null; for (const q of d.bars || []){ if (q.t <= t) b = q; else break; }
   const out = svg.parentNode.querySelector(".gread"), when = new Date(t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
   const sinceBuy = p && num(d.gift.at_buy) ? p.p - d.gift.at_buy : null, v = b ? (b.open ? b.pnl : b.hold_pnl) : null;
   if (out) out.innerHTML = `${esc(when)}` + (p ? ` · GIFT <b>${n2(p.p)}</b> <b class="${cls(p.chg)}">${pts(p.chg)}</b> in session ${p.s}` + (num(sinceBuy) ? ` · <span class="${cls(sinceBuy)}">${pts(sinceBuy)}</span> since the buy` : "") : "")
     + (b ? ` · ${b.open ? "P&L" : "if held"} <b class="${cls(v)}">${rs(v)}</b> (option ${n2(b.c)})` : "");
-  const cur = svg.querySelector(".gcur"); if (cur){ cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.style.display = ""; }
+  const cx = sc.L + (t - sc.t0) / Math.max(1, sc.t1 - sc.t0) * (sc.W - sc.L - sc.R);
+  const cur = svg.querySelector(".gcur"); if (cur){ cur.setAttribute("x1", cx); cur.setAttribute("x2", cx); cur.style.display = ""; }
 }
 
 async function tick(){
   try{
     const d = await (await fetch("/api/state")).json();
     LAST = d;
+    if (HIST.open && HIST.data) (HIST.data.jobs || []).forEach(j => { if (j.position) loadChart(j.job_id); });
     drawHead(d); drawGift(d); drawOpen(d); drawCapital(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
   }catch(e){ document.getElementById("chips").innerHTML = `<span class="chip bad"><i></i>disconnected</span>`; }
 }
 tick(); setInterval(tick, 3000);
+// GIFT Nifty every second: the tile, and the price the next redraw puts at the end of a trade's GIFT line
+async function giftTick(){
+  if (document.hidden || !LAST) return;
+  try{ const g = await (await fetch("/api/gift")).json(); if (g && g.status){ LAST.gift_live = g; drawGift(LAST); } }catch(e){}
+}
+setInterval(giftTick, 1000);
 </script>
 """
 
@@ -989,6 +1002,9 @@ def make_handler(strategy, store, switch_mode, book=None, set_principal=None, ex
                     except ValueError:
                         out = {"error": f"not a date: {day!r}"}
                     self._send(json.dumps(out, default=str))
+                elif path == "/api/gift":
+                    rec = getattr(strategy, "gift_rec", None)
+                    self._send(json.dumps(dict(rec.live) if rec is not None else {}, default=str))
                 elif path == "/api/chart":
                     jid = (parse_qs(urlparse(self.path).query).get("job") or [""])[0]
                     self._send(json.dumps(strategy.chart(jid), default=str))

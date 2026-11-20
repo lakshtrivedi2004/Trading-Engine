@@ -3497,9 +3497,9 @@ def gq(day):
 
 
 gst = MongoStore(client=_Client(), db_name="g")
-glog, gclock = [], {"t": 0.0}
+glog, gclock, GDIR = [], {"t": 0.0}, tempfile.mkdtemp()
 grec = GR.GiftRecorder(gst, gq, cfg=lambda k, d=None: {"gift_record_sec": 60}.get(k, d), now=lambda: CLOCK["t"],
-                       log=glog.append, clock=lambda: gclock["t"])
+                       log=glog.append, clock=lambda: gclock["t"], folder=GDIR)
 
 
 def gat(px, *a, step=61):
@@ -3532,13 +3532,21 @@ check("02:46: the session over - saved as closed, said in the log; live: closed,
       gst.gift_session("2026-10-22-S2")["closed"] is True and any("session 2" in x and "ended" in x for x in glog)
       and grec.live["status"] == "closed" and grec.live["next_session"] == 1
       and grec.live["next_open"].startswith("2026-10-23T06:30"), str(grec.live))
+g1 = gst.gift_session("2026-10-22-S2")
+check("...every price read is kept: gzipped into the session's document (3 - 16:36, 16:37:30, 02:44:10), the "
+      "local file removed",
+      g1.get("gz") and GR.unzip(g1["gz"]) == [(int(IS(2026, 10, 22, 16, 36).timestamp() * 1000), 22600.0),
+                                              (int(IS(2026, 10, 22, 16, 37, 30).timestamp() * 1000), 22640.0),
+                                              (int(IS(2026, 10, 23, 2, 44, 10).timestamp() * 1000), 22590.0)]
+      and g1["ticks"] == 3 and not os.path.exists(os.path.join(GDIR, "2026-10-22-S2.csv")),
+      str(GR.unzip(g1["gz"]) if g1.get("gz") else None))
 gat(22700.0, 2026, 10, 23, 6, 31)
 g2 = gst.gift_session("2026-10-23-S1")
 check("Fri 06:31: session 1 from the evening's last price 22,590 - 22,700 = +110",
       g2["base"] == 22590.0 and "session 2" in g2["base_from"] and g2["change"] == 110.0
       and GQ["days"][-1] == date(2026, 10, 23), str({k: g2.get(k) for k in ("base", "base_from", "change")}))
 grec2 = GR.GiftRecorder(gst, gq, cfg=lambda k, d=None: {"gift_record_sec": 60}.get(k, d), now=lambda: CLOCK["t"],
-                        log=glog.append, clock=lambda: gclock["t"])
+                        log=glog.append, clock=lambda: gclock["t"], folder=GDIR)
 at(2026, 10, 23, 9, 0)
 GQ["price"] = 22650.0
 grec2.pass_once()
@@ -3557,6 +3565,7 @@ gclock["t"] += 61
 grec2.pass_once()
 at(2026, 10, 23, 15, 41)
 grec2.pass_once()
+grec = grec2                                       # the first recorder's process is gone
 GQ["time"] = "2026-10-23T15:39:00+05:30"           # the weekend: NSE IX shows Friday's last quote
 gat(22680.0, 2026, 10, 24, 6, 40)
 check("Sat 06:40: the quote is Friday's - no trading, nothing recorded", gst.gift_session("2026-10-24-S1") is None
@@ -3602,6 +3611,128 @@ check("the trade's chart: GIFT from the buy (Thu 15:18) to the recording's end (
 check("...GIFT at the buy: no minute before it - its first price", gp["at_buy"] == 22600.0)
 check("the page draws it: the live tile, the chart, the day's table",
       all(k in web.PAGE for k in ('id="giftlive"', "function giftChart", "function giftDay", "function drawGift")))
+
+lv0 = dict(s28.gift_rec.live)
+s28.gift_rec.live = {"status": "recording", "session_id": "2026-10-23-S1", "session": 1,
+                     "at": "2026-10-23T15:39:30+05:30", "last": 22685.0, "change": 95.0}
+gp = s28.chart(j28["job_id"]).get("gift") or {}
+check("...the session on now: its line ends at the price read seconds ago (15:39:30, 22,685 = +95), not at the "
+      "last minute saved", gp["points"][-1] == {"t": int(IS(2026, 10, 23, 15, 39, 30).timestamp() * 1000),
+                                                 "p": 22685.0, "chg": 95.0, "s": 1}, str(gp["points"][-2:]))
+s28.gift_rec.live = lv0
+
+# every 3 s: each new price kept, MongoDB written once a minute, a failure backs off
+gst3, GDIR3, g3clock, g3log = MongoStore(client=_Client(), db_name="g3"), tempfile.mkdtemp(), {"t": 1000.0}, []
+writes = []
+_gp = gst3.gift_point
+gst3.gift_point = lambda sid, set_, point=None: (writes.append(point), _gp(sid, set_, point))[1]
+grec3 = GR.GiftRecorder(gst3, gq, cfg=lambda k, d=None: {"gift_record_sec": 3, "gift_save_sec": 60}.get(k, d),
+                        now=lambda: CLOCK["t"], log=g3log.append, clock=lambda: g3clock["t"], folder=GDIR3)
+GQ.update(time=None, fail=0, expiry="27-Oct-2026", prev_close=25000.0)
+
+
+def g3(px, sec, step=3, minute=0):
+    at(2026, 10, 27, 10, minute, sec)
+    GQ["price"] = px
+    g3clock["t"] += step
+    grec3.pass_once()
+
+
+for k, px in enumerate((25010.0, 25012.0, 25011.5, 25015.0, 25014.0)):
+    g3(px, 3 * k)
+check("every 3 s (10:00:00-10:00:12): 5 prices read, 5 kept in the local file; live at the newest (25,014, +14)",
+      len(open(os.path.join(GDIR3, "2026-10-27-S1.csv")).read().splitlines()) == 5
+      and grec3.live["last"] == 25014.0 and grec3.live["change"] == 14.0 and grec3.live["ticks"] == 5,
+      str(grec3.live)[:200])
+check("...MongoDB written once (the minute's point), not every 3 s", len(writes) == 1 and writes[0][1] == 25010.0,
+      str(writes))
+g3(25014.0, 14, step=1)
+check("1 s later: not read (every 3 s)", grec3.live["ticks"] == 5)
+GQ["time"] = "2026-10-27T10:00:12+05:30"
+g3(25014.0, 15)
+check("the same quote again (same time, same price): not kept twice", grec3.live["ticks"] == 5)
+GQ["time"] = None
+g3(25020.0, 2, minute=1)
+check("10:01: a new minute - its point written", len(writes) == 2 and writes[-1][1] == 25020.0
+      and grec3.live["ticks"] == 6)
+GQ["fail"] = 2
+g3(25020.0, 5, minute=1)
+check("NSE IX fails: the next try in 6 s", grec3.live["status"] == "error" and grec3.wait == 6.0)
+g3(25020.0, 8, minute=1)
+check("...3 s later: not yet", GQ["fail"] == 1)
+g3(25020.0, 11, minute=1)
+check("...6 s: tried, failed again - next in 12 s", grec3.wait == 12.0 and GQ["fail"] == 0)
+g3(25025.0, 23, step=12, minute=1)
+check("...12 s: read - back to every 3 s, said in the log", grec3.wait is None and grec3.live["last"] == 25025.0
+      and any("read again after 2 failure" in x for x in g3log))
+grec4 = GR.GiftRecorder(gst3, gq, cfg=lambda k, d=None: {"gift_record_sec": 3}.get(k, d), now=lambda: CLOCK["t"],
+                        log=g3log.append, clock=lambda: g3clock["t"], folder=GDIR3)
+at(2026, 10, 27, 16, 0)
+grec4.pass_once()
+d3 = gst3.gift_session("2026-10-27-S1")
+check("a stop in the session, the desk back after it: the file left behind gzipped into the session (7 prices), "
+      "closed, the file removed",
+      d3.get("gz") and len(GR.unzip(d3["gz"])) == 7 and d3["closed"] is True and d3["ticks"] == 7
+      and not os.path.exists(os.path.join(GDIR3, "2026-10-27-S1.csv")), str(d3.get("ticks")))
+from btst import gift as GF                                       # noqa: E402
+
+fcalls, FDOWN = [], {"n": 0}
+
+
+class _FResp:
+    def __init__(self, body):
+        self.body = body
+
+    def read(self):
+        return self.body.encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class _FOp:
+    def open(self, req, timeout=None):
+        u = req.full_url.replace(GF.BASE, "")
+        fcalls.append(u)
+        if u == "/":
+            return _FResp("<html>")
+        if u.startswith("/api/getquotes/expiry"):
+            return _FResp(_json.dumps({"data": ["27-Oct-2026", "24-Nov-2026"]}))
+        if FDOWN["n"]:
+            FDOWN["n"] -= 1
+            raise OSError("reset")
+        return _FResp(_json.dumps({"data": [{"LASTPRICE": "25,010.5", "PREVCLOSE": "25000",
+                                             "TIMESTMP": "27-Oct-2026 10:00:03"}]}))
+
+
+_bo = GF.urllib.request.build_opener
+GF.urllib.request.build_opener = lambda *a: _FOp()
+try:
+    feed = GF.Feed(clock=lambda: 0.0)
+    fq = [feed(date(2026, 10, 27)), feed(date(2026, 10, 27)), feed(date(2026, 10, 28))]
+    n_warm = len(fcalls)
+    FDOWN["n"] = 1
+    try:
+        feed(date(2026, 10, 27))
+        fail_raised = False
+    except OSError:
+        fail_raised = True
+    feed(date(2026, 10, 27))
+finally:
+    GF.urllib.request.build_opener = _bo
+check("GIFT read every second (config/btst.json), the tile from /api/gift every second",
+      _shipped["gift_record_sec"] == 1 and '"/api/gift"' in open(web.__file__).read()
+      and "setInterval(giftTick, 1000)" in web.PAGE)
+check("the feed: the site and the expiry list once, then one request a read (3 reads = 5 requests); 25,010.50 at "
+      "10:00:03, the near month (24 Nov from 28 Oct)",
+      n_warm == 5 and fcalls[0] == "/" and fcalls[1].startswith("/api/getquotes/expiry")
+      and fq[0]["price"] == 25010.5 and fq[0]["time"] == "2026-10-27T10:00:03+05:30"
+      and fq[0]["expiry"] == "27-Oct-2026" and fq[2]["expiry"] == "24-Nov-2026", str(fcalls))
+check("...a failed read raises, and the next one starts afresh (the site's cookies again)",
+      fail_raised and fcalls[-3] == "/" and fcalls[-2].startswith("/api/getquotes/expiry"), str(fcalls[-4:]))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

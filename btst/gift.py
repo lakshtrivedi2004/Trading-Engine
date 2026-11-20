@@ -51,6 +51,48 @@ def fetch(today, timeout=20):
         raise ValueError(f"no GIFT Nifty expiry on or after {today} in {expiries}")
     q = json.loads(get("/api/getquotes?symbol=NIFTY&instrumenttype=Ind&expiry=" + near
                        + "&optiontype=-&strikeprice=-&inst=" + urllib.parse.quote("Index Futures")))
+    return _quote(q, near)
+
+
+class Feed:
+    """GIFT Nifty read often (btst/giftrec.py, every few seconds): one opener
+    kept with its cookies and the expiry list kept for expiry_ttl seconds, so
+    a read is one request; any failure starts afresh on the next read."""
+
+    def __init__(self, timeout=10, expiry_ttl=1800, clock=None):
+        import time as _time
+        self.timeout, self.expiry_ttl = timeout, expiry_ttl
+        self.clock = clock or _time.time
+        self.op, self.expiries, self.expiries_at = None, None, 0.0
+
+    def _get(self, path):
+        head = {"User-Agent": UA, "Accept": "application/json,*/*", "Referer": BASE + "/"}
+        with self.op.open(urllib.request.Request(BASE + path, headers=head), timeout=self.timeout) as r:
+            return r.read().decode("utf-8")
+
+    def __call__(self, today):
+        try:
+            if self.op is None:
+                self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                self._get("/")                          # the site's cookies first
+                self.expiries = None
+            if self.expiries is None or self.clock() - self.expiries_at > self.expiry_ttl:
+                self.expiries = json.loads(self._get("/api/getquotes/expiry?symbol=NIFTY&inst=Ind")).get("data") or []
+                self.expiries_at = self.clock()
+            days = sorted((datetime.strptime(e, "%d-%b-%Y").date(), e) for e in self.expiries)
+            near = next((e for d, e in days if d >= today), None)
+            if not near:
+                self.expiries = None
+                raise ValueError(f"no GIFT Nifty expiry on or after {today} in {self.expiries}")
+            q = json.loads(self._get("/api/getquotes?symbol=NIFTY&instrumenttype=Ind&expiry=" + near
+                                     + "&optiontype=-&strikeprice=-&inst=" + urllib.parse.quote("Index Futures")))
+            return _quote(q, near)
+        except Exception:
+            self.op = None                              # cookies, expiries: all afresh next time
+            raise
+
+
+def _quote(q, near):
     rows = q.get("data") or []
     if not rows:
         raise ValueError(f"no GIFT Nifty quote for {near}")
