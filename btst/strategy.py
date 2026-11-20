@@ -14,25 +14,27 @@ no trade (the day is still recorded, btst_days).
 
 Day D+1 (the next trading day), tracked live from the open (owner, 26 Oct
 2026), against the first buy price; at most 100% of the first amount added:
-    down less than 25%: the target stays
-    first down 25%: add 50%; target cut 25%, then 1 point lower per point
-        (trail_step_points) below that buy, never under the new average + 10%
+    down less than 30%: the target stays
+    first down 30% (topup_first_loss_pct; owner, 20 Nov 2026 - was 25%): add
+        50%; the target is not cut (target_cut_pct 0; was 25%) - from where
+        it is, 1 point lower per point (trail_step_points) below that buy,
+        never under the new average + 10%
     then down 50%: add the other 50%; target = the new average + 10%
     already down 50% when first seen (a gap down): add 100%; target =
         the new average + 10%
 Each add of x (that % of the first amount) buys the most lots whose cost is
 within x + topup_tolerance_pct (10%), at the price then - at least 1 lot
-(owner, 6 Nov 2026; was the count nearest x): Rs 30,000 bought at 100, at 75
+(owner, 6 Nov 2026; was the count nearest x): Rs 30,000 bought at 100, at 70
 x = Rs 15,000, so the most lots within Rs 16,500.
-Opening at -25% or better (in profit, or down 25% at most - owner, 6 Nov
-2026): the other 50% goes in at the open as a resting LIMIT BUY at
+Opening at -30% or better (in profit, or down 30% at most - owner, 6 Nov
+2026; -25% until 20 Nov): the other 50% goes in at the open as a resting LIMIT BUY at
 limit_topup_loss_pct (53%) below the first buy (100 -> 47, the most lots within
-Rs 16,500 there) instead of the -50% buy; the -25% buy is as above (target cut
-25%, then 1 point lower per point). Filled: the target is not reset - it keeps
+Rs 16,500 there) instead of the -50% buy; the -30% buy is as above (no cut,
+1 point lower per point). Filled: the target is not reset - it keeps
 trailing 1 point per point, its floor now the new average + 10%. Cancelled at
 any exit and when the target fills - a cancel not confirmed is tried again
 every limit_cancel_retry_sec (10) until the order is final. Refused by the
-exchange: the -50% buy stands. Opening below -25%: no limit order, the rules
+exchange: the -50% buy stands. Opening below -30%: no limit order, the rules
 above.
 The option's expiry day as D+1 (owner, 14 Nov 2026 - every index; any other
 day the rules above): two LIMIT BUYs at the open - 50% at
@@ -60,7 +62,11 @@ at amo_at (17:00) on day D as an AMO for the next open, so an opening spike
 fills it; it stays through the decision (averaging down cancels it first -
 never two sells at once), and an AMO the exchange rejects at the open is
 replaced by a normal target. Paper places the target again at the open. At
-exit_at (15:14) whatever is still open is cancelled and sold at market. Every step - the message, the signal, each order, the decision, the
+exit_at (15:30 - owner, 20 Nov 2026; was 15:14) whatever is still open is
+cancelled and sold at market. A signal read in the scan window (15:15-15:45)
+while the trade is still open on its exit day: the trade is sold at market at
+once (exit reason new_signal; tried again every pass until it is out) and the
+new signal is then entered (owner, 20 Nov 2026). Every step - the message, the signal, each order, the decision, the
 close with its metrics - is written to MongoDB (services/mongo.py) under the
 job's id, and logged ("LEVEL area | text", btst/logbook.py) with the reason
 for every trade not taken. No stop-loss, by the owner's design.
@@ -100,8 +106,8 @@ LIMIT_KEYS = ("limit_topup", "limit_topup2")
 GIFT_MOVES = ("raise", "lower")            # a morning GIFT decision that changes the target
 
 # What the page shows of the rules - with the values the code falls back to.
-RULE_DEFAULTS = {"exit_at": "15:14", "topup_first_loss_pct": 25.0, "topup_first_pct": 50.0,
-                 "topup_second_loss_pct": 50.0, "target_cut_pct": 25.0, "floor_target_pct": 10.0,
+RULE_DEFAULTS = {"exit_at": "15:30", "exit_for_new_signal": True, "topup_first_loss_pct": 30.0, "topup_first_pct": 50.0,
+                 "topup_second_loss_pct": 50.0, "target_cut_pct": 0.0, "floor_target_pct": 10.0,
                  "trail_step_points": 1.0, "amo_at": "17:00", "market_open": "09:15", "market_close": "15:45",
                  "session_refresh_at": "09:14", "trade_amount": 0, "amount_tolerance_pct": 5.0,
                  "principal": 0, "trade_pct": 10.0, "topup_tolerance_pct": 10.0, "limit_topup_loss_pct": 0.0,
@@ -153,6 +159,8 @@ class BtstStrategy:
         self.last_leftover_check = 0.0
         self.touch_said = None
         self.managing = False
+        self.pending_entry = None           # the job sold for a new signal: that signal goes in once it is out
+        self.gift_rec = None                # GIFT Nifty, session by session (btst/giftrec.py), on its own thread
         self.last_trail_modify = 0.0
         self.last_offhours_price = 0.0     # 0: the first pass after a start fetches at once
         self.gift_fetch = G.fetch           # GIFT Nifty (btst/gift.py); tests replace it
@@ -312,8 +320,67 @@ class BtstStrategy:
             return
         j = self.store.open_job()
         if j:
+            if self._sells_for_signal(j, today):
+                self._exit_for_signal(j, res, m, what)
+                return
             self._say(f"signal {what} ignored - {j['job_id']} is still open", area="signal", level="WARN")
             return
+        self._take_signal(sig, res, m, what)
+
+    def _sells_for_signal(self, j, today):
+        """A trade open on its exit day (entered before today), the market open:
+        sold for the new signal (exit_for_new_signal - owner, 20 Nov 2026)."""
+        return (bool(self.c("exit_for_new_signal", True)) and j.get("status") == "open"
+                and str(j.get("trade_date") or "") < today and self._market_open(self.now())
+                and _secs(self.now()) < _hm(self.c("market_close", "15:45")))
+
+    def _exit_for_signal(self, j, res, m, what):
+        """The open trade sold at market now, the new signal kept on it
+        (exit_requested) - entered as soon as the trade is out (_pending_entry),
+        this pass if the sell fills. Not out: the sell is tried again on every
+        pass (_manage)."""
+        jid = j["job_id"]
+        posted = self._ist(m["date"])
+        req = {"at": self._ts(), "reason": "new_signal", "what": what, "signal": res,
+               "message": {"id": m["id"], "date": posted.isoformat(timespec="seconds"), "text": m["text"]}}
+        self.store.update_job(jid, set_={"exit_requested": req})
+        self.pending_entry = jid
+        self._say(f"signal {what} (message {m['id']}, {posted:%H:%M:%S}) while {jid} "
+                  f"({j['contract']['symbol']}) waits for its {self.c('exit_at', '15:30')} exit - selling it at "
+                  f"market now, then the new trade", jid, True, "signal", "TRADE")
+        self._exit_market(self.store.get_job(jid) or j, "new_signal")
+        self._pending_entry()
+
+    def _pending_entry(self):
+        """The signal a trade was sold for: entered once that trade is closed."""
+        jid = self.pending_entry
+        if not jid:
+            return
+        old = self.store.get_job(jid)
+        if old and old.get("status") == "open":
+            return                              # its sell is tried again on the next pass
+        self.pending_entry = None
+        req = (old or {}).get("exit_requested") or {}
+        if not req or req.get("entered"):
+            return
+        self.store.update_job(jid, set_={"exit_requested": dict(req, entered=self._ts())})
+        res, mm = req["signal"], req["message"]
+        m = {"id": mm["id"], "date": datetime.fromisoformat(mm["date"]), "text": mm["text"]}
+        today = self.now().date().isoformat()
+        if mm["date"][:10] != today:            # the sell went through only on a later day: that signal is old
+            self._say(f"{jid} was sold for the signal {req['what']} of {mm['date'][:10]} - not entered today",
+                      jid, True, "signal", "WARN")
+            return
+        done = self.store.job_for_trade_date(today)
+        if done:
+            self._say(f"signal {req['what']} not entered - today's BTST is already {done['job_id']}",
+                      area="signal", level="WARN")
+            return
+        self._log("entry", f"{jid} is out ({(old.get('result') or {}).get('exit_reason')}) - entering the signal "
+                           f"{req['what']} it was sold for")
+        self._take_signal(res["signal"], res, m, req["what"])
+
+    def _take_signal(self, sig, res, m, what):
         close = self.c("market_close", "15:45")
         if _secs(self.now()) >= _hm(close):
             self._after_close_signal(sig, res, m, what, close)
@@ -496,8 +563,10 @@ class BtstStrategy:
             if st and st["status"] == "complete":
                 self._close(job, "target", st["avg"] or job["target_price"], None)
                 return
+            exiting = bool((job.get("exit_requested") or {}) and not job["exit_requested"].get("entered")) \
+                or _secs(now) >= _hm(self.c("exit_at", "15:30"))   # our own exit cancelled it: no new target
             if (st and to.get("kind") == "amo_target" and st["status"] in ("rejected", "cancelled")
-                    and now.date().isoformat() > job["trade_date"]):
+                    and now.date().isoformat() > job["trade_date"] and not exiting):
                 self._say(f"the AMO target {to.get('order_id')} was {st['status']} at the open"
                           + (f" ({st['text']})" if st.get("text") else "")
                           + f" - placing a normal target at {tp:.2f}", jid, True, "order", "WARN")
@@ -524,8 +593,13 @@ class BtstStrategy:
         if not job.get("decision"):
             self._session_start(job, ltp)       # the open: the target back in, the rules armed
             return
-        if _secs(now) >= _hm(self.c("exit_at", "15:14")):
-            self._log("exit", f"{self.c('exit_at', '15:14')} reached - target not hit, closing at market", "TRADE")
+        req = job.get("exit_requested")
+        if req and not req.get("entered"):
+            self._log("exit", f"selling at market for the new signal {req.get('what')} (read {req.get('at')})", "TRADE")
+            self._exit_market(job, "new_signal")
+            return
+        if _secs(now) >= _hm(self.c("exit_at", "15:30")):
+            self._log("exit", f"{self.c('exit_at', '15:30')} reached - target not hit, closing at market", "TRADE")
             self._exit_market(job, "time_exit")
             return
         if self._limit_topup_check(self.store.get_job(jid) or job):
@@ -591,10 +665,10 @@ class BtstStrategy:
                     "scenario": "hold"}
         self.store.update_job(jid, set_={"decision": decision})
         job["decision"] = decision
-        first, second = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
+        first, second = float(self.c("topup_first_loss_pct", 30.0)), float(self.c("topup_second_loss_pct", 50.0))
         lim = float(self.c("limit_topup_loss_pct", 0) or 0)
         expiry = self._expiry_day(job)
-        limit = lim > 0 and pnl_pct >= -first - 1e-9 and not job.get("limit_topup") and not expiry  # down 25% at most
+        limit = lim > 0 and pnl_pct >= -first - 1e-9 and not job.get("limit_topup") and not expiry  # down 30% at most
         fl = self.c("floor_target_pct", 10.0)
         if expiry:
             e1, e2 = self._topup_levels(job)
@@ -604,17 +678,18 @@ class BtstStrategy:
                       f"({base * (1 - e1 / 100):.2f}), the other {100 - float(self.c('topup_first_pct', 50.0)):g}% at "
                       f"-{e2:g}% ({base * (1 - e2 / 100):.2f}); after each fill the target = the new average + {ep:g}% "
                       f"(no cut, no trailing); the target filled first, every limit buy left is cancelled; out at "
-                      f"{self.c('exit_at', '15:14')} if not hit", jid, True, "decision")
+                      f"{self.c('exit_at', '15:30')} if not hit", jid, True, "decision")
         else:
             self._say(f"session open: {ltp:.2f} vs the buy {base:.2f} = {pnl_pct:+.1f}%. Watching live: at -{first:g}% "
-                      f"({base * (1 - first / 100):.2f}) top up {self.c('topup_first_pct', 50.0):g}% and cut the target "
-                      f"{self.c('target_cut_pct', 25.0):g}%, then 1 point lower per point; "
+                      f"({base * (1 - first / 100):.2f}) top up {self.c('topup_first_pct', 50.0):g}% and "
+                      + (f"cut the target {self._cut_pct():g}%, then " if self._cut_pct() else "the target, not cut, ")
+                      + "1 point lower per point; "
                       + (f"the other {100 - float(self.c('topup_first_pct', 50.0)):g}% as a LIMIT BUY at -{lim:g}% "
                          f"({base * (1 - lim / 100):.2f}), placed now, instead of the -{second:g}% buy - the target "
                          f"trailing on to the average + {fl:g}%"
                          if limit else f"at -{second:g}% ({base * (1 - second / 100):.2f}) top up to 100%, target = "
                                        f"average + {fl:g}%")
-                      + f"; out at {self.c('exit_at', '15:14')} if not hit", jid, True, "decision")
+                      + f"; out at {self.c('exit_at', '15:30')} if not hit", jid, True, "decision")
         st = self._target_state(job)
         if st and st["status"] == "complete":
             self._close(job, "target", st["avg"] or job["target_price"], None)
@@ -646,8 +721,9 @@ class BtstStrategy:
         price; at most 100% of the first amount added in all:
           already -50% or worse, nothing added yet -> add 100%; target =
               the new average + 10%
-          first reaches -25%                        -> add 50%; target cut by
-              25%, then 1 point lower per point below that buy, never under
+          first reaches -30% (topup_first_loss_pct)  -> add 50%; the target
+              not cut (target_cut_pct 0 - owner, 20 Nov 2026; was 25% at
+              -25%), 1 point lower per point below that buy, never under
               the new average + 10% (there trailing stops)
           after that, reaches -50%                  -> add the other 50%;
               target = the new average + 10% (trailing ends)
@@ -726,12 +802,17 @@ class BtstStrategy:
                 job = self.store.get_job(job["job_id"]) or job
 
     def _topup_levels(self, job):
-        """(first, second) loss % that top up: -25% / -50%, on the option's
+        """(first, second) loss % that top up: -30% / -50%, on the option's
         expiry day expiry_topup_first_loss_pct (60) / expiry_topup_second_loss_pct (87)."""
         if self._expiry_day(job):
             return (float(self.c("expiry_topup_first_loss_pct", 60.0)),
                     float(self.c("expiry_topup_second_loss_pct", 87.0)))
-        return float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
+        return float(self.c("topup_first_loss_pct", 30.0)), float(self.c("topup_second_loss_pct", 50.0))
+
+    def _cut_pct(self):
+        """The cut of the target at the first top-up: target_cut_pct (0 - owner,
+        20 Nov 2026: trailing only, from the target as it is; was 25%)."""
+        return float(self.c("target_cut_pct", 0.0) or 0.0)
 
     def _target_pct(self, job):
         """The target over the average after a top-up: floor_target_pct (10%),
@@ -855,7 +936,7 @@ class BtstStrategy:
         floor = tick_round(avg * (1 + floor_pct / 100.0), c["tick"], up=True)
         done = float(job.get("topped_pct") or 0.0) + pct
         if step == "first" and not expiry:
-            target = max(floor, tick_round(float(job["target_price"]) * (1 - float(self.c("target_cut_pct", 25.0)) / 100.0),
+            target = max(floor, tick_round(float(job["target_price"]) * (1 - self._cut_pct() / 100.0),
                                            c["tick"], up=True))
         else:
             target = floor
@@ -887,14 +968,15 @@ class BtstStrategy:
         self.store.update_job(jid, set_=upd)
         self._say(f"{-loss:.1f}% below the buy: topped up {pct:g}% ({q2} @ {p2:.2f}, Rs {p2 * q2:,.0f}) - now "
                   f"{q} @ {avg:.2f}; target {target:.2f}"
-                  + (f" (cut {self.c('target_cut_pct', 25.0):g}%; then 1 point lower per point below {p2:.2f}, "
-                     f"never under {floor:.2f})" if step == "first" and target > floor
+                  + ((f" (cut {self._cut_pct():g}%; then" if self._cut_pct() else " (not cut;")
+                     + f" 1 point lower per point below {p2:.2f}, never under {floor:.2f})"
+                     if step == "first" and target > floor
                      else f" (= average + {floor_pct:g}%" + (", the option's expiry day)" if expiry else ")")),
                   jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, f"target_after_topup_{step}")
         return True
 
-    # ── the limit top-up (opened above -25%) ───────────────────────────────
+    # ── the limit top-up (opened above -30%) ───────────────────────────────
     def _place_limit_topup(self, job, key="limit_topup", lim=None, pct=None):
         """The other 50% (x) as a resting LIMIT BUY at limit_topup_loss_pct (53%)
         below the first buy: the most lots within x + topup_tolerance_pct
@@ -1027,8 +1109,8 @@ class BtstStrategy:
                   f"{p['qty']} @ {p['avg_price']:.2f}; target {target:.2f} for all {p['qty']}, "
                   + (f"= the average + {self._target_pct(job):g}% (the option's expiry day)" if self._expiry_day(job)
                      else f"trailing 1 point per point, floor {upd['topups'][-1]['floor']:.2f} (= the average + "
-                     f"{self.c('floor_target_pct', 10.0):g}%)" if job.get("trail") else "the -25% top-up and its "
-                     "trailing to come"), jid, True, "decision", "TRADE")
+                     f"{self.c('floor_target_pct', 10.0):g}%)" if job.get("trail") else
+                     f"the -{self._topup_levels(job)[0]:g}% top-up and its trailing to come"), jid, True, "decision", "TRADE")
         self._place_target(self.store.get_job(jid), target, "target_after_limit_topup")
         return True
 
@@ -1285,7 +1367,7 @@ class BtstStrategy:
                           status=o.get("status"), why=why)
             self._say(f"AMO target SELL {c['symbol']} x{q} @ {tp:.2f} placed for the next open "
                       f"({o.get('order_id')}, {o.get('status')}); cancelled and sold at market at "
-                      f"{self.c('exit_at', '15:14')} if not hit", jid, True, "order", "TRADE")
+                      f"{self.c('exit_at', '15:30')} if not hit", jid, True, "order", "TRADE")
         return o
 
     def _after_close(self, job):
@@ -1500,7 +1582,51 @@ class BtstStrategy:
         return {"date": day, "phase": phase, "trading_day": SP.trading_day(self.cfg, d),
                 "jobs": jobs, "rows": [r for r in rows if r.get("job_id")],
                 "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.messages_on(day)],
-                "no_signal": self.store.get_day(day)}
+                "no_signal": self.store.get_day(day), "gift": self._gift_day(day)}
+
+    def _gift_day(self, day):
+        """GIFT Nifty's sessions that started on `day` (btst/giftrec.py), without their minutes."""
+        try:
+            out = []
+            for g in self.store.gift_sessions_on(day):
+                g = {k: v for k, v in g.items() if k not in ("points", "last_minute")}
+                out.append(g)
+            return out
+        except Exception as e:
+            self._log("gift", f"GIFT Nifty sessions of {day} unreadable: {e!r}", "WARN")
+            return []
+
+    def _gift_series(self, job, bars):
+        """GIFT Nifty a minute at a time over the trade's chart (the buy to the
+        recording's end): each price with its change since its session's base
+        (the session before's last price); the sessions; GIFT at the buy."""
+        p = job.get("position") or {}
+        a = p.get("entry_at") or (job.get("created_at"))
+        rec = job.get("recording") or {}
+        b = rec.get("until") or (job.get("result") or {}).get("closed_at") or self._ts()
+        if not a:
+            return None
+        try:
+            docs = self.store.gift_between(str(a)[:19], str(b)[:19] + "+05:30")
+        except Exception as e:
+            self._log("gift", f"GIFT Nifty for the chart unreadable: {e!r}", "WARN")
+            return None
+        a_ms = int(datetime.fromisoformat(str(a)).timestamp() * 1000)
+        b_ms = int(datetime.fromisoformat(str(b)).timestamp() * 1000)
+        pts, sessions, at_buy = [], [], None
+        for d in docs:
+            base = d.get("base")
+            sessions.append({k: d.get(k) for k in ("session_id", "session", "start", "end", "base", "base_from",
+                                                     "first", "high", "low", "last", "change", "expiry")})
+            for t, px in d.get("points") or []:
+                if t <= a_ms:
+                    at_buy = px
+                if a_ms - 60000 <= t <= b_ms and base:
+                    pts.append({"t": t, "p": px, "chg": round(px - base, 2), "s": d.get("session")})
+        pts.sort(key=lambda x: x["t"])
+        if at_buy is None and pts:
+            at_buy = pts[0]["p"]
+        return {"points": pts, "sessions": sessions, "at_buy": at_buy}
 
     def chart(self, job_id):
         """The page's chart for a trade: from MongoDB once saved, from the local file while recording."""
@@ -1517,9 +1643,10 @@ class BtstStrategy:
             bars, source, ticks = [], "none", None
         out = CH.build(_no_channel(job), bars, ticks)
         out["source"] = source
+        out["gift"] = self._gift_series(job, bars)
         base = float((job.get("position") or {}).get("entry_price") or 0)
         if base:                                # the top-up levels, against the first buy price
-            l1, l2 = float(self.c("topup_first_loss_pct", 25.0)), float(self.c("topup_second_loss_pct", 50.0))
+            l1, l2 = float(self.c("topup_first_loss_pct", 30.0)), float(self.c("topup_second_loss_pct", 50.0))
             out["levels"] = [{"label": f"-{l1:g}% top-up", "price": round(base * (1 - l1 / 100), 2)},
                              {"label": f"-{l2:g}% top-up", "price": round(base * (1 - l2 / 100), 2)}]
             out["entry_price"] = base
@@ -1962,8 +2089,19 @@ class BtstStrategy:
                                       datetime.fromisoformat(j["trade_date"]).date())
             if hasattr(self.broker, "adopt"):
                 self.broker.adopt(j)            # paper: the position and target lived in the old process
+            if (j.get("exit_requested") or {}) and not j["exit_requested"].get("entered"):
+                self.pending_entry = j["job_id"]
+                self._say(f"{j['job_id']} was being sold for the signal {j['exit_requested'].get('what')} - "
+                          f"selling it again, then that signal", j["job_id"], True, "resume", "WARN")
         else:
             self._log("resume", "no open trade to resume")
+        today = self.now().date().isoformat()
+        for x in self.store.recent_jobs(5):     # sold for a signal, stopped before it went in
+            req = x.get("exit_requested") or {}
+            if (x.get("status") != "open" and req and not req.get("entered")
+                    and str((x.get("result") or {}).get("closed_at") or "")[:10] == today):
+                self.pending_entry = x["job_id"]
+                self._log("resume", f"{x['job_id']} was sold for the signal {req.get('what')} - entering it now")
 
     def _record_quiet_day(self):
         """After the scan window of a trading day with no job at all: no signal,
@@ -2007,6 +2145,7 @@ class BtstStrategy:
             else:
                 self.status_note = (f"waiting for a signal ({self.c('scan_start', '15:15')} - "
                                     f"{self.c('scan_end', '15:30')})")
+            self._pending_entry()
             self._limit_leftovers()
             self._recording_pass()
             if self.prices is not None:
@@ -2031,6 +2170,7 @@ class BtstStrategy:
                 "special_sessions": SP.upcoming(self.cfg, self.now().date()),
                 "note": self.status_note,
                 "window": f"{self.c('scan_start', '15:15')}-{self.c('scan_end', '15:30')}",
+                "gift_live": dict(self.gift_rec.live) if self.gift_rec is not None else None,
                 "open_job": _no_channel(j), "jobs": [_no_channel(x) for x in self.store.recent_jobs(20)],
                 "messages": [{k: v for k, v in m.items() if k != "channel"} for m in self.store.recent_messages(20)],
                 "price": self.prices.state() if self.prices is not None else None,

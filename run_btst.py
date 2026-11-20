@@ -252,6 +252,13 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
+    if cfg.get("gift_record", True):        # GIFT Nifty session by session, on its own thread (btst/giftrec.py)
+        from btst import gift as GIFT, giftrec
+        strategy.gift_rec = giftrec.GiftRecorder(store, GIFT.fetch, cfg=strategy.c, log=BOOK.log)
+        giftrec.start(strategy.gift_rec, stop)
+        log(f"GIFT Nifty recorder on: sessions {cfg.get('gift_sessions') or giftrec.SESSIONS}, every "
+            f"{cfg.get('gift_record_sec', 60)} s, saved in MongoDB (btst_gift)", area="gift")
+
     def start_reader():
         log(f"starting the Telegram reader on the signal channel (last {cfg.get('read_last_messages', 50)} "
             f"messages, poll {cfg.get('channel_poll_sec', 5)} s)", area="channel")

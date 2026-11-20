@@ -109,6 +109,8 @@ PAGE = r"""<!DOCTYPE html>
   .chartbox .legend{font-size:11px;color:var(--dim);display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px}
   .chartbox .readout{font-size:12px;min-height:18px;color:var(--ink)}
   .chartbox text{font:10px -apple-system,"Segoe UI",Roboto,sans-serif;fill:var(--dim)}
+  .gift{margin:8px 0 0;padding:7px 10px;background:var(--surface);border:1px solid var(--hair);font-size:13px;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+  .gift .k{color:var(--dim)} .gift .big{font-size:18px;font-weight:600} .gift .n{color:var(--dim);font-size:12px}
   @media (max-width:640px){.hero{text-align:left}.hero .pnl{font-size:24px}.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
 <script>
@@ -133,6 +135,7 @@ PAGE = r"""<!DOCTYPE html>
   </div>
   <button class="btn fab" id="fab" onclick="goHome()" title="close History, back to the top" hidden>🏠 Home</button>
   <div class="chips" id="chips"><span class="chip">connecting…</span></div>
+  <div id="giftlive"></div>
   <p class="sub" id="sub"></p>
   <div id="history" hidden>
     <h2>History</h2>
@@ -179,11 +182,11 @@ const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const tm = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 16)}`;
 const tms = s => !s ? "–" : `${+s.slice(8, 10)} ${MON[+s.slice(5, 7) - 1] || ""} ${s.slice(11, 19)}`;
 const day = s => { if (!s) return "–"; const d = new Date(s.slice(0, 10) + "T12:00:00Z"); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
-const SCEN = {hold: "No top-up (above -25%)", topup_50: "Topped up 50% at -25%: target cut 25%, trailing",
+const SCEN = {hold: "No top-up", topup_50: "Topped up 50%: target trailing",
   topup_100: "Topped up 100%: target = average + 10%", topup_limit: "Limit buy filled: the target trailing on, floor average + 10%",
   hold_small_loss: "Down ≤ 20%: target held", average_down: "Averaged (old rule)", average_down_deep: "Averaged, trailing (old rule)",
   average_down_failed: "Average-down buy failed", average_down_skipped: "Average down skipped", closed_on_entry_day: "Closed on the entry day"};
-const EXIT = {target: "Target hit", "target (watched)": "Target hit (watched)", time_exit: "15:14 exit", overdue_exit: "Exit at the next open (missed day)",
+const EXIT = {target: "Target hit", "target (watched)": "Target hit (watched)", time_exit: "Time exit", new_signal: "Sold for the next signal", overdue_exit: "Exit at the next open (missed day)",
   manual_exit: "Exited from the page"};
 const MARKET = {open: ["Market open", "ok"], preopen: ["Pre-open", "mid"], closed: ["Market closed", ""], weekend: ["Weekend", ""], holiday: ["Holiday", ""]};
 const OPEN_ROWS = new Set();
@@ -291,7 +294,7 @@ function plan(d, j, p){
     const limRow = [lt, j.limit_topup2].filter(x => x).map(x => `<tr><td>Limit BUY ${tms(x.at)}</td><td>${x.ok ? `${n0(x.qty)} @ ${n2(x.price)} (-${x.loss_pct}%) · ${esc(x.status || "open")}${x.booked ? ` · filled ${n0(x.booked)}` : ""} — ${xp ? `filled → target = the new average + ${fl}%; cancelled if the target fills first` : `instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%`}`
       : `not placed (${esc(x.error || "")}) — ${xp ? `bought at market at -${x.loss_pct}% instead` : `the -${l2}% buy stands`}`}</td></tr>`).join("");
     const nextRow = done >= 100 || (lim && done > 0) || (xp && (lim || lim2)) ? "" : `<tr><td>At ${n2(base * (1 - (done ? l2 : l1) / 100))}</td><td>${done ? `(-${l2}%) add the other ${n0(100 - done)}% (${lots(first * (100 - done) / 100)}) → target = new average + ${fl}%`
-      : `(-${l1}%) add ${half}% (${lots(first * half / 100)}) → ${xp ? `target = new average + ${fl}%` : `target cut ${cut}%, then -1 per point, floor average + ${fl}%`}${lim ? "" : `; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}`}</td></tr>`;
+      : `(-${l1}%) add ${half}% (${lots(first * half / 100)}) → ${xp ? `target = new average + ${fl}%` : `${cut ? `target cut ${cut}%, then` : "target not cut,"} -1 per point, floor average + ${fl}%`}${lim ? "" : `; at ${n2(base * (1 - l2 / 100))} (-${l2}%) the other ${100 - half}%`}`}</td></tr>`;
     return `<div class="plan"><div class="k">Today's plan — live from ${esc(R.market_open)}</div><table>
       ${xRow}<tr><td>Open ${tms(dec.at)}</td><td>${n2(dec.ltp)} = ${pc(dec.pnl_pct)} vs the buy ${n2(base)}</td></tr>
       ${ups.map(u => `<tr><td>Top-up ${tms(u.at)}</td><td>${n0(u.pct)}% at ${pc(-u.loss_pct)}: +${n0(u.qty)} @ ${n2(u.price)} (${rsp(u.amount)})</td></tr>`).join("")}
@@ -302,7 +305,7 @@ function plan(d, j, p){
   }
   return `<div class="plan"><div class="k">Next-day plan — ${day(d.next_session)}, tracked live from ${esc(R.market_open)}</div><table>
     ${xRow}<tr><td>Above ${n2(base * (1 - l1 / 100))}</td><td>(down < ${l1}%) keep the target ${n2(t)}${lp > 0 ? `; opened at ${n2(base * (1 - l1 / 100))} or above, a LIMIT BUY for the other ${100 - half}% goes in at once at ${n2(base * (1 - lp / 100))} (-${lp}%; ${lots(first * (100 - half) / 100)} at that price) instead of the -${l2}% buy; filled → the target keeps trailing 1 point per point, floor the new average + ${fl}%` : ""}</td></tr>
-    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (${lots(first * half / 100)}); ${xp ? `target = the new average + ${fl}%` : `target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then 1 point lower per point below that buy, never under the new average + ${fl}%`}</td></tr>
+    <tr><td>At ${n2(base * (1 - l1 / 100))}</td><td>(-${l1}%) add ${half}% (${lots(first * half / 100)}); ${xp ? `target = the new average + ${fl}%` : `${cut ? `target cut ${cut}% (≈${n2(t * (1 - cut / 100))}); then` : `the target (${n2(t)}) not cut;`} 1 point lower per point below that buy, never under the new average + ${fl}%`}</td></tr>
     <tr><td>At ${n2(base * (1 - l2 / 100))}</td><td>(-${l2}%) add the other ${100 - half}% (${lots(first * (100 - half) / 100)}); target = the new average + ${fl}%${lp > 0 ? ` - only if it opened below -${l1}% (else the limit buy)` : ""}</td></tr>
     <tr><td>Opens ≤ ${n2(base * (1 - l2 / 100))}</td><td>(already -${l2}%) add 100% (${lots(first)}) at once; target = the new average + ${fl}%</td></tr>
     <tr><td>Exit</td><td>at market at ${esc(R.exit_at)} that day if the target is not hit</td></tr>${giftRow}${gtRow}</table></div>`;
@@ -427,7 +430,7 @@ function drawTopups(d){
   (d.days || []).forEach(r => (r.topups || []).concat(r.missed_topups || []).forEach(u => all.push(Object.assign({_sym: r.signal || r.symbol, _mode: r.mode, _job: r.job_id}, u))));
   all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
   document.getElementById("topups").innerHTML = all.length ? topupTable(all, true)
-    : `<p class="empty">No top-up yet. A trade adds 50% when it first falls 25% below the buy price, and the rest at -50% (100% at once if it opens 50% down; opened above -25%, the rest is a limit buy at -${n0((d.rules || {}).limit_topup_loss_pct)}%) - each time the most lots within that amount + ${n0((d.rules || {}).topup_tolerance_pct)}%, at least 1.</p>`;
+    : `<p class="empty">No top-up yet. A trade adds 50% when it first falls ${n0((d.rules || {}).topup_first_loss_pct)}% below the buy price, and the rest at -50% (100% at once if it opens 50% down; opened above -${n0((d.rules || {}).topup_first_loss_pct)}%, the rest is a limit buy at -${n0((d.rules || {}).limit_topup_loss_pct)}%) - each time the most lots within that amount + ${n0((d.rules || {}).topup_tolerance_pct)}%, at least 1.</p>`;
 }
 function parkedHtml(d){
   const ps = d.parked || [];
@@ -498,7 +501,7 @@ function tradeCard(d, j, r){
     </div>
     ${(j.topups || []).length || (j.missed_topups || []).length ? `<div class="plan"><div class="k">Top-ups</div>${topupTable((j.topups || []).concat(j.missed_topups || []).sort((a, b) => String(a.at).localeCompare(String(b.at))), false)}</div>` : ""}
     ${open ? plan(Object.assign({}, d, {next_session: j.next_session || d.next_session}), j, p) : resultBox(j, r)}
-    ${chartSvg(CHARTS[j.job_id], j.job_id)}
+    ${chartSvg(CHARTS[j.job_id], j.job_id)}${giftChart(CHARTS[j.job_id], j.job_id)}
   </div>`;
 }
 function drawOpen(d){
@@ -541,6 +544,7 @@ function drawHistory(){
   (h.rows || []).forEach(r => rows[r.job_id] = r);
   const sigs = (h.messages || []).filter(m => m.is_signal).length;
   let html = `<p class="sub"><b>${esc(day(h.date))}</b> · ${h.trading_day ? "trading day" : esc(h.phase)} · ${(h.messages || []).length} message(s) read, ${sigs} signal(s) · ${(h.jobs || []).length} trade(s)</p>`;
+  html += giftDay(h.gift || []);
   if (h.no_signal) html += `<div class="phase" style="border-left-color:var(--dim)">No signal — ${n0(h.no_signal.messages_read)} message(s) read in the scan window, no trade</div>`;
   if (!(h.jobs || []).length && !h.no_signal) html += `<p class="empty">No trade ${h.trading_day ? "on this day" : "(the market was closed)"}.</p>`;
   (h.jobs || []).forEach(j => {
@@ -623,7 +627,7 @@ function drawTrades(d){
         <td class="l">${result}</td>
         <td><button class="linkbtn" onclick="toggle('${esc(r.job_id)}')">${OPEN_ROWS.has(r.job_id) ? "hide" : "details"}</button><span class="n"><a href="/logs?day=${encodeURIComponent(r.date || "")}" target="_blank" rel="noopener">log</a></span></td></tr>`;
       if (OPEN_ROWS.has(r.job_id)) loadChart(r.job_id);
-      return main + (OPEN_ROWS.has(r.job_id) ? `<tr class="det"><td colspan="${COLS}">${chartSvg(CHARTS[r.job_id], r.job_id)}${detail(r)}</td></tr>` : "");
+      return main + (OPEN_ROWS.has(r.job_id) ? `<tr class="det"><td colspan="${COLS}">${chartSvg(CHARTS[r.job_id], r.job_id)}${giftChart(CHARTS[r.job_id], r.job_id)}${detail(r)}</td></tr>` : "");
     }).join("") + `</table>`;
 }
 
@@ -729,11 +733,99 @@ function drawMsgs(d){
       <td class="l">${esc(m.reason)}</td><td class="l"><pre>${esc((m.text || "").slice(0, 300))}</pre></td></tr>`).join("") + `</table></div></details>`;
 }
 
+// ── GIFT Nifty, session by session (btst/giftrec.py) ───────────────────────
+const hmOf = s => s ? String(s).slice(11, 16) : "–";
+const pts = x => !num(x) ? "–" : (x > 0 ? "+" : "") + n2(x) + " pts";
+function drawGift(d){
+  const g = d.gift_live, el = document.getElementById("giftlive");
+  if (!el) return;
+  if (!g){ el.innerHTML = ""; return; }
+  let h = `<span class="k">GIFT Nifty</span>`;
+  if (g.status === "recording")
+    h += `<b class="big">${n2(g.last)}</b><b class="${cls(g.change)}">${pts(g.change)}</b>`
+      + `<span class="n">session ${g.session} (${hmOf(g.start)}–${hmOf(g.end)}) · since ${n2(g.base)}, ${esc(g.base_from || "")} · high ${n2(g.high)} · low ${n2(g.low)} · ${tms(g.at)} · ${esc(g.expiry || "")} · ${n0(g.points)} min saved</span>`;
+  else if (g.status === "closed")
+    h += (num(g.last) ? `<b class="big">${n2(g.last)}</b><b class="${cls(g.change)}">${pts(g.change)}</b><span class="n">session ${g.session} closed at ${hmOf(g.end)}</span>` : `<span class="n">no session on now</span>`)
+      + (g.next_open ? `<span class="n">next: session ${g.next_session} at ${tm(g.next_open)}</span>` : "");
+  else if (g.status === "no_trading") h += `<span class="n">no trading in session ${g.session} (${hmOf(g.start)}–${hmOf(g.end)}) - the last quote is from ${tms(g.quote_time)}</span>`;
+  else if (g.status === "error") h += `<span class="n down">not read: ${esc(g.error || "")} (${tms(g.at)})</span>`;
+  else h += `<span class="n">starting…</span>`;
+  el.innerHTML = `<div class="gift">${h}</div>`;
+}
+function giftDay(gs){
+  if (!gs.length) return `<p class="empty">GIFT Nifty: no session recorded on this day (recorded from 20 Nov 2026).</p>`;
+  return `<div class="tbl"><table><tr><th>GIFT Nifty</th><th>Hours</th><th>Base (the session before's last)</th><th>First</th><th>High</th><th>Low</th><th>Last</th><th>Change</th><th>Minutes</th></tr>`
+    + gs.map(s => `<tr><td class="l">Session ${s.session}${s.closed ? "" : " · on"}</td><td class="l">${hmOf(s.start)} – ${hmOf(s.end)}</td><td title="${esc(s.base_from || "")}">${n2(s.base)}</td><td>${n2(s.first)}</td><td>${n2(s.high)}</td><td>${n2(s.low)}</td><td>${n2(s.last)}</td><td class="${cls(s.change)}">${pts(s.change)}</td><td>${n0(s.n)}</td></tr>`).join("")
+    + `</table></div>`;
+}
+const GIFT_SCALE = {};
+function giftChart(d, id){
+  if (!d || d.error) return "";
+  const g = d.gift, B = d.bars || [];
+  if (!g || !(g.points || []).length) return B.length ? `<div class="chartbox"><p class="empty">GIFT Nifty: nothing recorded over this trade (GIFT is recorded from 20 Nov 2026).</p></div>` : "";
+  const P = g.points;
+  const W = 1000, L = 56, R = 56, T = 12, GH = 130, GAP = 24, QH = 110, BOT = 22, H = T + GH + GAP + QH + BOT;
+  const t0 = Math.min(P[0].t, B.length ? B[0].t : P[0].t), t1 = Math.max(P[P.length - 1].t, B.length ? B[B.length - 1].t : P[P.length - 1].t);
+  const X = t => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R);
+  GIFT_SCALE[id] = {t0, t1, L, R, W};
+  const gm = Math.max(10, ...P.map(p => Math.abs(p.chg))) * 1.08;
+  const GY = v => T + (gm - v) / (2 * gm) * GH;
+  const P0 = T + GH + GAP, pnl = b => b.open ? b.pnl : b.hold_pnl;
+  const pv = B.map(pnl).filter(num);
+  let plo = Math.min(0, ...pv), phi = Math.max(0, ...pv); if (plo === phi){ plo -= 1; phi += 1; }
+  const PY = v => P0 + (phi - v) / (phi - plo) * QH;
+  const segs = (arr, key, brk) => { const out = []; let cur = [];
+    arr.forEach((a, i) => { if (i && brk(arr[i - 1], a) && cur.length){ out.push(cur); cur = []; } cur.push(a); }); if (cur.length) out.push(cur); return out; };
+  const poly = (pts_, style) => `<polyline fill="none" ${style} points="${pts_.join(" ")}"/>`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" onmousemove="giftHover(evt,'${esc(id)}')" role="img" aria-label="GIFT Nifty points since each session's base, and the trade's P&L">`;
+  (g.sessions || []).forEach(s => { const a = Math.max(t0, Date.parse(s.start)), b = Math.min(t1, Date.parse(s.end));
+    if (b > a) svg += `<rect x="${X(a).toFixed(1)}" y="${T}" width="${(X(b) - X(a)).toFixed(1)}" height="${GH}" fill="var(--track)" opacity=".45"/>`
+      + (X(b) - X(a) > 170 ? `<text x="${(X(a) + 3).toFixed(1)}" y="${T + 10}">S${s.session} ${hmOf(s.start)}–${hmOf(s.end)} · from ${n2(s.base)}</text>`
+         : `<title>session ${s.session} ${hmOf(s.start)}–${hmOf(s.end)} · from ${n2(s.base)}</title>`); });
+  // the time axis: a label at each day's first point, the hours every 3
+  const dayOf = t => new Date(t).toLocaleDateString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short"});
+  let prevDay = dayOf(t0);
+  svg += `<text x="${L}" y="${H - 6}">${esc(prevDay)}</text>`;
+  const ticks = []; for (let t = Math.ceil(t0 / 3600000) * 3600000; t <= t1; t += 3600000) if (X(t) - L > 70) ticks.push(t);
+  ticks.forEach(t => { const dt = new Date(t), hh = +dt.toLocaleString("en-GB", {timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false});
+    const dd = dt.toLocaleDateString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short"});
+    if (dd !== prevDay && hh < 3){ prevDay = dd; svg += `<line x1="${X(t)}" x2="${X(t)}" y1="${T}" y2="${P0 + QH}" stroke="var(--hair)" stroke-dasharray="3 3"/><text x="${X(t) + 3}" y="${H - 6}">${esc(dd)}</text>`; }
+    else if (hh % 3 === 0) svg += `<text x="${X(t)}" y="${H - 6}" text-anchor="middle">${String(hh).padStart(2, "0")}:00</text>`; });
+  // GIFT panel
+  svg += `<line x1="${L}" x2="${W - R}" y1="${GY(0)}" y2="${GY(0)}" stroke="var(--rule)"/><text x="${L - 4}" y="${GY(0) + 3}" text-anchor="end">0</text>`
+    + `<text x="${L - 4}" y="${GY(gm / 1.08) + 3}" text-anchor="end">+${n0(gm / 1.08)}</text><text x="${L - 4}" y="${GY(-gm / 1.08) + 3}" text-anchor="end">−${n0(gm / 1.08)}</text>`;
+  segs(P, "chg", (a, b) => a.s !== b.s || b.t - a.t > 5 * 60000).forEach(sg => { svg += poly(sg.map(p => `${X(p.t).toFixed(1)},${GY(p.chg).toFixed(1)}`), `stroke="#3366cc" stroke-width="1.5"`); });
+  const lp = P[P.length - 1];
+  svg += `<text x="${W - R + 4}" y="${GY(lp.chg) + 3}" style="fill:#3366cc">${lp.chg > 0 ? "+" : ""}${n0(lp.chg)}</text>`;
+  // P&L panel: while open, then what holding on would have made
+  svg += `<line x1="${L}" x2="${W - R}" y1="${PY(0)}" y2="${PY(0)}" stroke="var(--rule)"/><text x="${L - 4}" y="${PY(0) + 3}" text-anchor="end">₹0</text>`
+    + (Math.abs(PY(phi) - PY(0)) > 12 ? `<text x="${L - 4}" y="${P0 + 8}" text-anchor="end">${rs(phi)}</text>` : "")
+    + (Math.abs(PY(plo) - PY(0)) > 12 ? `<text x="${L - 4}" y="${P0 + QH}" text-anchor="end">${rs(plo)}</text>` : "");
+  const Bv = B.filter(b => num(pnl(b)));
+  segs(Bv, "pnl", (a, b) => b.t - a.t > 5 * 60000 || a.open !== b.open).forEach(sg => {
+    svg += poly(sg.map(b => `${X(b.t + 30000).toFixed(1)},${PY(pnl(b)).toFixed(1)}`), sg[0].open ? `stroke="var(--ink)" stroke-width="1.4"` : `stroke="var(--dim)" stroke-width="1.2" stroke-dasharray="2 3"`); });
+  if (d.exit && d.exit.t) svg += `<line x1="${X(d.exit.t)}" x2="${X(d.exit.t)}" y1="${P0}" y2="${P0 + QH}" stroke="var(--dim)" stroke-dasharray="4 3"/><text x="${X(d.exit.t) + 3}" y="${P0 + 10}">exit ${rs(d.exit.net_pnl)}</text>`;
+  svg += `<line class="gcur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--dim)" style="display:none"/></svg>`;
+  return `<div class="chartbox"><div class="legend"><span><b style="color:#3366cc">—</b> GIFT Nifty, points since its session's base (the session before's last price)</span><span><b style="color:var(--ink)">—</b> P&L while open</span><span>· · if held, after the exit</span>${num(g.at_buy) ? `<span style="margin-left:auto">GIFT at the buy ${n2(g.at_buy)}</span>` : ""}</div>${svg}<div class="readout gread"></div></div>`;
+}
+function giftHover(evt, id){
+  const d = CHARTS[id], sc = GIFT_SCALE[id], svg = evt.currentTarget; if (!d || !sc || !d.gift) return;
+  const r = svg.getBoundingClientRect(), x = (evt.clientX - r.left) / r.width * sc.W;
+  const t = sc.t0 + (x - sc.L) / (sc.W - sc.L - sc.R) * (sc.t1 - sc.t0);
+  const P = d.gift.points; let p = null; for (const q of P){ if (q.t <= t) p = q; else break; }
+  let b = null; for (const q of d.bars || []){ if (q.t <= t) b = q; else break; }
+  const out = svg.parentNode.querySelector(".gread"), when = new Date(t).toLocaleString("en-GB", {timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+  const sinceBuy = p && num(d.gift.at_buy) ? p.p - d.gift.at_buy : null, v = b ? (b.open ? b.pnl : b.hold_pnl) : null;
+  if (out) out.innerHTML = `${esc(when)}` + (p ? ` · GIFT <b>${n2(p.p)}</b> <b class="${cls(p.chg)}">${pts(p.chg)}</b> in session ${p.s}` + (num(sinceBuy) ? ` · <span class="${cls(sinceBuy)}">${pts(sinceBuy)}</span> since the buy` : "") : "")
+    + (b ? ` · ${b.open ? "P&L" : "if held"} <b class="${cls(v)}">${rs(v)}</b> (option ${n2(b.c)})` : "");
+  const cur = svg.querySelector(".gcur"); if (cur){ cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.style.display = ""; }
+}
+
 async function tick(){
   try{
     const d = await (await fetch("/api/state")).json();
     LAST = d;
-    drawHead(d); drawOpen(d); drawCapital(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
+    drawHead(d); drawGift(d); drawOpen(d); drawCapital(d); drawTrades(d); drawTopups(d); drawStats(d); drawSys(d); drawMsgs(d);
   }catch(e){ document.getElementById("chips").innerHTML = `<span class="chip bad"><i></i>disconnected</span>`; }
 }
 tick(); setInterval(tick, 3000);

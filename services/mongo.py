@@ -13,6 +13,9 @@ Collections
                    the AI about the same message twice
     btst_days      a trading day that ended its scan window with no signal:
                    no trade, and how many messages were read
+    btst_gift      GIFT Nifty, one document a session (btst/giftrec.py): its
+                   base (the session before's last price), first, high, low,
+                   last, the change in points, and one price a minute
 """
 import os
 import sys
@@ -49,6 +52,7 @@ class MongoStore:
         self.messages = self.db["btst_messages"]
         self.days = self.db["btst_days"]
         self.ticks = self.db["btst_ticks"]      # a trade's recorded prices, by job id (btst/recorder.py)
+        self.gift = self.db["btst_gift"]        # GIFT Nifty, a document a session (btst/giftrec.py)
 
     def ensure_indexes(self):
         from pymongo import ASCENDING, DESCENDING
@@ -59,6 +63,9 @@ class MongoStore:
         self.days.create_index([("date", ASCENDING)], unique=True)
         self.ticks.create_index([("job_id", ASCENDING)], unique=True)
         self.jobs.create_index([("recording.status", ASCENDING)])
+        self.gift.create_index([("session_id", ASCENDING)], unique=True)
+        self.gift.create_index([("start", DESCENDING)])
+        self.gift.create_index([("day", ASCENDING)])
 
     def ping(self):
         return self.client.admin.command("ping")
@@ -157,3 +164,36 @@ class MongoStore:
 
     def recent_days(self, limit=400):
         return list(self.days.find({}, {"_id": 0}).sort("date", -1).limit(int(limit)))
+
+    # ── GIFT Nifty sessions (btst/giftrec.py) ───────────────────────────────
+    def gift_session(self, session_id, points=True):
+        return self.gift.find_one({"session_id": session_id}, {"_id": 0} if points else {"_id": 0, "points": 0})
+
+    def save_gift_session(self, doc):
+        self.gift.update_one({"session_id": doc["session_id"]}, {"$set": doc}, upsert=True)
+
+    def gift_point(self, session_id, set_, point=None):
+        """The session's latest figures, and a minute's price appended."""
+        upd = {"$set": set_}
+        if point is not None:
+            upd["$push"] = {"points": point}
+        self.gift.update_one({"session_id": session_id}, upd)
+
+    def gift_sessions(self, limit=20, points=False):
+        """The newest sessions first."""
+        proj = {"_id": 0} if points else {"_id": 0, "points": 0}
+        return list(self.gift.find({}, proj).sort("start", -1).limit(int(limit)))
+
+    def gift_session_before(self, start_iso):
+        """The last session that started before `start_iso` (its points left out)."""
+        return next((d for d in self.gift_sessions(10) if str(d.get("start") or "") < start_iso), None)
+
+    def gift_sessions_on(self, day, points=False):
+        """The sessions that started on `day` (YYYY-MM-DD), morning first."""
+        proj = {"_id": 0} if points else {"_id": 0, "points": 0}
+        return sorted(self.gift.find({"day": day}, proj), key=lambda d: d.get("start") or "")
+
+    def gift_between(self, a_iso, b_iso):
+        """The sessions overlapping [a, b], with their points, oldest first."""
+        out = self.gift.find({"start": {"$lte": b_iso}, "end": {"$gte": a_iso}}, {"_id": 0})
+        return sorted(out, key=lambda d: d.get("start") or "")

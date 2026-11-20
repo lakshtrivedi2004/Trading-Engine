@@ -30,7 +30,7 @@ def summary(jobs, mode=None):
         "profit_factor": round(sum(wins) / -sum(losses), 2) if sum(losses) < 0 else None,
         "max_drawdown": round(dd, 2),
         "target_hits": count(lambda r: r.get("target_hit")),
-        "time_exits": count(lambda r: str(r.get("exit_reason", "")).startswith(("time_exit", "overdue_exit"))),
+        "time_exits": count(lambda r: str(r.get("exit_reason", "")).startswith(("time_exit", "overdue_exit", "new_signal"))),
         "averaged": count(lambda r: r.get("averaged")),
         "trailed": count(lambda r: r.get("trailed")),
         "charges": round(sum(float(j["result"].get("charges") or 0) for j in closed), 2),

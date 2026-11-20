@@ -70,6 +70,10 @@ def _match(doc, flt):
                 return False
             if "$nin" in v and val in v["$nin"]:
                 return False
+            if "$lte" in v and not (val is not None and val <= v["$lte"]):
+                return False
+            if "$gte" in v and not (val is not None and val >= v["$gte"]):
+                return False
         elif val != v:
             return False
     return True
@@ -172,13 +176,18 @@ def at(y, mo, d, h, mi, s=0):
     CLOCK["t"] = datetime(y, mo, d, h, mi, s, tzinfo=IST)
 
 
+# Sections 1-25 were written for the first top-up at -25% with the target cut 25%; they keep
+# those as settings (both still are). Section 26 checks the shipped rule: -30%, no cut.
+OLD_TOPUP = {"topup_first_loss_pct": 25.0, "target_cut_pct": 25.0}
+
+
 def desk(model=None, cfg=None):
     store = MongoStore(client=_Client(), db_name="t")
     broker = PaperBtstBroker(lambda c: PRICE["ltp"], funds=1e9, log=lambda *_: None, today=lambda: CLOCK["t"].date())
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "trail_modify_gap_sec": 0,
-            "gift_target_enabled": False}
+            "gift_target_enabled": False, **OLD_TOPUP}
     conf.update(cfg or {})
     logs, sent = [], []
     st = BtstStrategy(conf, store, broker, lambda: MASTER, model or Model(GOOD), "test_channel",
@@ -934,7 +943,7 @@ def desk8():
     conf = {"lots": 1, "scan_start": "15:15", "scan_end": "15:30", "decide_at": "09:15:30", "exit_at": "15:14",
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "manage_poll_sec": 1, "poll_sec": 3,
-            "gift_target_enabled": False}
+            "gift_target_enabled": False, **OLD_TOPUP}
     lg = []
     s_ = BtstStrategy(conf, store, br, lambda: MASTER, Model(GOOD), "test_channel", log=lg.append,
                       now=lambda: CLOCK["t"], notifier=SimpleNamespace(send=lambda *_: None),
@@ -1177,7 +1186,7 @@ def live_desk(day=22, cfg=None):
             "target_mult": {"default": 2.0, "SENSEX": 3.0}, "avg_down_loss_pct": 20.0, "avg_target_pct": 10.0,
             "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
             "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55", "amo_tries": 3, "amo_retry_sec": 300,
-            "gift_target_enabled": False}
+            "gift_target_enabled": False, **OLD_TOPUP}
     conf.update(cfg or {})
     lg, sent = [], []
     s_ = BtstStrategy(conf, store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None), lambda: MASTER,
@@ -2704,7 +2713,7 @@ def live21(send):
     store = MongoStore(client=_Client(), db_name="sp")
     base = {"lots": 1, "decide_at": "09:15:30", "target_mult": {"default": 2.0}, "markers": ["BTST", "Disclaimer"],
             "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0, "amo_exit": True, "amo_tries": 3,
-            "amo_retry_sec": 300, "gift_target_enabled": False}
+            "amo_retry_sec": 300, "gift_target_enabled": False, **OLD_TOPUP}
     s_ = BtstStrategy(dict(base, **conf), store, AngelBtstBroker(ex, sleep=lambda s: None, log=lambda *_: None),
                       lambda: MASTER, Model(GOOD), "test_channel", log=[].append, now=lambda: CLOCK["t"],
                       notifier=SimpleNamespace(send=lambda *_: None), cost_model=CostModel.load())
@@ -2833,7 +2842,8 @@ sF = BtstStrategy({"principal": 1900000, "trade_pct": 10, "amount_tolerance_pct"
                    "scan_end": "15:30", "exit_at": "15:14", "target_mult": {"default": 2.0},
                    "markers": ["BTST", "Disclaimer"], "ai_fallback_regex": True, "ltp_poll_sec": 0, "order_poll_sec": 0,
                    "trail_modify_gap_sec": 0, "amo_exit": True, "amo_at": "16:01", "amo_until": "08:55",
-                   "amo_tries": 3, "amo_retry_sec": 300, "gift_enabled": False, "limit_topup_loss_pct": 53.0},
+                   "amo_tries": 3, "amo_retry_sec": 300, "gift_enabled": False, "limit_topup_loss_pct": 53.0,
+                   **OLD_TOPUP},
                   stF, AngelBtstBroker(exF, freeze_qty={"NIFTY": 1800}, sleep=lambda s: None, log=lambda *_: None),
                   lambda: MASTER, Model(GOOD), "test_channel", log=[].append, now=lambda: CLOCK["t"],
                   notifier=SimpleNamespace(send=sentF.append), cost_model=CostModel.load())
@@ -3233,6 +3243,365 @@ check("live, GIFT +25: the AMO waiting for the open is modified down to 180.60 -
       str([e for e in exL.events if e[0] == "modify"]))
 check("the page has the new settings", all(k in web.state(s25, st25)["rules"]
                                          for k in ("gift_target_small_points", "gift_target_small_mult")))
+
+section("26. The first top-up at -30%, the target not cut - only trailing 1 point per point (owner, 20 Nov 2026)")
+import json as _json                                              # noqa: E402
+from btst import strategy as _strat                               # noqa: E402
+
+_shipped = _json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                        "config", "btst.json")))
+NEW = {k: _shipped[k] for k in ("topup_first_loss_pct", "target_cut_pct")}
+check("config/btst.json and the code's defaults: -30%, no cut",
+      NEW == {"topup_first_loss_pct": 30.0, "target_cut_pct": 0.0}
+      and _strat.RULE_DEFAULTS["topup_first_loss_pct"] == 30.0 and _strat.RULE_DEFAULTS["target_cut_pct"] == 0.0,
+      str(NEW))
+
+
+def new_day(n, open_px, cfg=None):
+    """4 lots (260) @ 100 on Thu 22 Oct, signal 105, target 210; the shipped -30% / no cut."""
+    at(2026, 10, 22, 15, 18)
+    PRICE["ltp"] = 100.0
+    s_, st_, b_, lg_, sent_ = desk(cfg={**LIM, **NEW, **(cfg or {})})
+    s_.on_message(msg(n, SAMPLE, 15, 18))
+    s_.step()
+    at(2026, 10, 23, 9, 15, 5)
+    PRICE["ltp"] = open_px
+    s_.step()
+    return s_, st_, b_, lg_, sent_
+
+
+def px26(h, mi, px, s_):
+    at(2026, 10, 23, h, mi)
+    PRICE["ltp"] = px
+    s_.step()
+
+
+s26, st26, b26, lg26, sent26 = new_day(60, 72.0)
+j26 = st26.open_job()
+check("opened at 72 (-28%): above -30% - the LIMIT BUY at 47.00 (-53%) goes in, nothing bought at market "
+      "(under the old -25% this was a top-up at the open)",
+      (j26.get("limit_topup") or {}).get("price") == 47.0 and not j26.get("topups") and j26["target_price"] == 210.0,
+      str(j26.get("limit_topup"))[:200])
+check("...the open's message says -30% and no cut", any("at -30%" in x and "not cut" in x for x in sent26),
+      str([x for x in sent26 if "session open" in x])[:300])
+px26(9, 30, 75.0, s26)
+px26(9, 40, 70.05, s26)
+j26 = st26.open_job()
+check("75 (-25%) and 70.05 (-29.95%): no top-up, the target stays 210", not j26.get("topups")
+      and j26["target_price"] == 210.0 and not j26.get("trail"))
+px26(10, 0, 70.0, s26)
+j26 = st26.open_job()
+avg26 = round((26000 + 195 * 70.0) / 455, 2)
+fl26 = tick_round((26000 + 195 * 70.0) / 455 * 1.1, 0.05, up=True)
+check(f"70 (-30%): +50% of Rs 26,000 -> 3 lots (195 @ 70); average {avg26}; the target NOT cut - 210 as it was; "
+      f"trailing from 70, floor {fl26:.2f}",
+      j26["topped_pct"] == 50 and j26["position"]["qty"] == 455 and j26["position"]["avg_price"] == avg26
+      and j26["target_price"] == 210.0 and j26["trail"]["active"] and j26["trail"]["ref"] == 70.0
+      and j26["trail"]["initial"] == 210.0 and j26["trail"]["floor"] == fl26 and j26["topups"][0]["step"] == "first"
+      and j26["topups"][0]["target_after"] == 210.0, str({k: j26.get(k) for k in ("target_price", "trail")})[:300])
+check("...said: not cut, 1 point lower per point", any("topped up 50%" in x and "not cut" in x and "210.00" in x
+                                                       for x in sent26), str(sent26[-2:])[:300])
+px26(10, 10, 69.5, s26)
+check("69.50 (half a point under the buy): still 210", st26.open_job()["target_price"] == 210.0)
+px26(10, 20, 65.0, s26)
+check("65 (5 points under): 205", st26.open_job()["target_price"] == 205.0)
+px26(10, 30, 68.0, s26)
+check("...back to 68: stays 205 - it only comes down", st26.open_job()["target_price"] == 205.0)
+px26(10, 40, 60.0, s26)
+check("60: 200", st26.open_job()["target_price"] == 200.0)
+px26(11, 0, 47.0, s26)
+j26 = st26.open_job()
+check("47 (-53%): the limit buy fills - the target not reset (200 for the whole position)",
+      [u["step"] for u in j26["topups"]] == ["first", "limit"] and j26["target_price"] == 200.0, str(j26["target_price"]))
+px26(11, 1, 47.0, s26)
+j26 = st26.open_job()
+check("...and trails on the next look: 210 - 23 = 187, the floor now the new average + 10%",
+      j26["target_price"] == 187.0
+      and j26["trail"]["active"] and j26["trail"]["floor"] < fl26,
+      str({k: j26.get(k) for k in ("target_price", "trail")})[:300])
+
+s_, st_, b_, lg_, sent_ = new_day(61, 60.0)
+j_ = st_.open_job()
+check("opened at 60 (-40%, a gap down past -30%): 50% at the open, no limit order; the target stays 210, trailing "
+      "from 60", [u["step"] for u in j_.get("topups") or []] == ["first"] and not (j_.get("limit_topup") or {}).get("ok")
+      and j_["target_price"] == 210.0 and j_["trail"]["ref"] == 60.0, str(j_.get("topups"))[:200])
+px26(10, 0, 50.0, s_)
+j_ = st_.open_job()
+check("...then 50 (-50%): the other 50% - the target the new average + 10%, trailing ends",
+      j_["topped_pct"] == 100 and not j_["trail"]["active"]
+      and j_["target_price"] == tick_round(j_["position"]["avg_price"] * 1.1, 0.05, up=True), str(j_["target_price"]))
+
+s_, st_, b_, lg_, sent_ = new_day(62, 45.0)
+j_ = st_.open_job()
+check("opened at 45 (-55%): 100% at once, the target the new average + 10% (as before)",
+      [u["step"] for u in j_.get("topups") or []] == ["full"] and not j_.get("trail")
+      and j_["target_price"] == tick_round(j_["position"]["avg_price"] * 1.1, 0.05, up=True), str(j_.get("topups"))[:200])
+
+at(2026, 10, 26, 15, 18)
+PRICE["ltp"] = 100.0
+s_, st_, b_, lg_, sent_ = desk(cfg={**XP, **NEW})
+s_.on_message(msg(63, SAMPLE, 15, 18, day=26))
+s_.step()
+at(2026, 10, 27, 9, 15, 5)
+PRICE["ltp"] = 95.0
+s_.step()
+xp_px(10, 0, 70.0, s_)
+j_ = st_.open_job()
+check("the option's expiry day: -30% does nothing (its levels are -60% / -87%)",
+      not j_.get("topups") and j_["target_price"] == 210.0 and (j_.get("limit_topup") or {}).get("price") == 40.0)
+
+section("27. Out at 15:30; a new signal while the trade waits for it: sold at once, the new one entered "
+        "(owner, 20 Nov 2026)")
+X27 = {"exit_at": _shipped["exit_at"], "exit_for_new_signal": _shipped["exit_for_new_signal"]}
+check("config/btst.json and the code's defaults: out at 15:30, sold for a new signal",
+      X27 == {"exit_at": "15:30", "exit_for_new_signal": True} and _strat.RULE_DEFAULTS["exit_at"] == "15:30"
+      and _strat.RULE_DEFAULTS["exit_for_new_signal"] is True, str(X27))
+
+
+def day27(n, cfg=None):
+    """4 lots (260) @ 100 on Thu 22 Oct, target 210; Fri 23 Oct opens at 95 (the -53% limit buy resting)."""
+    at(2026, 10, 22, 15, 18)
+    PRICE["ltp"] = 100.0
+    s_, st_, b_, lg_, sent_ = desk(cfg={**LIM, **X27, **(cfg or {})})
+    s_.on_message(msg(n, SAMPLE, 15, 18))
+    s_.step()
+    at(2026, 10, 23, 9, 15, 5)
+    PRICE["ltp"] = 95.0
+    s_.step()
+    return s_, st_, b_, lg_, sent_
+
+
+s27, st27, b27, lg27, sent27 = day27(80)
+old27 = st27.open_job()
+px26(15, 14, 96.0, s27)
+check("15:14: not out any more - waiting for 15:30", st27.get_job(old27["job_id"])["status"] == "open")
+px26(15, 29, 96.0, s27)
+check("15:29: still open", st27.get_job(old27["job_id"])["status"] == "open")
+px26(15, 30, 96.5, s27)
+j_ = st27.get_job(old27["job_id"])
+check("15:30: target not hit - sold at market, a time exit; the limit buy cancelled",
+      j_["status"] == "closed" and j_["result"]["exit_reason"] == "time_exit" and j_["result"]["exit_price"] == 96.5
+      and b27.orders[old27["limit_topup"]["order_id"]]["status"] == "cancelled", str(j_.get("result"))[:200])
+check("...the open's message said out at 15:30", any("out at 15:30 if not hit" in x for x in sent27))
+
+s27, st27, b27, lg27, sent27 = day27(81)
+old27 = st27.open_job()
+lim27 = old27["limit_topup"]["order_id"]
+at(2026, 10, 23, 15, 20)
+PRICE["ltp"] = 97.0
+s27.on_message(msg(82, SAMPLE, 15, 20, day=23))
+s27.step()
+o_ = st27.get_job(old27["job_id"])
+n_ = st27.open_job()
+check("15:20, a new signal while Thursday's trade waits for 15:30: Thursday's sold at market at once (97, reason "
+      "new_signal), its target and the limit buy cancelled",
+      o_["status"] == "closed" and o_["result"]["exit_reason"] == "new_signal" and o_["result"]["exit_price"] == 97.0
+      and b27.orders[lim27]["status"] == "cancelled" and o_["exit_requested"]["entered"],
+      str((o_.get("result") or {}).get("exit_reason")) + " " + str(o_.get("exit_requested"))[:200])
+check("...and the new signal entered in the same pass: a new job for Friday, bought at 97, target 210",
+      n_ and n_["job_id"] != old27["job_id"] and n_["trade_date"] == "2026-10-23" and n_["status"] == "open"
+      and n_["position"]["entry_price"] == 97.0 and n_["target_price"] == 210.0 and n_["message"]["msg_id"] == 82,
+      str({k: (n_ or {}).get(k) for k in ("job_id", "trade_date", "target_price")}))
+check("...said on Telegram: selling it at market for the new signal",
+      any("waits for its 15:30 exit - selling it at market now" in x for x in sent27), str(sent27[-3:])[:300])
+check("...counted with the timed exits, not as a target hit", stats.summary([o_])["time_exits"] == 1
+      and not o_["result"]["target_hit"], str(stats.summary([o_]))[:200])
+at(2026, 10, 23, 15, 25)
+s27.on_message(msg(83, SAMPLE, 15, 25, day=23))
+s27.step()
+check("a third signal at 15:25: one BTST a day - ignored, Friday's new trade untouched",
+      st27.open_job()["job_id"] == n_["job_id"] and any("one BTST a day" in x for x in lg27 + sent27))
+
+s27, st27, b27, lg27, sent27 = day27(84, {"scan_end": _shipped["scan_end"]})
+at(2026, 10, 23, 15, 31)
+PRICE["ltp"] = 98.0
+s27.step()
+at(2026, 10, 23, 15, 35)
+s27.on_message(msg(85, SAMPLE, 15, 35, day=23))
+s27.step()
+n_ = st27.open_job()
+check("a signal after 15:30: Thursday's trade already out at 15:30 - the new one entered as before",
+      n_ and n_["trade_date"] == "2026-10-23" and n_["message"]["msg_id"] == 85
+      and st27.recent_jobs(5)[1]["result"]["exit_reason"] == "time_exit", str((n_ or {}).get("job_id")))
+
+s27, st27, b27, lg27, sent27 = desk(cfg={**LIM, **X27})
+at(2026, 10, 23, 15, 16)
+PRICE["ltp"] = 100.0
+s27.on_message(msg(86, SAMPLE, 15, 16, day=23))
+s27.step()
+first27 = st27.open_job()
+at(2026, 10, 23, 15, 20)
+s27.on_message(msg(87, SAMPLE, 15, 20, day=23))
+s27.step()
+check("a second signal the same day as the open trade's entry: not sold - one BTST a day, as before",
+      st27.open_job()["job_id"] == first27["job_id"] and st27.open_job()["status"] == "open")
+
+# live: the sell finds nothing the first time - tried again every pass, then the new signal
+sL, stL, exL, lgL, sentL = live_desk(cfg=X27)
+at(2026, 10, 22, 15, 45)
+sL.step()
+exL.close_day()
+at(2026, 10, 22, 16, 1)
+sL.step()
+at(2026, 10, 23, 9, 0)
+exL.send_amos()
+exL.open_market(120.0)
+at(2026, 10, 23, 9, 15, 5)
+sL.step()
+oldL = stL.open_job()
+exL.px = 118.0
+exL.book = 0                                    # nobody to buy from: the IOC sell finds nothing
+at(2026, 10, 23, 15, 20)
+sL.on_message(msg(90, SAMPLE, 15, 20, day=23))
+sL.step()
+check("live, 15:20 a new signal: the target cancelled, the IOC sell found nothing - still open, the signal waiting; "
+      "no target put back in (the AMO was cancelled by our exit, not at the open)",
+      stL.get_job(oldL["job_id"])["status"] == "open" and stL.get_job(oldL["job_id"])["exit_requested"]
+      and not exL.resting_sells() and sL.pending_entry == oldL["job_id"] and stL.open_job()["job_id"] == oldL["job_id"],
+      str(stL.get_job(oldL["job_id"]).get("exit_requested"))[:200])
+sL2 = BtstStrategy(sL.cfg, stL, sL.broker, lambda: MASTER, Model(GOOD), "test_channel", log=lgL.append,
+                   now=lambda: CLOCK["t"], notifier=SimpleNamespace(send=sentL.append), cost_model=CostModel.load())
+sL2.resume()
+check("...a restart keeps the waiting signal", sL2.pending_entry == oldL["job_id"]
+      and any("selling it again, then that signal" in x for x in sentL))
+exL.book = None
+at(2026, 10, 23, 15, 20, 5)
+sL2.step()
+oL = stL.get_job(oldL["job_id"])
+nL = stL.open_job()
+check("...the next pass: sold (65 @ 118, new_signal) and the new signal bought - one position, the new one",
+      oL["status"] == "closed" and oL["result"]["exit_reason"] == "new_signal" and nL and nL["job_id"] != oldL["job_id"]
+      and nL["trade_date"] == "2026-10-23" and exL.held.get("NIFTY27OCT2622800CE") == 65,
+      str(((oL.get("result") or {}).get("exit_reason"), exL.held)))
+
+section("28. GIFT Nifty session by session: recorded, saved day-wise, live and on the chart (owner, 20 Nov 2026)")
+from btst import giftrec as GR                                    # noqa: E402
+
+IS = lambda *a: datetime(*a, tzinfo=IST)
+check("the sessions: 06:30-15:40 and 16:35-02:45 (the evening one belongs to the day it started)",
+      GR.session_at(IS(2026, 10, 22, 6, 29)) is None and GR.session_at(IS(2026, 10, 22, 6, 30))[0] == 1
+      and GR.session_at(IS(2026, 10, 22, 15, 39))[0] == 1 and GR.session_at(IS(2026, 10, 22, 15, 40)) is None
+      and GR.session_at(IS(2026, 10, 22, 16, 35))[0] == 2
+      and GR.session_at(IS(2026, 10, 23, 1, 0))[1] == IS(2026, 10, 22, 16, 35)
+      and GR.session_at(IS(2026, 10, 23, 2, 45)) is None)
+GQ = {"price": 22600.0, "prev_close": 22550.0, "expiry": "27-Oct-2026", "time": None, "fail": 0, "days": []}
+
+
+def gq(day):
+    GQ["days"].append(day)
+    if GQ["fail"]:
+        GQ["fail"] -= 1
+        raise OSError("nseix down")
+    return {"price": GQ["price"], "prev_close": GQ["prev_close"], "expiry": GQ["expiry"],
+            "time": GQ["time"] or CLOCK["t"].isoformat(timespec="seconds")}
+
+
+gst = MongoStore(client=_Client(), db_name="g")
+glog, gclock = [], {"t": 0.0}
+grec = GR.GiftRecorder(gst, gq, cfg=lambda k, d=None: {"gift_record_sec": 60}.get(k, d), now=lambda: CLOCK["t"],
+                       log=glog.append, clock=lambda: gclock["t"])
+
+
+def gat(px, *a, step=61):
+    at(*a)
+    GQ["price"] = px
+    gclock["t"] += step
+    grec.pass_once()
+
+
+gat(22600.0, 2026, 10, 22, 16, 36)
+g1 = gst.gift_session("2026-10-22-S2")
+check("Thu 16:36, the first session ever recorded: base NSE IX's previous close 22,550 (no session before), "
+      "22,600 = +50 points; one minute saved",
+      g1 and g1["base"] == 22550.0 and "no session recorded before" in g1["base_from"] and g1["change"] == 50.0
+      and g1["points"] == [[int(IS(2026, 10, 22, 16, 36).timestamp() * 1000), 22600.0]] and g1["n"] == 1,
+      str({k: (g1 or {}).get(k) for k in ("base", "base_from", "change", "n")}))
+check("...the evening session reads tomorrow's contract (fetched for Fri 23 Oct)", GQ["days"][-1] == date(2026, 10, 23))
+check("...live: recording, session 2, +50", grec.live["status"] == "recording" and grec.live["session"] == 2
+      and grec.live["change"] == 50.0 and grec.live["last"] == 22600.0)
+gat(22640.0, 2026, 10, 22, 16, 36, 40, step=10)
+check("10 s later: not read again (every 60 s)", gst.gift_session("2026-10-22-S2")["last"] == 22600.0)
+gat(22640.0, 2026, 10, 22, 16, 37, 30)
+gat(22590.0, 2026, 10, 23, 2, 44, 10)
+g1 = gst.gift_session("2026-10-22-S2")
+check("16:37 22,640, Fri 02:44 22,590: three minutes, high 22,640, low 22,590, last 22,590 = +40",
+      g1["n"] == 3 and len(g1["points"]) == 3 and g1["high"] == 22640.0 and g1["low"] == 22590.0
+      and g1["last"] == 22590.0 and g1["change"] == 40.0, str({k: g1.get(k) for k in ("n", "high", "low", "change")}))
+gat(22590.0, 2026, 10, 23, 2, 46)
+check("02:46: the session over - saved as closed, said in the log; live: closed, next session 1 at 06:30",
+      gst.gift_session("2026-10-22-S2")["closed"] is True and any("session 2" in x and "ended" in x for x in glog)
+      and grec.live["status"] == "closed" and grec.live["next_session"] == 1
+      and grec.live["next_open"].startswith("2026-10-23T06:30"), str(grec.live))
+gat(22700.0, 2026, 10, 23, 6, 31)
+g2 = gst.gift_session("2026-10-23-S1")
+check("Fri 06:31: session 1 from the evening's last price 22,590 - 22,700 = +110",
+      g2["base"] == 22590.0 and "session 2" in g2["base_from"] and g2["change"] == 110.0
+      and GQ["days"][-1] == date(2026, 10, 23), str({k: g2.get(k) for k in ("base", "base_from", "change")}))
+grec2 = GR.GiftRecorder(gst, gq, cfg=lambda k, d=None: {"gift_record_sec": 60}.get(k, d), now=lambda: CLOCK["t"],
+                        log=glog.append, clock=lambda: gclock["t"])
+at(2026, 10, 23, 9, 0)
+GQ["price"] = 22650.0
+grec2.pass_once()
+g2 = gst.gift_session("2026-10-23-S1")
+check("a restart in the session: the same document, the same base - 22,650 = +60, two minutes",
+      g2["base"] == 22590.0 and g2["change"] == 60.0 and g2["n"] == 2 and len(g2["points"]) == 2, str(g2.get("n")))
+GQ["fail"] = 1
+gclock["t"] += 61
+at(2026, 10, 23, 9, 2)
+grec2.pass_once()
+check("NSE IX down: no crash, live says not read, said once in the log", grec2.live["status"] == "error"
+      and "nseix down" in grec2.live["error"] and any("not read" in x for x in glog))
+at(2026, 10, 23, 15, 39)
+GQ["price"] = 22680.0
+gclock["t"] += 61
+grec2.pass_once()
+at(2026, 10, 23, 15, 41)
+grec2.pass_once()
+GQ["time"] = "2026-10-23T15:39:00+05:30"           # the weekend: NSE IX shows Friday's last quote
+gat(22680.0, 2026, 10, 24, 6, 40)
+check("Sat 06:40: the quote is Friday's - no trading, nothing recorded", gst.gift_session("2026-10-24-S1") is None
+      and grec.live["status"] == "no_trading", str(grec.live))
+GQ["time"] = None
+gat(22720.0, 2026, 10, 26, 6, 31)
+g3 = gst.gift_session("2026-10-26-S1")
+check("Mon 06:31: from Friday's last session (15:39, 22,680) - the weekend skipped: +40", g3 and g3["base"] == 22680.0
+      and "2026-10-23-S1" in g3["base_from"] and g3["change"] == 40.0, str({k: (g3 or {}).get(k) for k in ("base", "base_from")}))
+GQ.update(expiry="24-Nov-2026", prev_close=22700.0)
+gat(22800.0, 2026, 10, 26, 16, 36)
+g4 = gst.gift_session("2026-10-26-S2")
+check("a new contract (the month rolled over): NSE IX's previous close of it - 22,800 vs 22,700 = +100, said so",
+      g4["base"] == 22700.0 and "new contract" in g4["base_from"] and g4["change"] == 100.0, str(g4.get("base_from")))
+GQ.update(expiry="27-Oct-2026", prev_close=22550.0)
+day23 = gst.gift_sessions_on("2026-10-23")
+check("day-wise in MongoDB (btst_gift): Fri 23 Oct has its morning session; Thu 22 Oct its evening one",
+      [d["session_id"] for d in day23] == ["2026-10-23-S1"]
+      and [d["session_id"] for d in gst.gift_sessions_on("2026-10-22")] == ["2026-10-22-S2"])
+
+# the desk: live on the page, the day's sessions in History, GIFT on the trade's chart
+s28, st28, b28, lg28, sent28 = desk()
+s28.store.gift = gst.gift
+s28.gift_rec = grec
+at(2026, 10, 22, 15, 18)
+PRICE["ltp"] = 100.0
+s28.on_message(msg(95, SAMPLE, 15, 18))
+s28.step()
+j28 = st28.open_job()
+check("the page's state carries GIFT live", web.state(s28, st28)["gift_live"]["session"] == 2)
+dv = s28.day_view("2026-10-23")
+check("History of Fri 23 Oct: its GIFT session, without the minutes - closed at 22,680, +90",
+      [g["session_id"] for g in dv["gift"]] == ["2026-10-23-S1"] and "points" not in dv["gift"][0]
+      and dv["gift"][0]["change"] == 90.0 and dv["gift"][0]["closed"] is True, str(dv["gift"])[:200])
+st28.update_job(j28["job_id"], set_={"recording": {"status": "recording", "until": "2026-10-23T15:45:00+05:30"}})
+ch28 = s28.chart(j28["job_id"])
+gp = ch28.get("gift") or {}
+check("the trade's chart: GIFT from the buy (Thu 15:18) to the recording's end (Fri 15:45) - the evening and the "
+      "morning session, each point's change since its own session's base",
+      [x["session_id"] for x in gp.get("sessions") or []] == ["2026-10-22-S2", "2026-10-23-S1"]
+      and gp["points"][0] == {"t": int(IS(2026, 10, 22, 16, 36).timestamp() * 1000), "p": 22600.0, "chg": 50.0, "s": 2}
+      and gp["points"][-1]["chg"] == 90.0 and gp["points"][-1]["s"] == 1, str(gp.get("points"))[:300])
+check("...GIFT at the buy: no minute before it - its first price", gp["at_buy"] == 22600.0)
+check("the page draws it: the live tile, the chart, the day's table",
+      all(k in web.PAGE for k in ('id="giftlive"', "function giftChart", "function giftDay", "function drawGift")))
 
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

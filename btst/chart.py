@@ -75,7 +75,7 @@ def extremes(job, bars, ticks=None):
     window - the buy to the next session's close, past the exit too: P&L at each
     price with the position held then (top-ups count; after the exit, the
     position as it was at the exit). Tick by tick where `ticks` [(ms, price)]
-    has them (owner, 12 Nov 2026): on a fast open the high, the -25% top-up and
+    has them (owner, 12 Nov 2026): on a fast open the high, the first top-up and
     the -53% fill can all be in one minute - SENSEX 81600 PE, 12 Nov: 445 at
     09:15:02 held 120 @ 403.62 (+4,966), not the 340 @ 291.26 held at the
     minute's end (+52,272)."""
