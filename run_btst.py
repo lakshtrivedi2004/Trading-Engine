@@ -254,7 +254,9 @@ def main():
 
     if cfg.get("gift_record", True):        # GIFT Nifty session by session, on its own thread (btst/giftrec.py)
         from btst import gift as GIFT, giftrec
-        strategy.gift_rec = giftrec.GiftRecorder(store, GIFT.Feed(), cfg=strategy.c, log=BOOK.log)
+        strategy.gift_rec = giftrec.GiftRecorder(store, GIFT.Feed(), cfg=strategy.c, log=BOOK.log,
+                                                 base_fn=GIFT.moneycontrol if cfg.get("gift_base_moneycontrol", True)
+                                                 else None)
         giftrec.start(strategy.gift_rec, stop)
         log(f"GIFT Nifty recorder on: sessions {cfg.get('gift_sessions') or giftrec.SESSIONS}, read every "
             f"{cfg.get('gift_record_sec', 1)} s - every new price kept ({giftrec.DIR} while the session runs, "

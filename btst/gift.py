@@ -92,6 +92,28 @@ class Feed:
             raise
 
 
+MC_URL = "https://www.moneycontrol.com/live-index/gift-nifty?symbol=in;gsx"
+
+
+def moneycontrol(timeout=15):
+    """Moneycontrol's GIFT Nifty figures (owner, 20 Nov 2026 - the page's change
+    is the one people read): {prev_close, price, change, time} from the page's
+    embedded data (__NEXT_DATA__ stockData)."""
+    import re
+    req = urllib.request.Request(MC_URL, headers={"User-Agent": UA, "Accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        page = r.read().decode("utf-8", "replace")
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', page, re.S)
+    if not m:
+        raise ValueError("no data in the Moneycontrol page")
+    d = json.loads(m.group(1))["props"]["pageProps"]["consumptionData"]["stockData"]
+    prev = _num(d.get("prevclose") or d.get("prev_close"))
+    if not prev:
+        raise ValueError("no previous close on the Moneycontrol page")
+    return {"prev_close": prev, "price": _num(d.get("lastprice") or d.get("current_price")),
+            "change": _num(d.get("change") or d.get("net_change")), "time": d.get("lastupdated")}
+
+
 def _quote(q, near):
     rows = q.get("data") or []
     if not rows:

@@ -17,11 +17,15 @@ kept:
     page's chart. A document rewritten every second would load the shared Atlas
     cluster for nothing; the page's live figures come from memory (state).
 
-The base: the last price recorded in the session before (the 15:40 close for
-the evening session, the 02:45 close for the morning one - a weekend or a
-holiday in between is skipped, the last session recorded counts). No session
-recorded before, or a new contract (the month rolled over): NSE IX's previous
-close of this contract instead - said so (base_from).
+The base: Moneycontrol's previous close (owner, 20 Nov 2026: in step with the
+page people read - gift.moneycontrol), read when the session opens and again
+every gift_base_sync_sec (600 s); kept only when Moneycontrol's price is within
+gift_base_sync_max_diff (25) points of NSE IX's (the same contract). Not read:
+the last price recorded in the session before (the 15:40 close for the
+evening session, the 02:45 close for the morning one - a weekend or a holiday
+in between is skipped). No session recorded before, or a new contract (the
+month rolled over): NSE IX's previous close of this contract - said so
+(base_from).
 
 The evening session reads the contract of the next day (as the desk's GIFT
 target does), so on GIFT's expiry day the evening is already the next month,
@@ -87,8 +91,10 @@ def unzip(gz):
 
 
 class GiftRecorder:
-    def __init__(self, store, fetch, cfg=None, now=None, log=None, clock=_time.time, folder=None):
-        self.store, self.fetch = store, fetch
+    def __init__(self, store, fetch, cfg=None, now=None, log=None, clock=_time.time, folder=None, base_fn=None):
+        self.store, self.fetch, self.base_fn = store, fetch, base_fn
+        self.synced_at = None                   # when Moneycontrol's previous close was last read
+        self.sync_err_said = None
         self.c = cfg or (lambda k, d=None: d)
         self.now = now or (lambda: datetime.now(IST))
         self.log = log or (lambda *_: None)
@@ -168,6 +174,7 @@ class GiftRecorder:
             return                              # a quote from before the session: not trading (a holiday)
         doc = self.cur if self.cur and self.cur["session_id"] == sid else self._open(sid, no, start, end, q)
         px = float(q["price"])
+        self._sync_base(doc, px)
         when = qt or now
         key = (q.get("time") or _iso(now), px)
         fresh = key != self.last_quote and (q.get("time") is not None or px != doc.get("last"))
@@ -193,6 +200,41 @@ class GiftRecorder:
                      "first": doc.get("first"), "last": px, "at": _iso(when), "read_at": _iso(now),
                      "change": upd["change"], "high": upd["high"], "low": upd["low"], "expiry": q.get("expiry"),
                      "points": upd["n"], "ticks": upd["ticks"]}
+
+    def _sync_base(self, doc, px):
+        """The base set to Moneycontrol's previous close: at the session's first
+        read, then every gift_base_sync_sec - when its price agrees with NSE IX's."""
+        if self.base_fn is None:
+            return
+        if self.synced_at is not None and doc.get("synced") and \
+                self.clock() - self.synced_at < float(self.c("gift_base_sync_sec", 600)):
+            return
+        self.synced_at = self.clock()
+        try:
+            mc = self.base_fn()
+        except Exception as e:
+            if self.sync_err_said is None or self.clock() - self.sync_err_said > 3600:
+                self.sync_err_said = self.clock()
+                self._say(f"Moneycontrol not read ({e!r}) - the base stays {doc['base']:,.2f} ({doc.get('base_from')})",
+                          "WARN")
+            return
+        self.sync_err_said = None
+        prev, mpx = mc.get("prev_close"), mc.get("price")
+        far = float(self.c("gift_base_sync_max_diff", 25))
+        if not prev or (mpx and abs(mpx - px) > far):
+            self._say(f"Moneycontrol's GIFT Nifty {mpx} is more than {far:g} points from NSE IX's {px:,.2f} - "
+                      f"another contract? the base stays {doc['base']:,.2f}", "WARN")
+            return
+        doc["synced"] = True
+        if abs(prev - float(doc["base"])) < 0.005:
+            return
+        old = doc["base"]
+        doc.update(base=prev, base_at=self.now().isoformat(timespec="seconds"),
+                   base_from=f"Moneycontrol's previous close (read {self.now():%H:%M})")
+        self.store.gift_point(doc["session_id"], {"base": prev, "base_at": doc["base_at"], "base_from": doc["base_from"],
+                                                  "change": round(px - prev, 2), "synced": True}, None)
+        self._say(f"GIFT Nifty session {doc['session']} base {old:,.2f} -> {prev:,.2f}, Moneycontrol's previous "
+                  f"close: {px:,.2f} = {px - prev:+,.2f} points")
 
     def _open(self, sid, no, start, end, q):
         """The session's document: the one saved (a restart), else a new one with its base."""
@@ -252,6 +294,7 @@ class GiftRecorder:
                   f"{n if n is not None else 0} price(s) saved")
         self.cur = None
         self.last_quote = None
+        self.synced_at = None                   # the next session reads Moneycontrol at once
 
     def _sweep(self, current):
         """On start: a session file left by a stop (not the session on now) saved into its document."""

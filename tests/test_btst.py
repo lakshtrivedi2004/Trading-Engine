@@ -3734,5 +3734,70 @@ check("the feed: the site and the expiry list once, then one request a read (3 r
 check("...a failed read raises, and the next one starts afresh (the site's cookies again)",
       fail_raised and fcalls[-3] == "/" and fcalls[-2].startswith("/api/getquotes/expiry"), str(fcalls[-4:]))
 
+# the base in step with Moneycontrol's previous close
+gst5, GDIR5, g5clock, g5log = MongoStore(client=_Client(), db_name="g5"), tempfile.mkdtemp(), {"t": 5000.0}, []
+MC = {"prev_close": 25550.0, "price": 25741.0, "fail": 0, "calls": 0}
+
+
+def mcq():
+    MC["calls"] += 1
+    if MC["fail"]:
+        MC["fail"] -= 1
+        raise OSError("akamai")
+    return {"prev_close": MC["prev_close"], "price": MC["price"]}
+
+
+grec5 = GR.GiftRecorder(gst5, gq, cfg=lambda k, d=None: {"gift_record_sec": 1, "gift_base_sync_sec": 600}.get(k, d),
+                        now=lambda: CLOCK["t"], log=g5log.append, clock=lambda: g5clock["t"], folder=GDIR5, base_fn=mcq)
+
+
+def g5(px, h, mi, sec=0, step=1):
+    at(2026, 11, 20, h, mi, sec)
+    GQ["price"] = px
+    g5clock["t"] += step
+    grec5.pass_once()
+
+
+GQ.update(time=None, fail=0, expiry="23-Nov-2026", prev_close=25480.0)
+g5(25741.5, 14, 4)
+d5 = gst5.gift_session("2026-11-20-S1")
+check("the session's first read: the base Moneycontrol's previous close 25,550 (not NSE IX's 25,480) - 25,741.50 "
+      "= +191.50, as Moneycontrol shows",
+      d5["base"] == 25550.0 and d5["change"] == 191.5 and "Moneycontrol" in d5["base_from"]
+      and grec5.live["change"] == 191.5 and MC["calls"] == 1, str({k: d5.get(k) for k in ("base", "base_from", "change")}))
+g5(25745.0, 14, 4, 1)
+g5(25746.0, 14, 9, 0, step=299)
+check("every second after it: Moneycontrol not read again for 10 minutes", MC["calls"] == 1)
+MC["prev_close"] = 25560.0
+g5(25750.0, 14, 14, 2, step=301)
+check("10 minutes on: read again - its previous close changed to 25,560, the base follows: +190, said in the log",
+      MC["calls"] == 2 and grec5.live["base"] == 25560.0 and grec5.live["change"] == 190.0
+      and gst5.gift_session("2026-11-20-S1")["base"] == 25560.0 and any("-> 25,560.00" in x for x in g5log),
+      str(grec5.live)[:200])
+MC.update(price=25850.0)
+g5(25752.0, 14, 24, 3, step=600)
+check("Moneycontrol 98 points from NSE IX (another contract?): not used, the base stays 25,560, said",
+      grec5.live["base"] == 25560.0 and any("more than 25 points" in x for x in g5log))
+MC.update(price=25752.0, fail=1)
+g5(25753.0, 14, 34, 4, step=600)
+check("Moneycontrol not read: the base stays, said once", grec5.live["base"] == 25560.0 and grec5.live["status"] ==
+      "recording" and any("Moneycontrol not read" in x for x in g5log))
+grec6 = GR.GiftRecorder(gst5, gq, cfg=lambda k, d=None: {"gift_record_sec": 1}.get(k, d), now=lambda: CLOCK["t"],
+                        log=g5log.append, clock=lambda: g5clock["t"], folder=GDIR5, base_fn=mcq)
+MC["prev_close"] = 25555.0
+at(2026, 11, 20, 14, 40)
+grec6.pass_once()
+check("a restart: Moneycontrol read at once - 25,555", grec6.live["base"] == 25555.0)
+at(2026, 11, 20, 15, 41)
+grec6.pass_once()
+MC.update(prev_close=25770.0, price=25790.0)
+at(2026, 11, 20, 16, 36)
+GQ["price"] = 25795.0
+g5clock["t"] += 5
+grec6.pass_once()
+d6 = gst5.gift_session("2026-11-20-S2")
+check("the evening session: Moneycontrol read at its first price (whatever it shows then - 25,770 = +25)",
+      d6["base"] == 25770.0 and d6["change"] == 25.0, str({k: d6.get(k) for k in ("base", "base_from", "change")}))
+
 print(f"\n{'=' * 64}\n  {PASS} passed, {FAIL} failed\n{'=' * 64}")
 sys.exit(1 if FAIL else 0)

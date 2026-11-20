@@ -755,8 +755,8 @@ function drawGift(d){
 }
 function giftDay(gs){
   if (!gs.length) return `<p class="empty">GIFT Nifty: no session recorded on this day (recorded from 20 Nov 2026).</p>`;
-  return `<div class="tbl"><table><tr><th>GIFT Nifty</th><th>Hours</th><th>Base (the session before's last)</th><th>First</th><th>High</th><th>Low</th><th>Last</th><th>Change</th><th>Minutes</th></tr>`
-    + gs.map(s => `<tr><td class="l">Session ${s.session}${s.closed ? "" : " · on"}</td><td class="l">${hmOf(s.start)} – ${hmOf(s.end)}</td><td title="${esc(s.base_from || "")}">${n2(s.base)}</td><td>${n2(s.first)}</td><td>${n2(s.high)}</td><td>${n2(s.low)}</td><td>${n2(s.last)}</td><td class="${cls(s.change)}">${pts(s.change)}</td><td>${n0(s.n)}</td></tr>`).join("")
+  return `<div class="tbl"><table><tr><th>GIFT Nifty</th><th>Hours</th><th>Base</th><th>First</th><th>High</th><th>Low</th><th>Last</th><th>Change</th><th>Minutes</th></tr>`
+    + gs.map(s => `<tr><td class="l">Session ${s.session}${s.closed ? "" : " · on"}</td><td class="l">${hmOf(s.start)} – ${hmOf(s.end)}</td><td title="${esc(s.base_from || "")}">${n2(s.base)}<span class="n" style="display:block">${esc(s.base_from || "")}</span></td><td>${n2(s.first)}</td><td>${n2(s.high)}</td><td>${n2(s.low)}</td><td>${n2(s.last)}</td><td class="${cls(s.change)}">${pts(s.change)}</td><td>${n0(s.n)}</td></tr>`).join("")
     + `</table></div>`;
 }
 const GIFT_SCALE = {};
@@ -811,7 +811,7 @@ function giftChart(d, id){
     svg += poly(sg.map(b => `${X(b.t + 30000).toFixed(1)},${PY(pnl(b)).toFixed(1)}`), sg[0].open ? `stroke="var(--ink)" stroke-width="1.4"` : `stroke="var(--dim)" stroke-width="1.2" stroke-dasharray="2 3"`); });
   if (d.exit && d.exit.t) svg += `<line x1="${X(d.exit.t)}" x2="${X(d.exit.t)}" y1="${P0}" y2="${P0 + QH}" stroke="var(--dim)" stroke-dasharray="4 3"/><text x="${X(d.exit.t) + 3}" y="${P0 + 10}">exit ${rs(d.exit.net_pnl)}</text>`;
   svg += `<line class="gcur" x1="0" x2="0" y1="${T}" y2="${P0 + QH}" stroke="var(--dim)" style="display:none"/></svg>`;
-  return `<div class="chartbox"><div class="legend"><span><b style="color:#3366cc">—</b> GIFT Nifty, points since its session's base (the session before's last price)</span><span><b style="color:var(--ink)">—</b> P&L while open</span><span>· · if held, after the exit</span>${num(g.at_buy) ? `<span style="margin-left:auto">GIFT at the buy ${n2(g.at_buy)}</span>` : ""}</div>${P[0].t - t0 > 3 * 3600000 ? `<p class="sub" style="margin:0 0 4px">GIFT Nifty recorded from ${esc(tm(new Date(P[0].t + 19800000).toISOString().slice(0, 16)))} only (the recording began on 20 Nov 2026, 13:45) - the line starts there.</p>` : ""}${svg}<div class="readout gread"></div></div>`;
+  return `<div class="chartbox"><div class="legend"><span><b style="color:#3366cc">—</b> GIFT Nifty, points since its session's base (Moneycontrol's previous close)</span><span><b style="color:var(--ink)">—</b> P&L while open</span><span>· · if held, after the exit</span>${num(g.at_buy) ? `<span style="margin-left:auto">GIFT at the buy ${n2(g.at_buy)}</span>` : ""}</div>${P[0].t - t0 > 3 * 3600000 ? `<p class="sub" style="margin:0 0 4px">GIFT Nifty recorded from ${esc(tm(new Date(P[0].t + 19800000).toISOString().slice(0, 16)))} only (the recording began on 20 Nov 2026, 13:45) - the line starts there.</p>` : ""}${svg}<div class="readout gread"></div></div>`;
 }
 function giftHover(evt, id){
   const d = CHARTS[id], sc = GIFT_SCALE[id], svg = evt.currentTarget; if (!d || !sc || !d.gift) return;
